@@ -14,6 +14,7 @@ var_disk="4"
 var_os="debian"
 var_version="12"
 var_unprivileged="1"
+var_postfix_sat="yes"
 
 # App Output & Base Settings
 header_info "$APP"
@@ -33,6 +34,7 @@ function update_script() {
         exit
     fi
     msg_info "Updating ${APP} LXC"
+    systemctl stop keycloak
 
     msg_info "Updating packages"
     apt-get update &>/dev/null
