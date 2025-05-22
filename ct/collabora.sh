@@ -8,9 +8,9 @@ source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/
 # App Default Values
 APP="Collabora"
 var_tags=""
-var_cpu="1"
-var_ram="1024"
-var_disk="12"
+var_cpu="2"
+var_ram="2048"
+var_disk="16"
 var_os="debian"
 var_version="12"
 var_unprivileged="1"
@@ -35,6 +35,10 @@ function update_script() {
   msg_info "Updating ${APP} LXC"
   apt-get update &>/dev/null
   apt-get -y upgrade &>/dev/null
+  dpkg --configure -a &>/dev/null
+  apt-get -f install &>/dev/null
+  apt autoremove &>/dev/null
+  apt autoclean &>/dev/null
   msg_ok "Updated ${APP} LXC"
   exit
 }
@@ -43,5 +47,9 @@ start
 build_container
 description
 
+msg_info "Setting Container to Normal Resources"
+pct set $CTID -memory 1024
+pct set $CTID -cores 1
+msg_ok "Set Container to Normal Resources"
 msg_ok "Completed Successfully!\n"
 echo -e "${APP} needs to be behind a proxy (Nginx Proxy Manager)."
