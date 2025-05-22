@@ -18,8 +18,17 @@ $STD apt-get install -y curl
 $STD apt-get install -y sudo
 $STD apt-get install -y mc
 $STD apt-get install -y ca-certificates-java
-$STD apt-get install -y openjdk-21-jre-headless
 msg_ok "Installed Dependencies"
+
+msg_info "Installing OpenJDK"
+apt install wget lsb-release -y
+$STD wget https://packages.microsoft.com/config/debian/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+$STD dpkg -i packages-microsoft-prod.deb
+$STD apt update
+$STD apt install -y msopenjdk-21
+sudo update-java-alternatives --set msopenjdk-21-amd64
+rm packages-microsoft-prod.deb
+msg_ok "Installed OpenJDK"
 
 msg_info "Installing PostgreSQL"
 apt-get install -y postgresql
