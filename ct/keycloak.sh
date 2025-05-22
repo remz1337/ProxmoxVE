@@ -7,7 +7,7 @@ source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/
 
 # App Default Values
 APP="Keycloak"
-var_tags="access management"
+var_tags="access-management"
 var_cpu="2"
 var_ram="2048"
 var_disk="4"
