@@ -58,6 +58,9 @@ Type=simple
 Restart=always
 RestartSec=1
 User=root
+Environment="NODE_ENV=production"
+#Replace the * with either the IP:PORT or FQDN of the server (see logs to get the exact server using: journalctl -u homepage -b)
+Environment="HOMEPAGE_ALLOWED_HOSTS=*"
 WorkingDirectory=/opt/homepage/
 ExecStart=pnpm start
 [Install]

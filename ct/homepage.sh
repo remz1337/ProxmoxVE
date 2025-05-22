@@ -50,6 +50,8 @@ function update_script() {
     cp -r homepage-${RELEASE}/* /opt/homepage/
     rm -rf homepage-${RELEASE}
     cd /opt/homepage
+	npm update -g npm
+	npm install pnpm -g
     npx update-browserslist-db@latest
     pnpm install
     pnpm build
