@@ -28,7 +28,7 @@ function update_script() {
   header_info
   check_container_storage
   check_container_resources
-  if [[ ! -f /etc/systemd/system/coolwsd.service ]]; then
+  if [[ ! -f /usr/lib/systemd/system/coolwsd.service ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
