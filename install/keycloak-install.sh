@@ -62,13 +62,15 @@ ExecStart=/opt/keycloak/bin/kc.sh start
 ExecStop=/opt/keycloak/bin/kc.sh stop
 Restart=always
 RestartSec=3
-Environment="JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64"
 Environment="KC_DB=postgres"
 Environment="KC_DB_USERNAME=$DB_USER"
 Environment="KC_DB_PASSWORD=$DB_PASS"
 Environment="KC_HTTP_ENABLED=true"
+Environment="KC_HOSTNAME_STRICT=false"
 #Environment="KC_HOSTNAME=keycloak.example.com"
 #Environment="KC_PROXY_HEADERS=xforwarded"
+Environment="KC_BOOTSTRAP_ADMIN_USERNAME=admin"
+Environment="KC_BOOTSTRAP_ADMIN_PASSWORD=admin"
 [Install]
 WantedBy=multi-user.target" >$service_path
 $STD systemctl enable --now keycloak.service
