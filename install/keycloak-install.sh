@@ -21,7 +21,7 @@ $STD apt-get install -y ca-certificates-java
 msg_ok "Installed Dependencies"
 
 msg_info "Installing OpenJDK"
-apt install wget lsb-release -y
+$STD apt install wget lsb-release -y
 $STD wget https://packages.microsoft.com/config/debian/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
 $STD dpkg -i packages-microsoft-prod.deb
 $STD apt update
@@ -31,12 +31,12 @@ rm packages-microsoft-prod.deb
 msg_ok "Installed OpenJDK"
 
 msg_info "Installing PostgreSQL"
-apt-get install -y postgresql
+$STD apt-get install -y postgresql
 DB_NAME="keycloak"
 DB_USER="keycloak"
 DB_PASS="$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | cut -c1-13)"
-$STD sudo -u postgres psql -c "CREATE DATABASE $DB_NAME;"
 $STD sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
+$STD sudo -u postgres psql -c "CREATE DATABASE $DB_NAME WITH OWNER $DB_USER ENCODING 'UTF8';"
 $STD sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
 msg_ok "Installed PostgreSQL"
 
