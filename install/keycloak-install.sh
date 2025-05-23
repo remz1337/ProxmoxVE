@@ -69,8 +69,8 @@ Environment="KC_HTTP_ENABLED=true"
 Environment="KC_HOSTNAME_STRICT=false"
 #Environment="KC_HOSTNAME=keycloak.example.com"
 #Environment="KC_PROXY_HEADERS=xforwarded"
-Environment="KC_BOOTSTRAP_ADMIN_USERNAME=admin"
-Environment="KC_BOOTSTRAP_ADMIN_PASSWORD=admin"
+Environment="KC_BOOTSTRAP_ADMIN_USERNAME=tmpadm"
+Environment="KC_BOOTSTRAP_ADMIN_PASSWORD=admin123"
 [Install]
 WantedBy=multi-user.target" >$service_path
 $STD systemctl enable --now keycloak.service
