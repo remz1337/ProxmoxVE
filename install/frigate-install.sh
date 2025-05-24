@@ -145,7 +145,7 @@ if [ $nvidia_installed == 1 ]; then
   TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
   TRT_MAJOR=${TRT_VER%%.*}
   #There can be slight mismatch between the installed drivers' CUDA version and the available download link, so dynamically retrieve the right link using the latest CUDA version mentioned in the TensorRT documentation
-  trt_cuda=$(curl --silent https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing-debian | grep "https://developer.nvidia.com/cuda-toolkit-archive" | head -n1)
+  trt_cuda=$(curl --silent https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing-debian | grep "https://developer.nvidia.com/cuda-toolkit-archive" | sed -n '1p')
   trt_cuda=$(echo "$trt_cuda" | sed 's|.*archive">||' | sed 's|</a>.*||' | sed 's| update |.|')
   trt_cuda=${trt_cuda}_1
   trt_url="https://developer.download.nvidia.com/compute/tensorrt/${TRT_VER}/local_installers//nv-tensorrt-local-repo-ubuntu2204-${TRT_VER}-cuda-${trt_cuda}.0-1_amd64.deb"
