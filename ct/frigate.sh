@@ -10,7 +10,7 @@ APP="Frigate"
 var_tags="nvr"
 var_cpu="4"
 var_ram="4096"
-var_disk="50"
+var_disk="45"
 var_os="debian"
 var_version="11"
 var_unprivileged="1"
@@ -69,54 +69,73 @@ function update_script() {
     msg_info "Updating Frigate to $FRIGATE (Patience)"
     python3 -m pip install --upgrade pip
 
-    cd /opt
-    wget https://github.com/blakeblackshear/frigate/archive/refs/tags/${FRIGATE}.tar.gz -O frigate.tar.gz
-    tar -xzf frigate.tar.gz -C frigate --strip-components 1 --overwrite
+RELEASE=$(curl -s https://api.github.com/repos/blakeblackshear/frigate/releases/latest | jq -r '.tag_name')
+msg_ok "Stop spinner to prevent segmentation fault"
+msg_info "Installing Frigate $RELEASE (Perseverance)"
+if [ -n "$SPINNER_PID" ] && ps -p $SPINNER_PID > /dev/null; then kill $SPINNER_PID > /dev/null; fi
+cd ~
+mkdir -p /opt/frigate/models
+wget -q https://github.com/blakeblackshear/frigate/archive/refs/tags/${RELEASE}.tar.gz -O frigate.tar.gz
+tar -xzf frigate.tar.gz -C /opt/frigate --strip-components 1 --overwrite
+rm -rf frigate.tar.gz
+cd /opt/frigate
+pip3 wheel --wheel-dir=/wheels -r /opt/frigate/docker/main/requirements-wheels.txt
+cp -a /opt/frigate/docker/main/rootfs/. /
+export TARGETARCH="amd64"
+echo 'libc6 libraries/restart-without-asking boolean true' | debconf-set-selections
+/opt/frigate/docker/main/install_deps.sh
+apt update
+ln -svf /usr/lib/btbn-ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+ln -svf /usr/lib/btbn-ffmpeg/bin/ffprobe /usr/local/bin/ffprobe
+pip3 install -U /wheels/*.whl
+ldconfig
+pip3 install -r /opt/frigate/docker/main/requirements-dev.txt
+/opt/frigate/.devcontainer/initialize.sh
+make version
+cd /opt/frigate/web
+npm install
+npm run build
+cp -r /opt/frigate/web/dist/* /opt/frigate/web/
+cp -r /opt/frigate/config/. /config
+sed -i '/^s6-svc -O \.$/s/^/#/' /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/frigate/run
+# cat <<EOF >/config/config.yml
+# mqtt:
+  # enabled: false
+# cameras:
+  # test:
+    # ffmpeg:
+      # # hwaccel_args: preset-vaapi
+      # inputs:
+        # - path: /media/frigate/person-bicycle-car-detection.mp4
+          # input_args: -re -stream_loop -1 -fflags +genpts
+          # roles:
+            # - detect
+            # - rtmp
+    # detect:
+      # height: 1080
+      # width: 1920
+      # fps: 5
+# EOF
+ln -sf /config/config.yml /opt/frigate/config/config.yml
+# if [[ "$CTTYPE" == "0" ]]; then
+  # sed -i -e 's/^kvm:x:104:$/render:x:104:root,frigate/' -e 's/^render:x:105:root$/kvm:x:105:/' /etc/group
+# else
+  # sed -i -e 's/^kvm:x:104:$/render:x:104:frigate/' -e 's/^render:x:105:$/kvm:x:105:/' /etc/group
+# fi
+# echo "tmpfs   /tmp/cache      tmpfs   defaults        0       0" >> /etc/fstab
+msg_ok "Installed Frigate $RELEASE"
 
-    #Cleanup
-    rm frigate.tar.gz
+msg_info "Building Nginx with Custom Modules"
+$STD /opt/frigate/docker/main/build_nginx.sh
+sed -e '/s6-notifyoncheck/ s/^#*/#/' -i /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/nginx/run
+ln -sf /usr/local/nginx/sbin/nginx  /usr/local/bin/nginx
+msg_ok "Built Nginx"
 
-    cd /opt/frigate
-    bash docker/main/build_nginx.sh
-
-    #Cleanup previous wheels
-    rm -rf /wheels
-
-    pip3 install -r docker/main/requirements.txt
-    pip3 wheel --wheel-dir=/wheels -r /opt/frigate/docker/main/requirements-wheels.txt
-
-    pip3 install -U /wheels/*.whl
-    ldconfig
-    pip3 install -U /wheels/*.whl
-
-    pip3 install -r /opt/frigate/docker/main/requirements-dev.txt
-
-    #First, comment the call to S6 in the run script
-    sed -i '/^s6-svc -O \.$/s/^/#/' /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/frigate/run
-
-    #Call nginx from absolute path
-    #nginx --> /usr/local/nginx/sbin/nginx
-    sed -i 's/exec nginx/exec \/usr\/local\/nginx\/sbin\/nginx/g' /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/nginx/run
-
-    #Copy preconfigured files
-    cp -a /opt/frigate/docker/main/rootfs/. /
-
-    #Can't log to /dev/stdout with systemd, so log to file
-    sed -i 's/error_log \/dev\/stdout warn\;/error_log nginx\.err warn\;/' /usr/local/nginx/conf/nginx.conf
-    sed -i 's/access_log \/dev\/stdout main\;/access_log nginx\.log main\;/' /usr/local/nginx/conf/nginx.conf
-
-    #Frigate web build
-    #This should be architecture agnostic, so speed up the build on multiarch by not using QEMU.
-    cd /opt/frigate/web
-
-    npm install
-    npm run build
-
-    cp -r dist/BASE_PATH/monacoeditorwork/* dist/assets/
-    cd /opt/frigate/
-    cp -r /opt/frigate/web/dist/* /opt/frigate/web/
-
-    msg_ok "Updated Frigate"
+msg_info "Installing Tempio"
+sed -i 's|/rootfs/usr/local|/usr/local|g' /opt/frigate/docker/main/install_tempio.sh
+$STD /opt/frigate/docker/main/install_tempio.sh
+ln -sf /usr/local/tempio/bin/tempio /usr/local/bin/tempio
+msg_ok "Installed Tempio"
 
     msg_info "Starting Frigate"
     systemctl start frigate.service
