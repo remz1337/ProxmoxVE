@@ -83,7 +83,7 @@ pip3 wheel --wheel-dir=/wheels -r /opt/frigate/docker/main/requirements-wheels.t
 cp -a /opt/frigate/docker/main/rootfs/. /
 export TARGETARCH="amd64"
 echo 'libc6 libraries/restart-without-asking boolean true' | debconf-set-selections
-sed -i '|gpg --dearmor -o /etc/apt/trusted.gpg.d/google|gpg --yes --dearmor -o /etc/apt/trusted.gpg.d/google|' /opt/frigate/docker/main/install_deps.sh
+sed -i 's|gpg --dearmor -o /etc/apt/trusted.gpg.d/google|gpg --yes --dearmor -o /etc/apt/trusted.gpg.d/google|' /opt/frigate/docker/main/install_deps.sh
 /opt/frigate/docker/main/install_deps.sh
 apt update
 ln -svf /usr/lib/btbn-ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
