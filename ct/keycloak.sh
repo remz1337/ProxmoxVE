@@ -33,15 +33,18 @@ function update_script() {
         msg_error "No ${APP} Installation Found!"
         exit
     fi
-    msg_info "Updating ${APP} LXC"
+    
+	msg_info "Stopping ${APP}"
     systemctl stop keycloak
+	msg_ok "Stopped ${APP}"
 
     msg_info "Updating packages"
     apt-get update &>/dev/null
     apt-get -y upgrade &>/dev/null
+	msg_ok "Updated packages"
 
     RELEASE=$(curl -s https://api.github.com/repos/keycloak/keycloak/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
-    msg_info "Updating Keycloak to v$RELEASE"
+    msg_info "Updating ${APP} to v$RELEASE"
     cd /opt
     wget -q https://github.com/keycloak/keycloak/releases/download/$RELEASE/keycloak-$RELEASE.tar.gz
     mv keycloak keycloak.old
@@ -50,14 +53,13 @@ function update_script() {
     cp -r keycloak.old/providers keycloak-$RELEASE
     cp -r keycloak.old/themes keycloak-$RELEASE
     mv keycloak-$RELEASE keycloak
-
-    msg_info "Delete temporary installation files"
     rm keycloak-$RELEASE.tar.gz
     rm -rf keycloak.old
+	msg_ok "Updated ${APP} LXC"
 
     msg_info "Restating Keycloak"
     systemctl restart keycloak
-    msg_ok "Updated Successfully"
+    msg_ok "Restated Keycloak"
     exit
 }
 
