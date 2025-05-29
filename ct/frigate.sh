@@ -129,14 +129,14 @@ ln -sf /config/config.yml /opt/frigate/config/config.yml
 msg_ok "Installed Frigate $RELEASE"
 
 msg_info "Building Nginx with Custom Modules"
-$STD /opt/frigate/docker/main/build_nginx.sh
+/opt/frigate/docker/main/build_nginx.sh
 sed -e '/s6-notifyoncheck/ s/^#*/#/' -i /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/nginx/run
 ln -sf /usr/local/nginx/sbin/nginx  /usr/local/bin/nginx
 msg_ok "Built Nginx"
 
 msg_info "Installing Tempio"
 sed -i 's|/rootfs/usr/local|/usr/local|g' /opt/frigate/docker/main/install_tempio.sh
-$STD /opt/frigate/docker/main/install_tempio.sh
+/opt/frigate/docker/main/install_tempio.sh
 ln -sf /usr/local/tempio/bin/tempio /usr/local/bin/tempio
 msg_ok "Installed Tempio"
 
