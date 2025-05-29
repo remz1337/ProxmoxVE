@@ -58,7 +58,7 @@ wget -q https://github.com/blakeblackshear/frigate/archive/refs/tags/${RELEASE}.
 tar -xzf frigate.tar.gz -C /opt/frigate --strip-components 1
 rm -rf frigate.tar.gz
 cd /opt/frigate
-rm /wheels/*.whl 2> /dev/null
+rm -f /wheels/*.whl
 $STD pip3 wheel --wheel-dir=/wheels -r /opt/frigate/docker/main/requirements-wheels.txt
 cp -a /opt/frigate/docker/main/rootfs/. /
 export TARGETARCH="amd64"
