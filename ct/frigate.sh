@@ -74,7 +74,8 @@ msg_ok "Stop spinner to prevent segmentation fault"
 msg_info "Installing Frigate $RELEASE (Perseverance)"
 if [ -n "$SPINNER_PID" ] && ps -p $SPINNER_PID > /dev/null; then kill $SPINNER_PID > /dev/null; fi
 cd ~
-mkdir -p /opt/frigate/models
+#mkdir -p /opt/frigate/models
+rm -rf /opt/frigate/web/*
 wget -q https://github.com/blakeblackshear/frigate/archive/refs/tags/${RELEASE}.tar.gz -O frigate.tar.gz
 tar -xzf frigate.tar.gz -C /opt/frigate --strip-components 1 --overwrite
 rm -rf frigate.tar.gz
@@ -98,7 +99,7 @@ cd /opt/frigate/web
 npm install
 npm run build
 cp -r /opt/frigate/web/dist/* /opt/frigate/web/
-cp -r /opt/frigate/config/. /config
+#cp -r /opt/frigate/config/. /config
 sed -i '/^s6-svc -O \.$/s/^/#/' /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/frigate/run
 # cat <<EOF >/config/config.yml
 # mqtt:
