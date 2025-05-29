@@ -24,7 +24,8 @@ check_nvidia_drivers_version() {
     exit-script
   fi
 
-  NVD_VER=$(nvidia-smi --version | grep DRIVER | cut -d ":" -f 2 | sed "s| ||g")
+  #NVD_VER=$(nvidia-smi --version | grep DRIVER | cut -d ":" -f 2 | sed "s| ||g")
+  NVD_VER=$(nvidia-smi | grep "NVIDIA-SMI" | sed 's|.*Driver Version: ||' | sed 's|[[:space:]]*CUDA.*||')
   NVD_MAJOR=${NVD_VER%%.*}
 
   if [ $NVD_MAJOR -le 500 ]; then
@@ -47,7 +48,8 @@ check_cuda_version(){
     exit-script
   fi
 
-  NVD_VER_CUDA=$(nvidia-smi --version | grep CUDA | cut -d ":" -f 2 | sed "s| ||g")
+  #NVD_VER_CUDA=$(nvidia-smi --version | grep CUDA | cut -d ":" -f 2 | sed "s| ||g")
+  NVD_VER_CUDA=$(nvidia-smi | grep "NVIDIA-SMI" | sed 's|.*CUDA Version: ||' | sed 's/[[:space:]].*|//')
   NVD_MAJOR_CUDA=${NVD_VER_CUDA%%.*}
 
   if [ $NVD_MAJOR_CUDA -lt 11 ]; then
