@@ -35,7 +35,7 @@ function update_script() {
   msg_info "Updating ${APP} LXC"
   apt-get update &>/dev/null
   apt-get -y upgrade &>/dev/null
-  dpkg --configure -a &>/dev/null
+  dpkg --configure -a --force-all &>/dev/null
   apt-get -f install &>/dev/null
   apt autoremove &>/dev/null
   apt autoclean &>/dev/null
