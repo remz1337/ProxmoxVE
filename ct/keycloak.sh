@@ -49,7 +49,8 @@ function update_script() {
     wget -q https://github.com/keycloak/keycloak/releases/download/$RELEASE/keycloak-$RELEASE.tar.gz
     mv keycloak keycloak.old
     tar -xzf keycloak-$RELEASE.tar.gz
-    cp -r keycloak.old/conf keycloak-$RELEASE
+    tar -czf keycloak_conf_backup.tar.gz keycloak.old/conf
+    mv keycloak_conf_backup.tar.gz keycloak-$RELEASE/conf
     cp -r keycloak.old/providers keycloak-$RELEASE
     cp -r keycloak.old/themes keycloak-$RELEASE
     mv keycloak-$RELEASE keycloak
@@ -73,3 +74,4 @@ echo -e "${INFO}${YW} Access it using the following URL:${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080/admin${CL}"
 echo -e "${TAB}${GN}Temporary admin user:${BL}tmpadm${CL}"
 echo -e "${TAB}${GN}Temporary admin password:${BL}admin123${CL}"
+echo -e "${INFO}${YW} If you modified configurations files in `conf/`: Re-apply your changes to those files, otherwise leave them unchanged.${CL}"
