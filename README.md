@@ -121,6 +121,9 @@ This fork aims to add support for Nvidia GPU. The scripts are not guaranteed to 
 - Motherboard: Asrock B450M Pro4-F
 - RAM: 4x8GB HyperX (non ECC)
 
+## Diagnostics API
+All diagnostic functions have been disabled.
+
 # Extra scripts
 Here's a shortlist of scripts/apps that did not get merged upstream (tteck) for various reasons:
 - <a href="https://github.com/CollaboraOnline/online">Collabora Online</a>
