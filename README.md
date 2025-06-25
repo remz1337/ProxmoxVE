@@ -111,9 +111,6 @@ This project is licensed under the [MIT License](LICENSE).
   <i style="font-size: smaller;"><b>Proxmox</b>® is a registered trademark of <a href="https://www.proxmox.com/en/about/company">Proxmox Server Solutions GmbH</a>.</i>
 </p>
 
-
-Proxmox® is a registered trademark of [Proxmox Server Solutions GmbH](https://www.proxmox.com/en/about/company).
-
 ---
 
 # Disclaimer - remz1337's fork
