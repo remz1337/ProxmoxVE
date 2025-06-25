@@ -138,8 +138,9 @@ Here's a shortlist of scripts/apps that did not get merged upstream (tteck) for 
 # Extra configurations
 I have added some configuration options to streamline deployment of certain services in my environment. When building a container, I run an extra script to do that additional configuration. That script is `ct/post_create_lxc.sh`, which is called at the end of the `build_container()` function (in `build.func`). This can be used to:
 - mount a shared folder by adding this configuration to the LXC:`mp0: /mnt/pve/share/public,mp=/mnt/pve/share`
-- setup postfix service to run as a satellite, leverage a single postfix LXC to send all emails
+- setup postfix service to run as a satellite, leveraging a single postfix LXC to send all emails
 - passthrough a Nvidia GPU
+
 Some of these configurations leverage settings that can be found in `/etc/pve-helper-scripts.conf`.
 
 # Deploying services
@@ -165,3 +166,5 @@ To install or update latest Nvidia drivers, run the following command directly o
 ```
 bash -c "$(wget -qLO - https://github.com/remz1337/ProxmoxVE/raw/remz/misc/nvidia-drivers-host.sh)"
 ```
+# Donate to Support this fork
+- **Ko-Fi for remz1337's fork**: [Donate to support this fork](https://ko-fi.com/remz1337)
