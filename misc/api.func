@@ -3,7 +3,7 @@
 # License: MIT | https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/LICENSE
 
 post_to_api() {
-
+  return
   if ! command -v curl &>/dev/null; then
     return
   fi
@@ -48,6 +48,7 @@ EOF
 }
 
 post_to_api_vm() {
+  return
 
   if [[ ! -f /usr/local/community-scripts/diagnostics ]]; then
     return
@@ -100,6 +101,7 @@ EOF
 
 POST_UPDATE_DONE=false
 post_update_to_api() {
+  return
 
   if ! command -v curl &>/dev/null; then
     return
