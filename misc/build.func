@@ -201,14 +201,14 @@ base_settings() {
   VLAN=""
   SSH="no"
   SSH_AUTHORIZED_KEY=""
+  ENABLE_FUSE="${1:-no}"
+  ENABLE_TUN="${1:-no}"
   TAGS="remz1337;"
   # Additional settings for post_create_lxc
   ADD_SSH_USER="no"
   SHARED_MOUNT="no"
   POSTFIX_SAT="no"
   NVIDIA_PASSTHROUGH="no"
-  ENABLE_FUSE="${1:-no}"
-  ENABLE_TUN="${1:-no}"
 
   # Override default settings with variables from ct script
   CT_TYPE=${var_unprivileged:-$CT_TYPE}
@@ -345,7 +345,7 @@ exit_script() {
 advanced_settings() {
   whiptail --backtitle "Proxmox VE Helper Scripts" --msgbox --title "Here is an instructional tip:" "To make a selection, use the Spacebar." 8 58
   # Setting Default Tag for Advanced Settings
-  TAGS="community-script;${var_tags:-}"
+  TAGS="remz1337;${var_tags:-}"
   CT_DEFAULT_TYPE="${CT_TYPE}"
   CT_TYPE=""
   while [ -z "$CT_TYPE" ]; do
