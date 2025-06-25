@@ -128,4 +128,4 @@ info "Successfully Transferred Data."
 
 # Use to copy all data from one Home Assistant LXC to another
 # run from the Proxmox Shell
-# bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/mainmain/tools/copy-data//home-assistant-container-copy-data-home-assistant-container.sh)"
+# bash -c "$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remzmain/tools/copy-data//home-assistant-container-copy-data-home-assistant-container.sh)"
