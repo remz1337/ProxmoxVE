@@ -764,6 +764,9 @@ advanced_settings() {
 }
 
 diagnostics_check() {
+  DIAGNOSTICS="no"
+  return
+
   if ! [ -d "/usr/local/community-scripts" ]; then
     mkdir -p /usr/local/community-scripts
   fi
