@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # Co-Author: remz1337
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://github.com/janeczku/calibre-web
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -15,9 +15,6 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
 $STD apt-get install -y imagemagick
 msg_ok "Installed Dependencies"
 
@@ -35,7 +32,8 @@ msg_ok "Installed Kepubify"
 
 msg_info "Installing Calibre-Web"
 mkdir -p /opt/calibre-web
-$STD wget https://github.com/janeczku/calibre-web/raw/master/library/metadata.db -P /opt/calibre-web
+$STD apt-get install -y calibre
+$STD curl -fsSL https://github.com/janeczku/calibre-web/raw/master/library/metadata.db -o /opt/calibre-web/metadata.db
 $STD pip install calibreweb
 $STD pip install jsonschema
 msg_ok "Installed Calibre-Web"
@@ -57,7 +55,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now cps.service
+systemctl enable -q --now cps
 msg_ok "Created Service"
 
 motd_ssh

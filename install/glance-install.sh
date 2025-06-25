@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 community-scripts ORG
+# Copyright (c) 2021-2025 community-scripts ORG
 # Author: kristocopani
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://github.com/glanceapp/glance
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -13,18 +13,10 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Dependencies"
-$STD apt-get install -y \
-    curl \
-    sudo \
-    mc 
-msg_ok "Installed Dependencies"
-
-
 msg_info "Installing Glance"
-RELEASE=$(curl -s https://api.github.com/repos/glanceapp/glance/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+RELEASE=$(curl -fsSL https://api.github.com/repos/glanceapp/glance/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
 cd /opt
-wget -q https://github.com/glanceapp/glance/releases/download/v${RELEASE}/glance-linux-amd64.tar.gz
+curl -fsSL "https://github.com/glanceapp/glance/releases/download/v${RELEASE}/glance-linux-amd64.tar.gz" -o "glance-linux-amd64.tar.gz"
 mkdir -p /opt/glance
 tar -xzf glance-linux-amd64.tar.gz -C /opt/glance
 cat <<EOF >/opt/glance/glance.yml
@@ -68,7 +60,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target" >$service_path
 
-systemctl enable -q --now glance.service
+systemctl enable -q --now glance
 msg_ok "Created Service"
 
 motd_ssh

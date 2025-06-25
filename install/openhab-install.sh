@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://www.openhab.org/
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -14,30 +14,26 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-$STD apt-get install -y gnupg
-$STD apt-get install -y apt-transport-https
+$STD apt-get install -y \
+  ca-certificates \
+  apt-transport-https
 msg_ok "Installed Dependencies"
 
-msg_info "Installing Azul Zulu"
-wget -qO /etc/apt/trusted.gpg.d/zulu-repo.asc "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xB1998361219BD9C9"
-wget -q https://cdn.azul.com/zulu/bin/zulu-repo_1.0.0-3_all.deb
-$STD dpkg -i zulu-repo_1.0.0-3_all.deb
+msg_info "Installing Azul Zulu17"
+curl -fsSL https://repos.azul.com/azul-repo.key | gpg --dearmor -o /usr/share/keyrings/azul.gpg
+echo "deb [signed-by=/usr/share/keyrings/azul.gpg] https://repos.azul.com/zulu/deb stable main" >/etc/apt/sources.list.d/zulu.list
 $STD apt-get update
 $STD apt-get -y install zulu17-jdk
-msg_ok "Installed Azul Zulu"
+msg_ok "Installed Azul Zulu17"
 
 msg_info "Installing openHAB"
-curl -fsSL "https://openhab.jfrog.io/artifactory/api/gpg/key/public" | gpg --dearmor >openhab.gpg
-mv openhab.gpg /usr/share/keyrings
+curl -fsSL "https://openhab.jfrog.io/artifactory/api/gpg/key/public" | gpg --dearmor -o /usr/share/keyrings/openhab.gpg
 chmod u=rw,g=r,o=r /usr/share/keyrings/openhab.gpg
-echo "deb [signed-by=/usr/share/keyrings/openhab.gpg] https://openhab.jfrog.io/artifactory/openhab-linuxpkg stable main" > /etc/apt/sources.list.d/openhab.list
+echo "deb [signed-by=/usr/share/keyrings/openhab.gpg] https://openhab.jfrog.io/artifactory/openhab-linuxpkg stable main" >/etc/apt/sources.list.d/openhab.list
 $STD apt update
 $STD apt-get -y install openhab
 systemctl daemon-reload
-systemctl enable -q --now openhab.service
+systemctl enable -q --now openhab
 msg_ok "Installed openHAB"
 
 motd_ssh

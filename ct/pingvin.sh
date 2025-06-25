@@ -1,52 +1,56 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://stonith404.github.io/pingvin-share/introduction
 
-# App Default Values
 APP="Pingvin"
-var_tags="sharing"
-var_cpu="2"
-var_ram="2048"
-var_disk="8"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-sharing}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-8}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
 
 function update_script() {
-    header_info
-    check_container_storage
-    check_container_resources
-    if [[ ! -d /opt/pingvin-share ]]; then
-        msg_error "No ${APP} Installation Found!"
-        exit
-    fi
+  header_info
+  check_container_storage
+  check_container_resources
+  if [[ ! -d /opt/pingvin-share ]]; then
+    msg_error "No ${APP} Installation Found!"
+    exit
+  fi
+
+  RELEASE=$(curl -fsSL https://api.github.com/repos/stonith404/pingvin-share/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+  if [[ ! -f /opt/pingvin_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/pingvin_version.txt)" ]]; then
+
     msg_info "Stopping Pingvin Share"
     systemctl stop pm2-root.service
     msg_ok "Stopped Pingvin Share"
 
-    msg_info "Updating Pingvin Share"
+    msg_info "Updating Pingvin Share to v${RELEASE}"
+    cd /opt
+    curl -fsSL "https://github.com/stonith404/pingvin-share/archive/refs/tags/v${RELEASE}.zip" -o $(basename "https://github.com/stonith404/pingvin-share/archive/refs/tags/v${RELEASE}.zip")
+    $STD unzip v${RELEASE}.zip
+    cp -rf pingvin-share-${RELEASE}/* /opt/pingvin-share
     cd /opt/pingvin-share
-    git fetch --tags
-    git checkout $(git describe --tags $(git rev-list --tags --max-count=1)) &>/dev/null
     cd backend
-    npm install &>/dev/null
-    npm run build &>/dev/null
+    $STD npm install
+    $STD npm run build
     cd ../frontend
-    npm install &>/dev/null
-    npm run build &>/dev/null
-    msg_ok "Updated Pingvin Share"
+    $STD npm install
+    $STD npm run build
+    echo "${RELEASE}" >"/opt/pingvin_version.txt"
+    rm -rf /opt/v${RELEASE}.zip
+    rm -rf /opt/pingvin-share-${RELEASE}
+    msg_ok "Updated Pingvin Share to v${RELEASE}"
 
     msg_info "Starting Pingvin Share"
     systemctl start pm2-root.service
@@ -54,6 +58,9 @@ function update_script() {
 
     msg_ok "Updated Successfully"
     exit
+  else
+    msg_ok "No update required. Pingvin Share is already at v${RELEASE}."
+  fi
 }
 
 start

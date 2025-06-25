@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://aria2.github.io/
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -13,22 +13,16 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-msg_ok "Installed Dependencies"
-
 msg_info "Installing Aria2"
 $STD apt-get install -y aria2
 msg_ok "Installed Aria2"
 
-read -r -p "Would you like to add AriaNG? <y/N> " prompt
+read -r -p "${TAB3}Would you like to add AriaNG? <y/N> " prompt
 if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   msg_info "Installing AriaNG"
   $STD apt-get install -y nginx
   systemctl disable -q --now nginx
-  wget -q "$(curl -s https://api.github.com/repos/mayswind/ariang/releases/latest | grep download | grep AllInOne.zip | cut -d\" -f4)"
+  curl -fsSL "$(curl -fsSL https://api.github.com/repos/mayswind/ariang/releases/latest | grep download | grep AllInOne.zip | cut -d\" -f4)" -o $(basename "$(curl -fsSL https://api.github.com/repos/mayswind/ariang/releases/latest | grep download | grep AllInOne.zip | cut -d\" -f4)")
   $STD unzip AriaNg-*-AllInOne.zip -d /var/www
   rm /etc/nginx/sites-enabled/*
   cat <<EOF >/etc/nginx/conf.d/ariang.conf
@@ -84,7 +78,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now aria2.service
+systemctl enable -q --now aria2
 systemctl enable -q --now ariang
 msg_ok "Created Service"
 

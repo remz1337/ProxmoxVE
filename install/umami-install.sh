@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://umami.is/
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -14,25 +14,11 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
 $STD apt-get install -y git
-$STD apt-get install -y gpg
-$STD apt-get install -y postgresql
 msg_ok "Installed Dependencies"
 
-msg_info "Setting up Node.js Repository"
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >/etc/apt/sources.list.d/nodesource.list
-msg_ok "Set up Node.js Repository"
-
-msg_info "Installing Node.js"
-$STD apt-get update
-$STD apt-get install -y nodejs
-$STD npm install -g yarn
-msg_ok "Installed Node.js"
+NODE_VERSION="22" NODE_MODULE="yarn@latest" install_node_and_modules
+PG_VERSION="16" install_postgresql
 
 msg_info "Setting up postgresql"
 DB_NAME=umamidb
@@ -44,12 +30,13 @@ $STD sudo -u postgres psql -c "CREATE DATABASE $DB_NAME WITH OWNER $DB_USER ENCO
 $STD sudo -u postgres psql -c "ALTER ROLE $DB_USER SET client_encoding TO 'utf8';"
 $STD sudo -u postgres psql -c "ALTER ROLE $DB_USER SET default_transaction_isolation TO 'read committed';"
 $STD sudo -u postgres psql -c "ALTER ROLE $DB_USER SET timezone TO 'UTC'"
-echo "" >~/umami.creds
-echo "Umami Database Credentials" >>~/umami.creds
-echo "" >>~/umami.creds
-echo -e "umami Database User: \e[32m$DB_USER\e[0m" >>~/umami.creds
-echo -e "umami Database Password: \e[32m$DB_PASS\e[0m" >>~/umami.creds
-echo -e "umami Database Name: \e[32m$DB_NAME\e[0m" >>~/umami.creds
+{
+  echo "Umami-Credentials"
+  echo "Umami Database User: $DB_USER"
+  echo "Umami Database Password: $DB_PASS"
+  echo "Umami Database Name: $DB_NAME"
+  echo "Umami Secret Key: $SECRET_KEY"
+} >>~/umami.creds
 msg_ok "Set up postgresql"
 
 msg_info "Installing Umami (Patience)"
@@ -75,7 +62,7 @@ ExecStart=/usr/bin/yarn run start
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now umami.service
+systemctl enable -q --now umami
 msg_ok "Created Service"
 
 motd_ssh

@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://www.home-assistant.io/
 
-# App Default Values
 APP="Home Assistant"
-var_tags="automation;smarthome"
-var_cpu="2"
-var_ram="2048"
-var_disk="16"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-automation;smarthome}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-16}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -43,15 +38,16 @@ function update_script() {
     msg_info "Updating All Containers"
     CONTAINER_LIST="${1:-$(docker ps -q)}"
     for container in ${CONTAINER_LIST}; do
-      CONTAINER_IMAGE="$(docker inspect --format "{{.Config.Image}}" --type container ${container})"
+      CONTAINER_IMAGE="$(docker inspect --format "{{.Config.Image}}" --type container "${container}")"
       RUNNING_IMAGE="$(docker inspect --format "{{.Image}}" --type container "${container}")"
       docker pull "${CONTAINER_IMAGE}"
       LATEST_IMAGE="$(docker inspect --format "{{.Id}}" --type image "${CONTAINER_IMAGE}")"
       if [[ "${RUNNING_IMAGE}" != "${LATEST_IMAGE}" ]]; then
+        pip install -U runlike
         echo "Updating ${container} image ${CONTAINER_IMAGE}"
-        DOCKER_COMMAND="$(runlike "${container}")"
+        DOCKER_COMMAND="$(runlike --use-volume-id "${container}")"
         docker rm --force "${container}"
-        eval ${DOCKER_COMMAND}
+        eval "${DOCKER_COMMAND}"
       fi
     done
     msg_ok "Updated All Containers"
@@ -65,10 +61,9 @@ function update_script() {
   fi
   if [ "$UPD" == "3" ]; then
     msg_info "Installing Home Assistant Community Store (HACS)"
-    apt update &>/dev/null
-    apt install unzip &>/dev/null
+    $STD apt update
     cd /var/lib/docker/volumes/hass_config/_data
-    bash <(curl -fsSL https://get.hacs.xyz) &>/dev/null
+    $STD bash <(curl -fsSL https://get.hacs.xyz)
     msg_ok "Installed Home Assistant Community Store (HACS)"
     echo -e "\n Reboot Home Assistant and clear browser cache then Add HACS integration.\n"
     exit
@@ -77,10 +72,10 @@ function update_script() {
     IP=$(hostname -I | awk '{print $1}')
     msg_info "Installing FileBrowser"
     RELEASE=$(curl -fsSL https://api.github.com/repos/filebrowser/filebrowser/releases/latest | grep -o '"tag_name": ".*"' | sed 's/"//g' | sed 's/tag_name: //g')
-    curl -fsSL https://github.com/filebrowser/filebrowser/releases/download/v2.23.0/linux-amd64-filebrowser.tar.gz | tar -xzv -C /usr/local/bin &>/dev/null
-    filebrowser config init -a '0.0.0.0' &>/dev/null
-    filebrowser config set -a '0.0.0.0' &>/dev/null
-    filebrowser users add admin helper-scripts.com --perm.admin &>/dev/null
+    $STD curl -fsSL https://github.com/filebrowser/filebrowser/releases/download/v2.23.0/linux-amd64-filebrowser.tar.gz | tar -xzv -C /usr/local/bin
+    $STD filebrowser config init -a '0.0.0.0'
+    $STD filebrowser config set -a '0.0.0.0'
+    $STD filebrowser users add admin helper-scripts.com --perm.admin
     msg_ok "Installed FileBrowser"
 
     msg_info "Creating Service"
@@ -95,7 +90,7 @@ ExecStart=/usr/local/bin/filebrowser -r /
 [Install]
 WantedBy=default.target" >$service_path
 
-    systemctl enable --now filebrowser.service &>/dev/null
+    $STD systemctl enable --now filebrowser
     msg_ok "Created Service"
 
     msg_ok "Completed Successfully!\n"
@@ -113,4 +108,4 @@ msg_ok "Completed Successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} Access it using the following URL:${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}HA: http://${IP}:8123${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}Portainer: http://${IP}:9443${CL}"
+echo -e "${TAB}${GATEWAY}${BGN}Portainer: https://${IP}:9443${CL}"

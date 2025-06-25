@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://www.photoprism.app/
 
-# App Default Values
 APP="PhotoPrism"
-var_tags="media;photo"
-var_cpu="2"
-var_ram="3072"
-var_disk="8"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-media;photo}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-3072}"
+var_disk="${var_disk:-8}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -37,8 +32,8 @@ function update_script() {
   msg_ok "Stopped PhotoPrism"
 
   msg_info "Updating PhotoPrism"
-  apt-get install -y libvips42 &>/dev/null
-  wget -q -cO - https://dl.photoprism.app/pkg/linux/amd64.tar.gz | tar -xzf - -C /opt/photoprism --strip-components=1
+  $STD apt-get install -y libvips42
+  curl -fsSL https://dl.photoprism.app/pkg/linux/amd64.tar.gz | tar -xzf - -C /opt/photoprism --strip-components=1
   msg_ok "Updated PhotoPrism"
 
   msg_info "Starting PhotoPrism"

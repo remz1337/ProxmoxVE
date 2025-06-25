@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 communtiy-scripts ORG
+# Copyright (c) 2021-2025 communtiy-scripts ORG
 # Author: MickLesk (Canbiz)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://nextpvr.com/
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -18,21 +18,18 @@ $STD apt-get install -y \
   mediainfo \
   libmediainfo-dev \
   libc6 \
-  curl \
-  sudo \
   libgdiplus \
   acl \
   dvb-tools \
   libdvbv5-0 \
   dtv-scan-tables \
   libc6-dev \
-  ffmpeg \
-  mc
+  ffmpeg
 msg_ok "Installed Dependencies"
 
 msg_info "Setup NextPVR (Patience)"
 cd /opt
-wget -q https://nextpvr.com/nextpvr-helper.deb
+curl -fsSL "https://nextpvr.com/nextpvr-helper.deb" -o "/opt/nextpvr-helper.deb"
 $STD dpkg -i nextpvr-helper.deb
 msg_ok "Installed NextPVR"
 

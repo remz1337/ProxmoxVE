@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://gethomepage.dev/
 
-# App Default Values
 APP="Homepage"
-var_tags="dashboard"
-var_cpu="2"
-var_ram="1024"
-var_disk="3"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-dashboard}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-4096}"
+var_disk="${var_disk:-6}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -35,23 +30,31 @@ function update_script() {
   if [[ "$(node -v | cut -d 'v' -f 2)" == "18."* ]]; then
     if ! command -v npm >/dev/null 2>&1; then
       echo "Installing NPM..."
-      apt-get install -y npm >/dev/null 2>&1
-      npm install -g pnpm >/dev/null 2>&1
+      $STD apt-get install -y npm
+      $STD npm install -g pnpm
       echo "Installed NPM..."
     fi
   fi
-  RELEASE=$(curl -s https://api.github.com/repos/gethomepage/homepage/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+  # ensure that jq is installed
+  if ! command -v jq &>/dev/null; then
+    $STD msg_info "Installing jq..."
+    $STD apt-get update -qq &>/dev/null
+    $STD apt-get install -y jq &>/dev/null || {
+      msg_error "Failed to install jq"
+      exit
+    }
+  fi
+  LOCAL_IP=$(hostname -I | awk '{print $1}')
+  RELEASE=$(curl -fsSL https://api.github.com/repos/gethomepage/homepage/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
   if [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]] || [[ ! -f /opt/${APP}_version.txt ]]; then
     msg_info "Updating Homepage to v${RELEASE} (Patience)"
     systemctl stop homepage
-    wget -q https://github.com/gethomepage/homepage/archive/refs/tags/v${RELEASE}.tar.gz
+    curl -fsSL "https://github.com/gethomepage/homepage/archive/refs/tags/v${RELEASE}.tar.gz" -o $(basename "https://github.com/gethomepage/homepage/archive/refs/tags/v${RELEASE}.tar.gz")
     tar -xzf v${RELEASE}.tar.gz
     rm -rf v${RELEASE}.tar.gz
     cp -r homepage-${RELEASE}/* /opt/homepage/
     rm -rf homepage-${RELEASE}
     cd /opt/homepage
-	npm update -g npm
-	npm install pnpm -g
     npx update-browserslist-db@latest
     pnpm install
     pnpm build
@@ -59,7 +62,7 @@ function update_script() {
     echo "${RELEASE}" >/opt/${APP}_version.txt
     msg_ok "Updated Homepage to v${RELEASE}"
   else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
+    msg_ok "No update required. ${APP} is already at v${RELEASE}"
   fi
   exit
 }

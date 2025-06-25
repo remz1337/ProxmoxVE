@@ -1,26 +1,21 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
-# Author: tteck (tteckster) | Co-Author: remz1337
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
+# Authors: tteck (tteckster) | Co-Author: remz1337
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://frigate.video/
 
-# App Default Values
 APP="Frigate"
-var_tags="nvr"
-var_cpu="4"
-var_ram="4096"
-var_disk="45"
-var_os="debian"
-var_version="11"
-var_unprivileged="1"
-var_nvidia_passthrough="yes"
+var_tags="${var_tags:-nvr}"
+var_cpu="${var_cpu:-4}"
+var_ram="${var_ram:-4096}"
+var_disk="${var_disk:-45}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-11}"
+var_unprivileged="${var_unprivileged:-1}"
+var_nvidia_passthrough="${var_nvidia_passthrough:-yes}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors

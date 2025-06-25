@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: MickLesk (Canbiz)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://tandoor.dev/
 
-# App Default Values
 APP="Tandoor"
-var_tags="recipes"
-var_cpu="4"
-var_ram="4096"
-var_disk="10"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-recipes}"
+var_cpu="${var_cpu:-4}"
+var_ram="${var_ram:-4096}"
+var_disk="${var_disk:-10}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -32,19 +27,25 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
+  if ! [[ $(dpkg -s python3-xmlsec 2>/dev/null) ]]; then
+    $STD apt-get update
+    $STD apt-get install -y python3-xmlsec
+  fi
   if cd /opt/tandoor && git pull | grep -q 'Already up to date'; then
     msg_ok "There is currently no update available."
   else
     msg_info "Updating ${APP} (Patience)"
     export $(cat /opt/tandoor/.env | grep "^[^#]" | xargs)
     cd /opt/tandoor/
-    pip3 install -r requirements.txt >/dev/null 2>&1
-    /usr/bin/python3 /opt/tandoor/manage.py migrate >/dev/null 2>&1
-    /usr/bin/python3 /opt/tandoor/manage.py collectstatic --no-input >/dev/null 2>&1
-    /usr/bin/python3 /opt/tandoor/manage.py collectstatic_js_reverse >/dev/null 2>&1
+    $STD pip3 install -r requirements.txt
+    $STD /usr/bin/python3 /opt/tandoor/manage.py migrate
+    $STD /usr/bin/python3 /opt/tandoor/manage.py collectstatic --no-input
+    $STD /usr/bin/python3 /opt/tandoor/manage.py collectstatic_js_reverse
     cd /opt/tandoor/vue
-    yarn install >/dev/null 2>&1
-    yarn build >/dev/null 2>&1
+    $STD yarn install
+    $STD yarn build
+    cd /opt/tandoor
+    $STD python3 version.py
     systemctl restart gunicorn_tandoor
     msg_ok "Updated ${APP}"
   fi

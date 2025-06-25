@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: MickLesk (Canbiz)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://zipline.diced.sh/
 
-# App Default Values
 APP="Zipline"
-var_tags="file;sharing"
-var_cpu="2"
-var_ram="2048"
-var_disk="5"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-file;sharing}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-5}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -31,7 +26,13 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -s https://api.github.com/repos/diced/zipline/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+  if ! command -v pnpm &>/dev/null; then
+    msg_info "Installing pnpm"
+    #export NODE_OPTIONS=--openssl-legacy-provider
+    $STD npm install -g pnpm@latest
+    msg_ok "Installed pnpm"
+  fi
+  RELEASE=$(curl -fsSL https://api.github.com/repos/diced/zipline/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
   if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
     msg_info "Stopping ${APP}"
     systemctl stop zipline
@@ -39,14 +40,18 @@ function update_script() {
 
     msg_info "Updating ${APP} to ${RELEASE}"
     cp /opt/zipline/.env /opt/
+    mkdir -p /opt/zipline-upload
+    if [ -d /opt/zipline/upload ] && [ "$(ls -A /opt/zipline/upload)" ]; then
+      cp -R /opt/zipline/upload/* /opt/zipline-upload/
+    fi
+    curl -fsSL "https://github.com/diced/zipline/archive/refs/tags/v${RELEASE}.zip" -o $(basename "https://github.com/diced/zipline/archive/refs/tags/v${RELEASE}.zip")
+    $STD unzip v"${RELEASE}".zip
     rm -R /opt/zipline
-    wget -q "https://github.com/diced/zipline/archive/refs/tags/v${RELEASE}.zip"
-    unzip -q v${RELEASE}.zip
-    mv zipline-${RELEASE} /opt/zipline
+    mv zipline-"${RELEASE}" /opt/zipline
     cd /opt/zipline
     mv /opt/.env /opt/zipline/.env
-    yarn install &>/dev/null
-    yarn build &>/dev/null
+    $STD pnpm install
+    $STD pnpm build
     echo "${RELEASE}" >/opt/${APP}_version.txt
     msg_ok "Updated ${APP}"
 
@@ -55,7 +60,7 @@ function update_script() {
     msg_ok "Started ${APP}"
 
     msg_info "Cleaning Up"
-    rm -rf v${RELEASE}.zip
+    rm -rf v"${RELEASE}".zip
     msg_ok "Cleaned"
     msg_ok "Updated Successfully"
   else

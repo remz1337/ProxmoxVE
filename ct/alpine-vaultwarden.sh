@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://github.com/dani-garcia/vaultwarden
 
-# App Default Values
 APP="Alpine-Vaultwarden"
-var_tags="alpine;vault"
-var_cpu="1"
-var_ram="256"
-var_disk="0.3"
-var_os="alpine"
-var_version="3.20"
-var_unprivileged="1"
+var_tags="${var_tags:-alpine;vault}"
+var_cpu="${var_cpu:-1}"
+var_ram="${var_ram:-256}"
+var_disk="${var_disk:-1}"
+var_os="${var_os:-alpine}"
+var_version="${var_version:-3.21}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -41,14 +37,15 @@ function update_script() {
     header_info
     case $CHOICE in
     1)
-      apk update && apk upgrade && rc-service vaultwarden restart -q
+      $STD apk -U upgrade
+      rc-service vaultwarden restart -q
       exit
       ;;
     2)
       if NEWTOKEN=$(whiptail --backtitle "Proxmox VE Helper Scripts" --passwordbox "Setup your ADMIN_TOKEN (make it strong)" 10 58 3>&1 1>&2 2>&3); then
         if [[ -z "$NEWTOKEN" ]]; then exit-script; fi
         if ! command -v argon2 >/dev/null 2>&1; then apk add argon2 &>/dev/null; fi
-        TOKEN=$(echo -n ${NEWTOKEN} | argon2 "$(openssl rand -base64 32)" -e -id -k 19456 -t 2 -p 1)
+        TOKEN=$(echo -n "${NEWTOKEN}" | argon2 "$(openssl rand -base64 32)" -e -id -k 19456 -t 2 -p 1)
         if [[ ! -f /var/lib/vaultwarden/config.json ]]; then
           sed -i "s|export ADMIN_TOKEN=.*|export ADMIN_TOKEN='${TOKEN}'|" /etc/conf.d/vaultwarden
         else
@@ -69,4 +66,4 @@ description
 
 msg_ok "Completed Successfully!\n"
 echo -e "${APP} should be reachable by going to the following URL.
-         ${BL}http://${IP}:8000${CL} \n"
+         ${BL}https://${IP}:8000${CL} \n"

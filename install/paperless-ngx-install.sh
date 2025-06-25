@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://docs.paperless-ngx.com/
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -14,14 +14,12 @@ network_check
 update_os
 
 msg_info "Installing Dependencies (Patience)"
-$STD apt-get install -y --no-install-recommends \
+$STD apt-get install -y \
   redis \
-  postgresql \
   build-essential \
   imagemagick \
   fonts-liberation \
   optipng \
-  gnupg \
   libpq-dev \
   libmagic-dev \
   mime-support \
@@ -32,25 +30,24 @@ $STD apt-get install -y --no-install-recommends \
   libtool \
   pkg-config \
   git \
-  curl \
   libtiff-dev \
   libpng-dev \
-  libleptonica-dev \
-  sudo \
-  mc
+  libleptonica-dev
 msg_ok "Installed Dependencies"
 
-msg_info "Installing Python3 Dependencies (Patience)"
-$STD apt-get install -y --no-install-recommends \
+PG_VERSION="16" install_postgresql
+
+msg_info "Setup Python3"
+$STD apt-get install -y \
   python3 \
   python3-pip \
   python3-dev \
   python3-setuptools \
   python3-wheel
-msg_ok "Installed Python3 Dependencies"
+msg_ok "Setup Python3"
 
 msg_info "Installing OCR Dependencies (Patience)"
-$STD apt-get install -y --no-install-recommends \
+$STD apt-get install -y \
   unpaper \
   icc-profiles-free \
   qpdf \
@@ -60,9 +57,9 @@ $STD apt-get install -y --no-install-recommends \
   zlib1g \
   tesseract-ocr \
   tesseract-ocr-eng
-  
+
 cd /tmp
-wget -q https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10040/ghostscript-10.04.0.tar.gz
+curl -fsSL "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10040/ghostscript-10.04.0.tar.gz" -o "ghostscript-10.04.0.tar.gz"
 $STD tar -xzf ghostscript-10.04.0.tar.gz
 cd ghostscript-10.04.0
 $STD ./configure
@@ -81,23 +78,23 @@ rm -rf /opt/jbig2enc
 msg_ok "Installed JBIG2"
 
 msg_info "Installing Paperless-ngx (Patience)"
-Paperlessngx=$(wget -q https://github.com/paperless-ngx/paperless-ngx/releases/latest -O - | grep "title>Release" | cut -d " " -f 5)
+Paperlessngx=$(curl -fsSL "https://github.com/paperless-ngx/paperless-ngx/releases/latest" | grep "title>Release" | cut -d " " -f 5)
 cd /opt
-$STD wget https://github.com/paperless-ngx/paperless-ngx/releases/download/$Paperlessngx/paperless-ngx-$Paperlessngx.tar.xz
-$STD tar -xf paperless-ngx-$Paperlessngx.tar.xz -C /opt/
+$STD curl -fsSL "https://github.com/paperless-ngx/paperless-ngx/releases/download/$Paperlessngx/paperless-ngx-$Paperlessngx.tar.xz" -o "paperless-ngx-$Paperlessngx.tar.xz"
+$STD tar -xf "paperless-ngx-$Paperlessngx.tar.xz" -C /opt/
 mv paperless-ngx paperless
-rm paperless-ngx-$Paperlessngx.tar.xz
+rm "paperless-ngx-$Paperlessngx.tar.xz"
 cd /opt/paperless
 $STD pip install --upgrade pip
 $STD pip install -r requirements.txt
-curl -s -o /opt/paperless/paperless.conf https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/paperless.conf.example
+curl -fsSL "https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/paperless.conf.example" -o /opt/paperless/paperless.conf
 mkdir -p {consume,data,media,static}
 sed -i -e 's|#PAPERLESS_REDIS=redis://localhost:6379|PAPERLESS_REDIS=redis://localhost:6379|' /opt/paperless/paperless.conf
 sed -i -e "s|#PAPERLESS_CONSUMPTION_DIR=../consume|PAPERLESS_CONSUMPTION_DIR=/opt/paperless/consume|" /opt/paperless/paperless.conf
 sed -i -e "s|#PAPERLESS_DATA_DIR=../data|PAPERLESS_DATA_DIR=/opt/paperless/data|" /opt/paperless/paperless.conf
 sed -i -e "s|#PAPERLESS_MEDIA_ROOT=../media|PAPERLESS_MEDIA_ROOT=/opt/paperless/media|" /opt/paperless/paperless.conf
 sed -i -e "s|#PAPERLESS_STATICDIR=../static|PAPERLESS_STATICDIR=/opt/paperless/static|" /opt/paperless/paperless.conf
-echo "${Paperlessngx}" >/opt/${APPLICATION}_version.txt
+echo "${Paperlessngx}" >/opt/"${APPLICATION}"_version.txt
 msg_ok "Installed Paperless-ngx"
 
 msg_info "Installing Natural Language Toolkit (Patience)"
@@ -128,7 +125,7 @@ cd /opt/paperless/src
 $STD python3 manage.py migrate
 msg_ok "Set up PostgreSQL database"
 
-read -r -p "Would you like to add Adminer? <y/N> " prompt
+read -r -p "${TAB3}Would you like to add Adminer? <y/N> " prompt
 if [[ "${prompt,,}" =~ ^(y|yes)$ ]]; then
   msg_info "Installing Adminer"
   $STD apt install -y adminer
@@ -196,6 +193,7 @@ Requires=redis.service
 
 [Service]
 WorkingDirectory=/opt/paperless/src
+ExecStartPre=/bin/sleep 2
 ExecStart=python3 manage.py document_consumer
 
 [Install]
@@ -211,7 +209,10 @@ Requires=redis.service
 
 [Service]
 WorkingDirectory=/opt/paperless/src
-ExecStart=/usr/local/bin/gunicorn -c /opt/paperless/gunicorn.conf.py paperless.asgi:application
+ExecStart=granian --interface asginl --ws "paperless.asgi:application"
+Environment=GRANIAN_HOST=::
+Environment=GRANIAN_PORT=8000
+Environment=GRANIAN_WORKERS=1
 
 [Install]
 WantedBy=multi-user.target
@@ -220,7 +221,7 @@ EOF
 sed -i -e 's/rights="none" pattern="PDF"/rights="read|write" pattern="PDF"/' /etc/ImageMagick-6/policy.xml
 
 systemctl daemon-reload
-$STD systemctl enable --now paperless-consumer paperless-webserver paperless-scheduler paperless-task-queue.service
+$STD systemctl enable -q --now paperless-webserver paperless-scheduler paperless-task-queue paperless-consumer
 msg_ok "Created Services"
 
 motd_ssh

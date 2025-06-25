@@ -1,39 +1,27 @@
-> **🛠️ Note:**  
-> We are meticulous about merging code into the main branch, so please understand that pull requests not meeting the project's standards may be rejected. It's never personal!  
-> 🎮 **Note for game-related scripts:** These have a lower likelihood of being merged.
+<!--🛑 New scripts must be submitted to [ProxmoxVED](https://github.com/community-scripts/ProxmoxVED) for testing.  
+PRs without prior testing will be closed. -->
+## ✍️ Description  
+
+
+
+## 🔗 Related PR / Issue  
+Link: #
+
+
+## ✅ Prerequisites  (**X** in brackets) 
+
+- [ ] **Self-review completed** – Code follows project standards.  
+- [ ] **Tested thoroughly** – Changes work as expected.  
+- [ ] **No security risks** – No hardcoded secrets, unnecessary privilege escalations, or permission issues.  
 
 ---
 
-## ✍️ Description
-Provide a summary of the changes made and/or reference the issue being addressed.
+## 🛠️ Type of Change (**X** in brackets)  
 
-- 
-
-- - -
-
-- Related Issue: # (issue number, if applicable)  
-- Related PR: # (if applicable)  
-- Related Discussion: [Link](https://github.com/community-scripts/ProxmoxVE/discussions)  
-
----
-
-## 🛠️ Type of Change
-Please check the relevant options:  
-- [ ] Bug fix (non-breaking change that resolves an issue)  
-- [ ] New feature (non-breaking change that adds functionality)  
-- [ ] Breaking change (fix or feature that would cause existing functionality to change unexpectedly)  
-- [ ] New script (a fully functional and thoroughly tested script or set of scripts)  
-
----
-
-## ✅ Prerequisites
-The following steps must be completed for the pull request to be considered:  
-- [ ] Self-review performed (I have reviewed my code to ensure it follows established patterns and conventions.)  
-- [ ] Testing performed (I have thoroughly tested my changes and verified expected functionality.)  
-- [ ] Documentation updated (I have updated any relevant documentation)
-
----
-
-## 📋 Additional Information (optional)
-Provide any extra context or screenshots about the feature or fix here.  
-
+- [ ] 🐞 **Bug fix** – Resolves an issue without breaking functionality.  
+- [ ] ✨ **New feature** – Adds new, non-breaking functionality.  
+- [ ] 💥 **Breaking change** – Alters existing functionality in a way that may require updates.  
+- [ ] 🆕 **New script** – A fully functional and tested script or script set.  
+- [ ] 🌍 **Website update** – Changes to website-related JSON files or metadata.  
+- [ ] 🔧 **Refactoring / Code Cleanup** – Improves readability or maintainability without changing functionality.  
+- [ ] 📝 **Documentation update** – Changes to `README`, `AppName.md`, `CONTRIBUTING.md`, or other docs.  

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 community-scripts ORG
+# Copyright (c) 2021-2025 community-scripts ORG
 # Author: bvdberg01
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://netboxlabs.com/
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -15,16 +15,8 @@ update_os
 
 msg_info "Installing Dependencies"
 $STD apt-get install -y \
-  curl \
-  sudo \
-  mc \
   apache2 \
   redis-server \
-  postgresql \
-  python3 \
-  python3-pip \
-  python3-venv \
-  python3-dev \
   build-essential \
   libxml2-dev \
   libxslt1-dev \
@@ -34,6 +26,16 @@ $STD apt-get install -y \
   zlib1g-dev
 msg_ok "Installed Dependencies"
 
+PG_VERSION="16" install_postgresql
+
+msg_info "Installing Python"
+$STD apt-get install -y \
+  python3 \
+  python3-pip \
+  python3-venv \
+  python3-dev
+msg_ok "Installed Python"
+
 msg_info "Setting up PostgreSQL"
 DB_NAME=netbox
 DB_USER=netbox
@@ -41,19 +43,19 @@ DB_PASS=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | cut -c1-13)
 $STD sudo -u postgres psql -c "CREATE ROLE $DB_USER WITH LOGIN PASSWORD '$DB_PASS';"
 $STD sudo -u postgres psql -c "CREATE DATABASE $DB_NAME WITH OWNER $DB_USER TEMPLATE template0;"
 {
-echo "Netbox-Credentials"
-echo -e "Netbox Database User: \e[32m$DB_USER\e[0m"
-echo -e "Netbox Database Password: \e[32m$DB_PASS\e[0m"
-echo -e "Netbox Database Name: \e[32m$DB_NAME\e[0m"
-} >> ~/netbox.creds
+  echo "Netbox-Credentials"
+  echo -e "Netbox Database User: \e[32m$DB_USER\e[0m"
+  echo -e "Netbox Database Password: \e[32m$DB_PASS\e[0m"
+  echo -e "Netbox Database Name: \e[32m$DB_NAME\e[0m"
+} >>~/netbox.creds
 msg_ok "Set up PostgreSQL"
 
 msg_info "Installing NetBox (Patience)"
 cd /opt
-RELEASE=$(curl -s https://api.github.com/repos/netbox-community/netbox/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-wget -q "https://github.com/netbox-community/netbox/archive/refs/tags/v${RELEASE}.zip"
-unzip -q "v${RELEASE}.zip"
-mv /opt/netbox-${RELEASE}/ /opt/netbox
+RELEASE=$(curl -fsSL https://api.github.com/repos/netbox-community/netbox/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+curl -fsSL "https://github.com/netbox-community/netbox/archive/refs/tags/v${RELEASE}.zip" -o "v${RELEASE}.zip"
+$STD unzip "v${RELEASE}.zip"
+mv /opt/netbox-"${RELEASE}"/ /opt/netbox
 
 $STD adduser --system --group netbox
 chown --recursive netbox /opt/netbox/netbox/media/
@@ -67,8 +69,8 @@ ESCAPED_SECRET_KEY=$(printf '%s\n' "$SECRET_KEY" | sed 's/[&/\]/\\&/g')
 
 sed -i 's/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ["*"]/' /opt/netbox/netbox/netbox/configuration.py
 sed -i "s|SECRET_KEY = ''|SECRET_KEY = '${ESCAPED_SECRET_KEY}'|" /opt/netbox/netbox/netbox/configuration.py
-sed -i "/DATABASE = {/,/}/s/'USER': '[^']*'/'USER': '$DB_USER'/" /opt/netbox/netbox/netbox/configuration.py
-sed -i "/DATABASE = {/,/}/s/'PASSWORD': '[^']*'/'PASSWORD': '$DB_PASS'/" /opt/netbox/netbox/netbox/configuration.py
+sed -i "/DATABASES = {/,/}/s/'USER': '[^']*'/'USER': '$DB_USER'/" /opt/netbox/netbox/netbox/configuration.py
+sed -i "/DATABASES = {/,/}/s/'PASSWORD': '[^']*'/'PASSWORD': '$DB_PASS'/" /opt/netbox/netbox/netbox/configuration.py
 
 $STD /opt/netbox/upgrade.sh
 ln -s /opt/netbox/contrib/netbox-housekeeping.sh /etc/cron.daily/netbox-housekeeping
@@ -84,8 +86,8 @@ mv /opt/netbox/contrib/*.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable -q --now netbox netbox-rq
 
-echo "${RELEASE}" >/opt/${APPLICATION}_version.txt
-echo -e "Netbox Secret: \e[32m$SECRET_KEY\e[0m" >> ~/netbox.creds
+echo "${RELEASE}" >/opt/"${APPLICATION}"_version.txt
+echo -e "Netbox Secret: \e[32m$SECRET_KEY\e[0m" >>~/netbox.creds
 msg_ok "Installed NetBox"
 
 msg_info "Setting up Django Admin"
@@ -93,7 +95,7 @@ DJANGO_USER=Admin
 DJANGO_PASS=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | cut -c1-13)
 
 source /opt/netbox/venv/bin/activate
-$STD python3 /opt/netbox/netbox/manage.py shell << EOF
+$STD python3 /opt/netbox/netbox/manage.py shell <<EOF
 from django.contrib.auth import get_user_model
 UserModel = get_user_model()
 user = UserModel.objects.create_user('$DJANGO_USER', password='$DJANGO_PASS')
@@ -102,11 +104,11 @@ user.is_staff = True
 user.save()
 EOF
 {
-echo ""
-echo "Netbox-Django-Credentials"
-echo -e "Django User: \e[32m$DJANGO_USER\e[0m"
-echo -e "Django Password: \e[32m$DJANGO_PASS\e[0m"
-} >> ~/netbox.creds
+  echo ""
+  echo "Netbox-Django-Credentials"
+  echo -e "Django User: \e[32m$DJANGO_USER\e[0m"
+  echo -e "Django Password: \e[32m$DJANGO_PASS\e[0m"
+} >>~/netbox.creds
 msg_ok "Setup Django Admin"
 
 motd_ssh

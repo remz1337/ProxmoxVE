@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://n8n.io/
 
-# App Default Values
 APP="n8n"
-var_tags="automation"
-var_cpu="2"
-var_ram="2048"
-var_disk="6"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-automation}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-6}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -35,12 +30,12 @@ function update_script() {
   if [[ "$(node -v | cut -d 'v' -f 2)" == "18."* ]]; then
     if ! command -v npm >/dev/null 2>&1; then
       echo "Installing NPM..."
-      apt-get install -y npm >/dev/null 2>&1
+      $STD apt-get install -y npm
       echo "Installed NPM..."
     fi
   fi
   msg_info "Updating ${APP} LXC"
-  npm update -g n8n &>/dev/null
+  $STD npm update -g n8n
   systemctl restart n8n
   msg_ok "Updated Successfully"
   exit

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://github.com/Threadfin/Threadfin
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -14,16 +14,13 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-$STD apt-get install -y curl
 $STD apt-get install -y ffmpeg
 $STD apt-get install -y vlc
 msg_ok "Installed Dependencies"
 
 msg_info "Installing Threadfin"
 mkdir -p /opt/threadfin
-wget -q -O /opt/threadfin/threadfin 'https://github.com/Threadfin/Threadfin/releases/latest/download/Threadfin_linux_amd64'
+curl -fsSL "https://github.com/Threadfin/Threadfin/releases/latest/download/Threadfin_linux_amd64" -o "/opt/threadfin/threadfin"
 chmod +x /opt/threadfin/threadfin
 
 msg_ok "Installed Threadfin"
@@ -43,7 +40,7 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now threadfin.service
+systemctl enable -q --now threadfin
 msg_ok "Created Service"
 
 motd_ssh

@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://nodered.org/
 
-# App Default Values
 APP="Node-Red"
-var_tags="automation"
-var_cpu="1"
-var_ram="1024"
-var_disk="4"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-automation}"
+var_cpu="${var_cpu:-1}"
+var_ram="${var_ram:-1024}"
+var_disk="${var_disk:-4}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -40,7 +35,7 @@ function update_script() {
     if [[ "$(node -v | cut -d 'v' -f 2)" == "18."* ]]; then
       if ! command -v npm >/dev/null 2>&1; then
         msg_info "Installing NPM"
-        apt-get install -y npm >/dev/null 2>&1
+        $STD apt-get install -y npm
         msg_ok "Installed NPM"
       fi
     fi
@@ -49,7 +44,7 @@ function update_script() {
     msg_ok "Stopped ${APP}"
 
     msg_info "Updating ${APP}"
-    npm install -g --unsafe-perm node-red &>/dev/null
+    $STD npm install -g --unsafe-perm node-red
     msg_ok "Updated ${APP}"
 
     msg_info "Starting ${APP}"
@@ -89,7 +84,7 @@ function update_script() {
     msg_info "Installing ${THEME} Theme"
     cd /root/.node-red
     sed -i 's|// theme: ".*",|theme: "",|g' /root/.node-red/settings.js
-    npm install @node-red-contrib-themes/theme-collection &>/dev/null
+    $STD npm install @node-red-contrib-themes/theme-collection
     sed -i "{s/theme: ".*"/theme: '${THEME}',/g}" /root/.node-red/settings.js
     systemctl restart nodered
     msg_ok "Installed ${THEME} Theme"

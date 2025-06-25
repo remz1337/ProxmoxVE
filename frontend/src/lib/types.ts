@@ -5,13 +5,14 @@ export type Script = {
   slug: string;
   categories: number[];
   date_created: string;
-  type: "vm" | "ct" | "misc";
+  type: "vm" | "ct" | "pve" | "addon";
   updateable: boolean;
   privileged: boolean;
   interface_port: number | null;
   documentation: string | null;
   website: string | null;
   logo: string | null;
+  config_path: string;
   description: string;
   install_methods: {
     type: "default" | "alpine";
@@ -55,4 +56,10 @@ export interface Version {
 export interface OperatingSystem {
   name: string;
   versions: Version[];
+}
+
+export interface AppVersion {
+  name: string;
+  version: string;
+  date: Date;
 }

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://github.com/Whisparr/Whisparr
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -14,17 +14,15 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-$STD apt-get install -y sqlite3 
+$STD apt-get install -y sqlite3
 msg_ok "Installed Dependencies"
 
 msg_info "Installing Whisparr"
 mkdir -p /var/lib/whisparr/
 chmod 775 /var/lib/whisparr/
-$STD wget --content-disposition 'https://whisparr.servarr.com/v1/update/nightly/updatefile?os=linux&runtime=netcore&arch=x64'
-$STD tar -xvzf Whisparr.develop.*.tar.gz
+cd /var/lib/whisparr/
+$STD curl -fsSL 'https://whisparr.servarr.com/v1/update/nightly/updatefile?os=linux&runtime=netcore&arch=x64' -o whisparr.tar.gz
+$STD tar -xvzf whisparr.tar.gz
 mv Whisparr /opt
 chmod 775 /opt/Whisparr
 msg_ok "Installed Whisparr"

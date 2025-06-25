@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck
 # Co-Author: MickLesk (Canbiz)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/Donkie/Spoolman
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
@@ -18,32 +17,28 @@ update_os
 msg_info "Installing Dependencies"
 $STD apt-get install -y \
   build-essential \
-  curl \
-  sudo \
   make \
   libpq-dev \
-  gpg \
-  ca-certificates \
-  mc
+  ca-certificates
 msg_ok "Installed Dependencies"
 
-msg_info "Installing Python3"
+msg_info "Setup Python3"
 $STD apt-get install -y \
   python3-dev \
   python3-setuptools \
   python3-wheel \
   python3-pip
-msg_ok "Installed Python3"
+msg_ok "Setup Python3"
 
 msg_info "Installing Spoolman"
-RELEASE=$(wget -q https://github.com/Donkie/Spoolman/releases/latest -O - | grep "title>Release" | cut -d " " -f 4)
+RELEASE=$(curl -fsSL https://github.com/Donkie/Spoolman/releases/latest | grep "title>Release" | cut -d " " -f 4)
 cd /opt
-wget -q https://github.com/Donkie/Spoolman/releases/download/$RELEASE/spoolman.zip
-unzip -q spoolman.zip -d spoolman
+curl -fsSL "https://github.com/Donkie/Spoolman/releases/download/$RELEASE/spoolman.zip" -o "spoolman.zip"
+$STD unzip spoolman.zip -d spoolman
 rm -rf spoolman.zip
 cd spoolman
 $STD pip3 install -r requirements.txt
-wget -q https://raw.githubusercontent.com/Donkie/Spoolman/master/.env.example -O .env
+curl -fsSL "https://raw.githubusercontent.com/Donkie/Spoolman/master/.env.example" -o ".env"
 echo "${RELEASE}" >/opt/${APPLICATION}_version.txt
 msg_ok "Installed Spoolman"
 
@@ -62,7 +57,7 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now spoolman.service
+systemctl enable -q --now spoolman
 msg_ok "Created Service"
 
 motd_ssh

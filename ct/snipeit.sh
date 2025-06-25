@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 community-scripts ORG
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 community-scripts ORG
 # Author: Michel Roegl-Brunner (michelroegl-brunner)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://snipeitapp.com/
 
-# App Default Values
 APP="SnipeIT"
-var_tags="assat-management;foss"
-var_cpu="2"
-var_ram="2048"
-var_disk="4"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-asset-management;foss}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-4}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -32,35 +27,43 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -s https://api.github.com/repos/snipe/snipe-it/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+  RELEASE=$(curl -fsSL https://api.github.com/repos/snipe/snipe-it/releases/latest | grep '"tag_name"' | sed -E 's/.*"tag_name": "v([^"]+).*/\1/')
   if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
+    msg_info "Stopping Services"
+    systemctl stop nginx
+    msg_ok "Services Stopped"
+
     msg_info "Updating ${APP} to v${RELEASE}"
-    apt-get update &>/dev/null
-    apt-get -y upgrade &>/dev/null
+    $STD apt-get update
+    $STD apt-get -y upgrade
     mv /opt/snipe-it /opt/snipe-it-backup
-    cd /opt
-    wget -q "https://github.com/snipe/snipe-it/archive/refs/tags/v${RELEASE}.zip" &>/dev/null
-    unzip -q v${RELEASE}.zip
-    mv snipe-it-${RELEASE} /opt/snipe-it
+    temp_file=$(mktemp)
+    curl -fsSL "https://github.com/snipe/snipe-it/archive/refs/tags/v${RELEASE}.tar.gz" -o "$temp_file"
+    tar zxf "$temp_file"
+    mv "snipe-it-${RELEASE}" /opt/snipe-it
     cp /opt/snipe-it-backup/.env /opt/snipe-it/.env
     cp -r /opt/snipe-it-backup/public/uploads/ /opt/snipe-it/public/uploads/
     cp -r /opt/snipe-it-backup/storage/private_uploads /opt/snipe-it/storage/private_uploads
     cd /opt/snipe-it/
     export COMPOSER_ALLOW_SUPERUSER=1
-    composer install --no-dev --prefer-source &>/dev/null
-    composer dump-autoload &>/dev/null
-    php artisan migrate --force &>/dev/null
-    php artisan config:clear &>/dev/null
-    php artisan route:clear &>/dev/null
-    php artisan cache:clear &>/dev/null
-    php artisan view:clear &>/dev/null
+    $STD composer install --no-dev --optimize-autoloader --no-interaction
+    $STD composer dump-autoload
+    $STD php artisan migrate --force
+    $STD php artisan config:clear
+    $STD php artisan route:clear
+    $STD php artisan cache:clear
+    $STD php artisan view:clear
     chown -R www-data: /opt/snipe-it
     chmod -R 755 /opt/snipe-it
-    rm -rf /opt/v${RELEASE}.zip
+    rm -rf "$temp_file"
     rm -rf /opt/snipe-it-backup
-    msg_ok "Updated ${APP} LXC"
+    msg_ok "Updated ${APP}"
+
+    msg_info "Starting Service"
+    systemctl start nginx
+    msg_ok "Started Service"
   else
-    msg_ok "No update required. ${APP} is already at v${RELEASE}."
+    msg_ok "No update required. ${APP} is already at v${RELEASE}"
   fi
   exit
 }

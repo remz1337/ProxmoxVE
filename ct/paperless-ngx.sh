@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://docs.paperless-ngx.com/
 
-# App Default Values
 APP="Paperless-ngx"
-var_tags="document;management"
-var_cpu="2"
-var_ram="2048"
-var_disk="10"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-document;management}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-10}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -29,7 +24,7 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -s https://api.github.com/repos/paperless-ngx/paperless-ngx/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
+  RELEASE=$(curl -fsSL https://api.github.com/repos/paperless-ngx/paperless-ngx/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
 
   UPD=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "SUPPORT" --radiolist --cancel-button Exit-Script "Spacebar = Select" 11 58 2 \
     "1" "Update Paperless-ngx to $RELEASE" ON \
@@ -43,12 +38,12 @@ function update_script() {
       if [[ "$(gs --version 2>/dev/null)" != "10.04.0" ]]; then
         msg_info "Updating Ghostscript (Patience)"
         cd /tmp
-        wget -q https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10040/ghostscript-10.04.0.tar.gz
+        curl -fsSL "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10040/ghostscript-10.04.0.tar.gz" -o $(basename "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10040/ghostscript-10.04.0.tar.gz")
         tar -xzf ghostscript-10.04.0.tar.gz
         cd ghostscript-10.04.0
-        ./configure &>/dev/null
-        make &>/dev/null
-        sudo make install &>/dev/null
+        $STD ./configure
+        $STD make
+        $STD sudo make install
         rm -rf /tmp/ghostscript*
         msg_ok "Ghostscript updated to 10.04.0"
       fi
@@ -58,14 +53,14 @@ function update_script() {
 
       msg_info "Updating to ${RELEASE}"
       cd ~
-      wget -q https://github.com/paperless-ngx/paperless-ngx/releases/download/$RELEASE/paperless-ngx-$RELEASE.tar.xz
+      curl -fsSL "https://github.com/paperless-ngx/paperless-ngx/releases/download/$RELEASE/paperless-ngx-$RELEASE.tar.xz" -o $(basename "https://github.com/paperless-ngx/paperless-ngx/releases/download/$RELEASE/paperless-ngx-$RELEASE.tar.xz")
       tar -xf paperless-ngx-$RELEASE.tar.xz
       cp -r /opt/paperless/paperless.conf paperless-ngx/
       cp -r paperless-ngx/* /opt/paperless/
       cd /opt/paperless
-      pip install -r requirements.txt &>/dev/null
+      $STD pip install -r requirements.txt
       cd /opt/paperless/src
-      /usr/bin/python3 manage.py migrate &>/dev/null
+      $STD /usr/bin/python3 manage.py migrate
       echo "${RELEASE}" >/opt/${APP}_version.txt
       msg_ok "Updated to ${RELEASE}"
 

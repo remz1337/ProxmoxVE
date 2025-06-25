@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck | Co-Author: havardthom
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://cockpit-project.org/
 
-# App Default Values
 APP="Cockpit"
-var_tags="monitoring;network"
-var_cpu="2"
-var_ram="1024"
-var_disk="4"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-monitoring;network}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-1024}"
+var_disk="${var_disk:-4}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -41,49 +36,61 @@ function update_script() {
 
   if [ "$UPD" == "1" ]; then
     msg_info "Updating ${APP} LXC"
-    apt-get update &>/dev/null
-    apt-get -y upgrade &>/dev/null
+    $STD apt-get update
+    $STD apt-get -y upgrade
     msg_ok "Updated ${APP} LXC"
     exit
   fi
+
   if [ "$UPD" == "2" ]; then
     msg_info "Installing dependencies (patience)"
-    apt-get install -y attr &>/dev/null
-    apt-get install -y nfs-kernel-server &>/dev/null
-    apt-get install -y samba &>/dev/null
-    apt-get install -y samba-common-bin &>/dev/null
-    apt-get install -y winbind &>/dev/null
-    apt-get install -y gawk &>/dev/null
+    $STD apt-get install -y \
+      attr \
+      nfs-kernel-server \
+      samba \
+      samba-common-bin \
+      winbind \
+      gawk
     msg_ok "Installed dependencies"
     msg_info "Installing Cockpit file sharing"
-    wget -q $(curl -s https://api.github.com/repos/45Drives/cockpit-file-sharing/releases/latest | grep download | grep focal_all.deb | cut -d\" -f4)
-    dpkg -i cockpit-file-sharing_*focal_all.deb &>/dev/null
-    rm cockpit-file-sharing_*focal_all.deb
+    URL=$(curl -fsSL https://api.github.com/repos/45Drives/cockpit-file-sharing/releases/latest | grep download | grep focal_all.deb | cut -d\" -f4)
+    FILE=$(basename "$URL")
+    curl -fsSL "$URL" -o "$FILE"
+    $STD dpkg -i "$FILE" || $STD apt-get install -f -y
+    rm -f "$FILE"
     msg_ok "Installed Cockpit file sharing"
     exit
   fi
+
   if [ "$UPD" == "3" ]; then
     msg_info "Installing dependencies (patience)"
-    apt-get install -y psmisc &>/dev/null
-    apt-get install -y samba &>/dev/null
-    apt-get install -y samba-common-bin &>/dev/null
+    $STD apt-get install -y \
+      psmisc \
+      samba \
+      samba-common-bin
     msg_ok "Installed dependencies"
     msg_info "Installing Cockpit identities"
-    wget -q $(curl -s https://api.github.com/repos/45Drives/cockpit-identities/releases/latest | grep download | grep focal_all.deb | cut -d\" -f4)
-    dpkg -i cockpit-identities_*focal_all.deb &>/dev/null
-    rm cockpit-identities_*focal_all.deb
+    URL=$(curl -fsSL https://api.github.com/repos/45Drives/cockpit-identities/releases/latest | grep download | grep focal_all.deb | cut -d\" -f4)
+    FILE=$(basename "$URL")
+    curl -fsSL "$URL" -o "$FILE"
+    $STD dpkg -i "$FILE" || $STD apt-get install -f -y
+    rm -f "$FILE"
     msg_ok "Installed Cockpit identities"
     exit
   fi
+
   if [ "$UPD" == "4" ]; then
     msg_info "Installing dependencies"
-    apt-get install -y rsync &>/dev/null
-    apt-get install -y zip &>/dev/null
+    $STD apt-get install -y \
+      rsync \
+      zip
     msg_ok "Installed dependencies"
     msg_info "Installing Cockpit navigator"
-    wget -q $(curl -s https://api.github.com/repos/45Drives/cockpit-navigator/releases/latest | grep download | grep focal_all.deb | cut -d\" -f4)
-    dpkg -i cockpit-navigator_*focal_all.deb &>/dev/null
-    rm cockpit-navigator_*focal_all.deb
+    URL=$(curl -fsSL https://api.github.com/repos/45Drives/cockpit-navigator/releases/latest | grep download | grep focal_all.deb | cut -d\" -f4)
+    FILE=$(basename "$URL")
+    curl -fsSL "$URL" -o "$FILE"
+    $STD dpkg -i "$FILE" || $STD apt-get install -f -y
+    rm -f "$FILE"
     msg_ok "Installed Cockpit navigator"
     exit
   fi

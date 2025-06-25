@@ -1,36 +1,34 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://alpinelinux.org/
 
-# App Default Values
 APP="Alpine"
-var_tags="os;alpine"
-var_cpu="1"
-var_ram="512"
-var_disk="0.1"
-var_os="alpine"
-var_version="3.20"
-var_unprivileged="1"
+var_tags="${var_tags:-os;alpine}"
+var_cpu="${var_cpu:-1}"
+var_ram="${var_ram:-512}"
+var_disk="${var_disk:-0.5}"
+var_os="${var_os:-alpine}"
+var_version="${var_version:-3.21}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
 
 function update_script() {
-  UPD=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "SUPPORT" --radiolist --cancel-button Exit-Script "Spacebar = Select" 11 58 1 \
-    "1" "Check for Alpine Updates" ON \
-    3>&1 1>&2 2>&3)
+  UPD=$(
+    whiptail --backtitle "Proxmox VE Helper Scripts" --title "SUPPORT" --radiolist --cancel-button Exit-Script "Spacebar = Select" 11 58 1 \
+      "1" "Check for Alpine Updates" ON \
+      3>&1 1>&2 2>&3
+  )
 
   header_info
   if [ "$UPD" == "1" ]; then
-    apk update && apk upgrade
+    $STD apk -U upgrade
     exit
   fi
 }

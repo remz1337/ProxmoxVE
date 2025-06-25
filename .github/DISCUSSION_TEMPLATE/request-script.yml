@@ -1,4 +1,4 @@
-title: "[Script request] "
+title: "[Script request]: "
 labels: ["enhancement"]
 body:
 - type: input
@@ -29,8 +29,6 @@ body:
       - label: "I have searched existing [scripts](https://community-scripts.github.io/Proxmox/scripts) and found no duplicates."
         required: true
       - label: "I have searched existing [discussions](https://github.com/community-scripts/ProxmoxVE/discussions?discussions_q=) and found no duplicate requests."
-        required: true
-      - label: "This is not a game-related request."
         required: true
 - type: markdown
   attributes:

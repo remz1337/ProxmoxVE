@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://zwave-js.github.io/zwave-js-ui/#/
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -13,20 +13,13 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Dependencies"
-$STD apt-get install -y \
-  curl \
-  sudo \
-  mc 
-msg_ok "Installed Dependencies"
-
 msg_info "Installing Z-Wave JS UI"
 mkdir -p /opt/zwave-js-ui
 mkdir -p /opt/zwave_store
 cd /opt/zwave-js-ui
-RELEASE=$(curl -s https://api.github.com/repos/zwave-js/zwave-js-ui/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
-wget -q https://github.com/zwave-js/zwave-js-ui/releases/download/${RELEASE}/zwave-js-ui-${RELEASE}-linux.zip
-unzip -q zwave-js-ui-${RELEASE}-linux.zip
+RELEASE=$(curl -fsSL https://api.github.com/repos/zwave-js/zwave-js-ui/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
+curl -fsSL "https://github.com/zwave-js/zwave-js-ui/releases/download/${RELEASE}/zwave-js-ui-${RELEASE}-linux.zip" -o "zwave-js-ui-${RELEASE}-linux.zip"
+$STD unzip zwave-js-ui-${RELEASE}-linux.zip
 cat <<EOF >/opt/.env
 ZWAVEJS_EXTERNAL_CONFIG=/opt/zwave_store/.config-db
 STORE_DIR=/opt/zwave_store
@@ -35,7 +28,7 @@ echo "${RELEASE}" >"/opt/${APPLICATION}_version.txt"
 msg_ok "Installed Z-Wave JS UI"
 
 msg_info "Creating Service"
-cat <<EOF > /etc/systemd/system/zwave-js-ui.service
+cat <<EOF >/etc/systemd/system/zwave-js-ui.service
 [Unit]
 Description=zwave-js-ui
 Wants=network-online.target

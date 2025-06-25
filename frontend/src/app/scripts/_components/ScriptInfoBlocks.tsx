@@ -1,12 +1,5 @@
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { basePath, mostPopularScripts } from "@/config/siteConfig";
 import { extractDate } from "@/lib/time";
 import { Category, Script } from "@/lib/types";
@@ -23,7 +16,8 @@ export const getDisplayValueFromType = (type: string) => {
       return "LXC";
     case "vm":
       return "VM";
-    case "misc":
+    case "pve":
+    case "addon":
       return "";
     default:
       return "";
@@ -35,10 +29,19 @@ export function LatestScripts({ items }: { items: Category[] }) {
 
   const latestScripts = useMemo(() => {
     if (!items) return [];
+
     const scripts = items.flatMap((category) => category.scripts || []);
-    return scripts.sort(
-      (a, b) =>
-        new Date(b.date_created).getTime() - new Date(a.date_created).getTime(),
+
+    // Filter out duplicates by slug
+    const uniqueScriptsMap = new Map<string, Script>();
+    scripts.forEach((script) => {
+      if (!uniqueScriptsMap.has(script.slug)) {
+        uniqueScriptsMap.set(script.slug, script);
+      }
+    });
+
+    return Array.from(uniqueScriptsMap.values()).sort(
+      (a, b) => new Date(b.date_created).getTime() - new Date(a.date_created).getTime(),
     );
   }, [items]);
 
@@ -64,18 +67,12 @@ export function LatestScripts({ items }: { items: Category[] }) {
           <h2 className="text-lg font-semibold">Newest Scripts</h2>
           <div className="flex items-center justify-end gap-1">
             {page > 1 && (
-              <div
-                className="cursor-pointer select-none p-2 text-sm font-semibold"
-                onClick={goToPreviousPage}
-              >
+              <div className="cursor-pointer select-none p-2 text-sm font-semibold" onClick={goToPreviousPage}>
                 Previous
               </div>
             )}
             {endIndex < latestScripts.length && (
-              <div
-                onClick={goToNextPage}
-                className="cursor-pointer select-none p-2 text-sm font-semibold"
-              >
+              <div onClick={goToNextPage} className="cursor-pointer select-none p-2 text-sm font-semibold">
                 {page === 1 ? "More.." : "Next"}
               </div>
             )}
@@ -84,23 +81,17 @@ export function LatestScripts({ items }: { items: Category[] }) {
       )}
       <div className="min-w flex w-full flex-row flex-wrap gap-4">
         {latestScripts.slice(startIndex, endIndex).map((script) => (
-          <Card
-            key={script.slug}
-            className="min-w-[250px] flex-1 flex-grow bg-accent/30"
-          >
+          <Card key={script.slug} className="min-w-[250px] flex-1 flex-grow bg-accent/30">
             <CardHeader>
               <CardTitle className="flex items-center gap-3">
-                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-accent p-1">
+                <div className="flex h-16 w-16 min-w-16 items-center justify-center rounded-lg bg-accent p-1">
                   <Image
                     src={script.logo || `/${basePath}/logo.png`}
                     unoptimized
                     height={64}
                     width={64}
                     alt=""
-                    onError={(e) =>
-                      ((e.currentTarget as HTMLImageElement).src =
-                        `/${basePath}/logo.png`)
-                    }
+                    onError={(e) => ((e.currentTarget as HTMLImageElement).src = `/${basePath}/logo.png`)}
                     className="h-11 w-11 object-contain"
                   />
                 </div>
@@ -116,9 +107,7 @@ export function LatestScripts({ items }: { items: Category[] }) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <CardDescription className="line-clamp-3 text-card-foreground">
-                {script.description}
-              </CardDescription>
+              <CardDescription className="line-clamp-3 text-card-foreground">{script.description}</CardDescription>
             </CardContent>
             <CardFooter className="">
               <Button asChild variant="outline">
@@ -141,9 +130,7 @@ export function LatestScripts({ items }: { items: Category[] }) {
 
 export function MostViewedScripts({ items }: { items: Category[] }) {
   const mostViewedScripts = items.reduce((acc: Script[], category) => {
-    const foundScripts = category.scripts.filter((script) =>
-      mostPopularScripts.includes(script.name),
-    );
+    const foundScripts = category.scripts.filter((script) => mostPopularScripts.includes(script.slug));
     return acc.concat(foundScripts);
   }, []);
 
@@ -156,23 +143,17 @@ export function MostViewedScripts({ items }: { items: Category[] }) {
       )}
       <div className="min-w flex w-full flex-row flex-wrap gap-4">
         {mostViewedScripts.map((script) => (
-          <Card
-            key={script.slug}
-            className="min-w-[250px] flex-1 flex-grow bg-accent/30"
-          >
+          <Card key={script.slug} className="min-w-[250px] flex-1 flex-grow bg-accent/30">
             <CardHeader>
               <CardTitle className="flex items-center gap-3">
-                <div className="flex max-h-16 min-h-16 min-w-16 max-w-16 items-center justify-center rounded-lg bg-accent p-1">
+                <div className="flex size-16 min-w-16 items-center justify-center rounded-lg bg-accent p-1">
                   <Image
                     unoptimized
                     src={script.logo || `/${basePath}/logo.png`}
                     height={64}
                     width={64}
                     alt=""
-                    onError={(e) =>
-                      ((e.currentTarget as HTMLImageElement).src =
-                        `/${basePath}/logo.png`)
-                    }
+                    onError={(e) => ((e.currentTarget as HTMLImageElement).src = `/${basePath}/logo.png`)}
                     className="h-11 w-11 object-contain"
                   />
                 </div>

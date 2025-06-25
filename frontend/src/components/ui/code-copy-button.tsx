@@ -37,29 +37,25 @@ export default function CodeCopyButton({
         );
       }, 500);
     }
-
-    // toast.success(`copied ${type} to clipboard`, {
-    //   icon: <ClipboardCheck className="h-4 w-4" />,
-    // });
   };
 
   return (
     <div className="mt-4 flex">
-      <Card className="flex items-center overflow-x-auto bg-primary-foreground pl-4">
-        <div className="overflow-x-auto whitespace-pre-wrap text-nowrap break-all pr-4 text-sm">
+      <Card className="flex items-center overflow-x-auto bg-primary-foreground pl-4 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20">
+        <div className="overflow-x-auto whitespace-pre-wrap text-nowrap break-all pr-4 text-sm [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20">
           {!isMobile && children ? children : "Copy install command"}
         </div>
-        <div
-          className={cn(" right-0 cursor-pointer bg-muted px-3 py-4")}
+        <button
           onClick={() => handleCopy("install command", children)}
+          className={cn("bg-muted px-3 py-4")}
+          title="Copy"
         >
           {hasCopied ? (
             <CheckIcon className="h-4 w-4" />
           ) : (
             <ClipboardIcon className="h-4 w-4" />
           )}
-          <span className="sr-only">Copy</span>
-        </div>
+        </button>
       </Card>
     </div>
   );

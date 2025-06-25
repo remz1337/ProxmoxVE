@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 community-scripts ORG
+# Copyright (c) 2021-2025 community-scripts ORG
 # Author: kristocopani
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://lubelogger.com/
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -14,27 +14,20 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y \
-    curl \
-    sudo \
-    wget \
-    mc \
-    zip \
-    jq
+$STD apt-get install -y jq
 msg_ok "Installed Dependencies"
-
 
 msg_info "Installing LubeLogger"
 cd /opt
 mkdir -p /opt/lubelogger
-RELEASE=$(curl -s https://api.github.com/repos/hargata/lubelog/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+RELEASE=$(curl -fsSL https://api.github.com/repos/hargata/lubelog/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
 RELEASE_TRIMMED=$(echo "${RELEASE}" | tr -d ".")
 cd /opt/lubelogger
-wget -q https://github.com/hargata/lubelog/releases/download/v${RELEASE}/LubeLogger_v${RELEASE_TRIMMED}_linux_x64.zip
-unzip -q LubeLogger_v${RELEASE_TRIMMED}_linux_x64.zip
+curl -fsSL "https://github.com/hargata/lubelog/releases/download/v${RELEASE}/LubeLogger_v${RELEASE_TRIMMED}_linux_x64.zip" -o "LubeLogger_v${RELEASE_TRIMMED}_linux_x64.zip"
+$STD unzip LubeLogger_v${RELEASE_TRIMMED}_linux_x64.zip
 chmod 700 /opt/lubelogger/CarCareTracker
 cp /opt/lubelogger/appsettings.json /opt/lubelogger/appsettings_bak.json
-jq '.Kestrel = {"Endpoints": {"Http": {"Url": "http://0.0.0.0:5000"}}}' /opt/lubelogger/appsettings_bak.json > /opt/lubelogger/appsettings.json
+jq '.Kestrel = {"Endpoints": {"Http": {"Url": "http://0.0.0.0:5000"}}}' /opt/lubelogger/appsettings_bak.json >/opt/lubelogger/appsettings.json
 echo "${RELEASE}" >"/opt/${APPLICATION}_version.txt"
 msg_ok "Installed LubeLogger"
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # Co-Author: remz1337
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://frigate.video/
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -15,26 +15,20 @@ network_check
 update_os
 
 msg_info "Installing Dependencies (Patience)"
-$STD apt-get install -y {curl,sudo,mc,git,gpg,automake,build-essential,xz-utils,libtool,ccache,pkg-config,libgtk-3-dev,libavcodec-dev,libavformat-dev,libswscale-dev,libv4l-dev,libxvidcore-dev,libx264-dev,libjpeg-dev,libpng-dev,libtiff-dev,gfortran,openexr,libatlas-base-dev,libssl-dev,libtbb2,libtbb-dev,libdc1394-22-dev,libopenexr-dev,libgstreamer-plugins-base1.0-dev,libgstreamer1.0-dev,gcc,gfortran,libopenblas-dev,liblapack-dev,libusb-1.0-0-dev,jq,moreutils}
+$STD apt-get install -y {git,ca-certificates,automake,build-essential,xz-utils,libtool,ccache,pkg-config,libgtk-3-dev,libavcodec-dev,libavformat-dev,libswscale-dev,libv4l-dev,libxvidcore-dev,libx264-dev,libjpeg-dev,libpng-dev,libtiff-dev,gfortran,openexr,libatlas-base-dev,libssl-dev,libtbb2,libtbb-dev,libdc1394-22-dev,libopenexr-dev,libgstreamer-plugins-base1.0-dev,libgstreamer1.0-dev,gcc,gfortran,libopenblas-dev,liblapack-dev,libusb-1.0-0-dev,jq,moreutils}
 msg_ok "Installed Dependencies"
 
-msg_info "Installing Python3 Dependencies"
+msg_info "Setup Python3"
 $STD apt-get install -y {python3,python3-dev,python3-setuptools,python3-distutils,python3-pip}
 $STD pip install --upgrade pip
-msg_ok "Installed Python3 Dependencies"
+msg_ok "Setup Python3"
 
-msg_info "Installing Node.js"
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >/etc/apt/sources.list.d/nodesource.list
-$STD apt-get update
-$STD apt-get install -y nodejs
-msg_ok "Installed Node.js"
+NODE_VERSION="22" install_node_and_modules
 
 msg_info "Installing go2rtc"
 mkdir -p /usr/local/go2rtc/bin
 cd /usr/local/go2rtc/bin
-wget -qO go2rtc "https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_amd64"
+curl -fsSL "https://github.com/AlexxIT/go2rtc/releases/latest/download/go2rtc_linux_amd64" -o "go2rtc"
 chmod +x go2rtc
 $STD ln -svf /usr/local/go2rtc/bin/go2rtc /usr/local/bin/go2rtc
 msg_ok "Installed go2rtc"
@@ -48,13 +42,13 @@ if [[ "$CTTYPE" == "0" ]]; then
 fi
 msg_ok "Set Up Hardware Acceleration"
 
-RELEASE=$(curl -s https://api.github.com/repos/blakeblackshear/frigate/releases/latest | jq -r '.tag_name')
+#RELEASE=$(curl -fsSL https://api.github.com/repos/blakeblackshear/frigate/releases/latest | jq -r '.tag_name')
 msg_ok "Stop spinner to prevent segmentation fault"
-msg_info "Installing Frigate $RELEASE (Perseverance)"
-if [ -n "$SPINNER_PID" ] && ps -p $SPINNER_PID > /dev/null; then kill $SPINNER_PID > /dev/null; fi
+msg_info "Installing Frigate v0.14.1 (Perseverance)"
+if [ -n "$SPINNER_PID" ] && ps -p $SPINNER_PID >/dev/null; then kill $SPINNER_PID >/dev/null; fi
 cd ~
 mkdir -p /opt/frigate/models
-wget -q https://github.com/blakeblackshear/frigate/archive/refs/tags/${RELEASE}.tar.gz -O frigate.tar.gz
+curl -fsSL "https://github.com/blakeblackshear/frigate/archive/refs/tags/v0.14.1.tar.gz" -o "frigate.tar.gz"
 tar -xzf frigate.tar.gz -C /opt/frigate --strip-components 1
 rm -rf frigate.tar.gz
 cd /opt/frigate
@@ -102,114 +96,11 @@ if [[ "$CTTYPE" == "0" ]]; then
 else
   sed -i -e 's/^kvm:x:104:$/render:x:104:frigate/' -e 's/^render:x:105:$/kvm:x:105:/' /etc/group
 fi
-echo "tmpfs   /tmp/cache      tmpfs   defaults        0       0" >> /etc/fstab
-msg_ok "Installed Frigate $RELEASE"
+echo "tmpfs   /tmp/cache      tmpfs   defaults        0       0" >>/etc/fstab
+msg_ok "Installed Frigate"
 
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/nvidia.func)
-nvidia_installed=$(check_nvidia_drivers_installed)
-if [ $nvidia_installed == 1 ]; then
-  check_nvidia_drivers_version
-  echo -e "Nvidia drivers detected. Version ${NVD_VER}"
-  msg_info "Installing Nvidia Dependencies"
-  os=""
-  if [ $PCT_OSTYPE == "debian" ]; then
-    os="debian$PCT_OSVERSION"
-  elif [ $PCT_OSTYPE == "ubuntu" ]; then
-    os_ver=$(echo "$var_version" | sed 's|\.||g')
-    os="ubuntu$os_ver"
-  fi
-  check_cuda_version
-  TARGET_CUDA_VER=$(echo $NVD_VER_CUDA | sed 's|\.|-|g')
-  $STD apt install -y gnupg
-  $STD apt-key del 7fa2af80
-  wget -q https://developer.download.nvidia.com/compute/cuda/repos/${os}/x86_64/cuda-keyring_1.1-1_all.deb
-  $STD dpkg -i cuda-keyring_1.1-1_all.deb
-  $STD apt install -y software-properties-common
-  $STD apt update
-  $STD add-apt-repository contrib
-  rm cuda-keyring_1.1-1_all.deb
-#  if grep -qR "Acquire::http::Proxy" /etc/apt/apt.conf.d/ && [ -f "/etc/apt/sources.list.d/cuda-${os}-x86_64.list" ]; then
-#    sed -i "s|https://developer|http://HTTPS///developer|g" /etc/apt/sources.list.d/cuda-${os}-x86_64.list
-#  fi
-#  $STD apt update && sleep 1
-  $STD apt update
-  $STD apt install -qqy "cuda-toolkit-$TARGET_CUDA_VER"
-  $STD apt install -qqy "cudnn-cuda-$NVD_MAJOR_CUDA"
-  msg_ok "Installed Nvidia Dependencies"
-
-  msg_info "Installing TensorRT"
-  #pip3 wheel --wheel-dir=/trt-wheels -r /opt/frigate/docker/tensorrt/requirements-amd64.txt
-  #pip3 install -U /trt-wheels/*.whl
-  # Use latest TensorRT version (instead of fixed v8)
-  $STD pip3 install --extra-index-url 'https://pypi.nvidia.com' numpy tensorrt cuda-python cython nvidia-cuda-runtime-cu12 nvidia-cuda-runtime-cu11 nvidia-cublas-cu11 nvidia-cudnn-cu11 onnx protobuf
-  TRT_VER=$(pip freeze | grep tensorrt== | sed "s|tensorrt==||g")
-  TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
-  TRT_MAJOR=${TRT_VER%%.*}
-  #There can be slight mismatch between the installed drivers' CUDA version and the available download link, so dynamically retrieve the right link using the latest CUDA version mentioned in the TensorRT documentation
-  trt_cuda=$(curl --silent https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing-debian | grep "https://developer.nvidia.com/cuda-toolkit-archive" | sed -n '1p')
-  trt_cuda=$(echo "$trt_cuda" | sed 's|.*archive">||' | sed 's|</a>.*||' | sed 's| update |.|')
-  trt_cuda=${trt_cuda}_1
-  trt_url="https://developer.download.nvidia.com/compute/tensorrt/${TRT_VER}/local_installers//nv-tensorrt-local-repo-ubuntu2204-${TRT_VER}-cuda-${trt_cuda}.0-1_amd64.deb"
-  $STD wget -qO nv-tensorrt-local-repo-amd64.deb $trt_url
-  $STD dpkg -i nv-tensorrt-local-repo-amd64.deb
-  #Nvidia only provides DEB package for Ubuntu, but still works with Debian
-  #cp /var/nv-tensorrt-local-repo-ubuntu2204-${TRT_VER}-cuda-${NVD_VER_CUDA}/nv-tensorrt-local-*-keyring.gpg /usr/share/keyrings/
-  cp /var/nv-tensorrt-local-repo-*/nv-tensorrt-local-*-keyring.gpg /usr/share/keyrings/
-  rm nv-tensorrt-local-repo-amd64.deb
-  $STD apt update
-  # Needed on top of the python install for the NvInfer.h header
-  $STD apt install -y tensorrt-dev
-  export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}
-  export LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/lib/python3.9/dist-packages/tensorrt_libs${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-  echo "PATH=${PATH}"  >> /etc/bash.bashrc
-  echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> /etc/bash.bashrc
-  ldconfig
-  # Temporarily get my patched frigate tensorrt.py plugin (with support for TensorRT v10)
-  #curl -s https://raw.githubusercontent.com/remz1337/frigate/dev/frigate/detectors/plugins/tensorrt.py > /opt/frigate/frigate/detectors/plugins/tensorrt.py
-  msg_ok "Installed TensorRT"
-
-  msg_info "Installing TensorRT Object Detection Model (Patience)"
-  cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
-  mkdir -p /usr/local/src/tensorrt_demos
-  cd /usr/local/src
-  fix_tensorrt="$(cat << EOF
-#!/bin/bash
-sed -i 's|/usr/local/TensorRT-.*/|/usr/local/lib/python3.9/dist-packages/tensorrt_libs/|g' /usr/local/src/tensorrt_demos/plugins/Makefile
-EOF
-)"
-  echo "${fix_tensorrt}" > /opt/frigate/fix_tensorrt.sh
-  if [ $TRT_MAJOR -gt 8 ]; then
-    echo "sed -i 's|-lnvparsers ||g' /usr/local/src/tensorrt_demos/plugins/Makefile" >> /opt/frigate/fix_tensorrt.sh
-  fi
-  sed -i '18,21 s|.|#&|' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  sed -i '9 i bash \/opt\/frigate\/fix_tensorrt.sh' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  #Temporarly get my fork patched for TensorRT v10
-  #sed -i 's|NateMeyer|remz1337|g' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  $STD apt install -qqy python-is-python3 g++
-  $STD /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  cd /opt/frigate
-  export YOLO_MODELS="yolov4-tiny-288,yolov4-tiny-416,yolov7-tiny-416,yolov7-320"
-  export TRT_VER="$TRT_VER"
-  $STD bash /opt/frigate/docker/tensorrt/detector/rootfs/etc/s6-overlay/s6-rc.d/trt-model-prepare/run
-  cat <<EOF >>/config/config.yml
-ffmpeg:
-  hwaccel_args: preset-nvidia-h264
-  output_args:
-    record: preset-record-generic-audio-aac
-detectors:
-  tensorrt:
-    type: tensorrt
-#    device: 0
-model:
-  path: /config/model_cache/tensorrt/yolov7-tiny-416.trt
-  input_tensor: nchw
-  input_pixel_format: rgb
-  width: 416
-  height: 416
-EOF
-  msg_ok "Installed TensorRT Object Detection Model (Patience)"
-elif grep -q -o -m1 -E 'avx[^ ]*' /proc/cpuinfo; then
-  msg_ok "AVX Support Detected"
+if grep -q -o -m1 -E 'avx[^ ]* | sse4_2' /proc/cpuinfo; then
+  msg_ok "AVX or SSE 4.2 Support Detected"
   msg_info "Installing Openvino Object Detection Model (Resilience)"
   $STD pip install -r /opt/frigate/docker/main/requirements-ov.txt
   cd /opt/frigate/models
@@ -218,7 +109,7 @@ elif grep -q -o -m1 -E 'avx[^ ]*' /proc/cpuinfo; then
   $STD /usr/local/bin/omz_converter --name ssdlite_mobilenet_v2 --precision FP16 --mo /usr/local/bin/mo
   cd /
   cp -r /opt/frigate/models/public/ssdlite_mobilenet_v2 openvino-model
-  wget -q https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt -O openvino-model/coco_91cl_bkgr.txt
+  curl -fsSL "https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt" -o "openvino-model/coco_91cl_bkgr.txt"
   sed -i 's/truck/car/g' openvino-model/coco_91cl_bkgr.txt
   cat <<EOF >>/config/config.yml
 detectors:
@@ -246,8 +137,8 @@ msg_info "Installing Coral Object Detection Model (Patience)"
 cd /opt/frigate
 export CCACHE_DIR=/root/.ccache
 export CCACHE_MAXSIZE=2G
-wget -q https://github.com/libusb/libusb/archive/v1.0.26.zip
-unzip -q v1.0.26.zip
+curl -fsSL "https://github.com/libusb/libusb/archive/v1.0.26.zip" -o "v1.0.26.zip"
+$STD unzip v1.0.26.zip
 rm v1.0.26.zip
 cd libusb-1.0.26
 $STD ./bootstrap.sh
@@ -255,27 +146,27 @@ $STD ./configure --disable-udev --enable-shared
 $STD make -j $(nproc --all)
 cd /opt/frigate/libusb-1.0.26/libusb
 mkdir -p /usr/local/lib
-$STD /bin/bash ../libtool  --mode=install /usr/bin/install -c libusb-1.0.la '/usr/local/lib'
+$STD /bin/bash ../libtool --mode=install /usr/bin/install -c libusb-1.0.la '/usr/local/lib'
 mkdir -p /usr/local/include/libusb-1.0
 $STD /usr/bin/install -c -m 644 libusb.h '/usr/local/include/libusb-1.0'
 ldconfig
 cd /
-wget -qO edgetpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite
-wget -qO cpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess.tflite
+curl -fsSL "https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite" -o "edgetpu_model.tflite"
+curl -fsSL "https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess.tflite" -o "cpu_model.tflite"
 cp /opt/frigate/labelmap.txt /labelmap.txt
-wget -qO yamnet-tflite-classification-tflite-v1.tar.gz https://www.kaggle.com/api/v1/models/google/yamnet/tfLite/classification-tflite/1/download
+curl -fsSL "https://www.kaggle.com/api/v1/models/google/yamnet/tfLite/classification-tflite/1/download" -o "yamnet-tflite-classification-tflite-v1.tar.gz"
 tar xzf yamnet-tflite-classification-tflite-v1.tar.gz
 rm -rf yamnet-tflite-classification-tflite-v1.tar.gz
 mv 1.tflite cpu_audio_model.tflite
 cp /opt/frigate/audio-labelmap.txt /audio-labelmap.txt
 mkdir -p /media/frigate
-wget -qO /media/frigate/person-bicycle-car-detection.mp4 https://github.com/intel-iot-devkit/sample-videos/raw/master/person-bicycle-car-detection.mp4
+curl -fsSL "https://github.com/intel-iot-devkit/sample-videos/raw/master/person-bicycle-car-detection.mp4" -o "/media/frigate/person-bicycle-car-detection.mp4"
 msg_ok "Installed Coral Object Detection Model"
 
 msg_info "Building Nginx with Custom Modules"
 $STD /opt/frigate/docker/main/build_nginx.sh
 sed -e '/s6-notifyoncheck/ s/^#*/#/' -i /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/nginx/run
-ln -sf /usr/local/nginx/sbin/nginx  /usr/local/bin/nginx
+ln -sf /usr/local/nginx/sbin/nginx /usr/local/bin/nginx
 msg_ok "Built Nginx"
 
 msg_info "Installing Tempio"

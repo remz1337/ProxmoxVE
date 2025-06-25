@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://uptime.kuma.pet/
 
-# App Default Values
 APP="Uptime Kuma"
-var_tags="analytics;monitoring"
-var_cpu="1"
-var_ram="1024"
-var_disk="4"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-analytics;monitoring}"
+var_cpu="${var_cpu:-1}"
+var_ram="${var_ram:-1024}"
+var_disk="${var_disk:-4}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -35,29 +30,29 @@ function update_script() {
   if [[ "$(node -v | cut -d 'v' -f 2)" == "18."* ]]; then
     if ! command -v npm >/dev/null 2>&1; then
       echo "Installing NPM..."
-      apt-get install -y npm >/dev/null 2>&1
+      $STD apt-get install -y npm
       echo "Installed NPM..."
     fi
   fi
-  LATEST=$(curl -sL https://api.github.com/repos/louislam/uptime-kuma/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+  LATEST=$(curl -fsSL https://api.github.com/repos/louislam/uptime-kuma/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
   msg_info "Stopping ${APP}"
-  sudo systemctl stop uptime-kuma &>/dev/null
+  $STD sudo systemctl stop uptime-kuma
   msg_ok "Stopped ${APP}"
 
   cd /opt/uptime-kuma
 
   msg_info "Pulling ${APP} ${LATEST}"
-  git fetch --all &>/dev/null
-  git checkout $LATEST --force &>/dev/null
+  $STD git fetch --all
+  $STD git checkout $LATEST --force
   msg_ok "Pulled ${APP} ${LATEST}"
 
   msg_info "Updating ${APP} to ${LATEST}"
-  npm install --production &>/dev/null
-  npm run download-dist &>/dev/null
+  $STD npm install --production
+  $STD npm run download-dist
   msg_ok "Updated ${APP}"
 
   msg_info "Starting ${APP}"
-  sudo systemctl start uptime-kuma &>/dev/null
+  $STD sudo systemctl start uptime-kuma
   msg_ok "Started ${APP}"
   msg_ok "Updated Successfully"
   exit

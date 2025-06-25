@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # Co-Author: Scorpoon
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/revenz/Fenrus
 
-
-
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -18,9 +15,6 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-$STD apt-get install -y curl
 $STD apt-get install -y git
 msg_ok "Installed Dependencies"
 
@@ -28,7 +22,7 @@ msg_info "Installing ASP.NET Core 7 SDK"
 var_os=$(grep "^ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
 var_version=$(grep "^VERSION_ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"')
 if [ "${var_os}" = "debian" ]; then
-  wget -q "https://packages.microsoft.com/config/debian/$var_version/packages-microsoft-prod.deb"
+  curl -fsSL "https://packages.microsoft.com/config/debian/$var_version/packages-microsoft-prod.deb" -o "packages-microsoft-prod.deb"
   $STD dpkg -i packages-microsoft-prod.deb
   rm packages-microsoft-prod.deb
 fi

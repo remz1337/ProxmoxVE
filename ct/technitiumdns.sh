@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://technitium.com/dns/
 
-# App Default Values
 APP="Technitium DNS"
-var_tags="dns"
-var_cpu="1"
-var_ram="512"
-var_disk="2"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-dns}"
+var_cpu="${var_cpu:-1}"
+var_ram="${var_ram:-512}"
+var_disk="${var_disk:-2}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -35,13 +30,13 @@ function update_script() {
   msg_info "Updating ${APP}"
 
   if ! dpkg -s aspnetcore-runtime-8.0 >/dev/null 2>&1; then
-    wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb
-    dpkg -i packages-microsoft-prod.deb &>/dev/null
-    apt-get update &>/dev/null
-    apt-get install -y aspnetcore-runtime-8.0 &>/dev/null
+    curl -fsSL "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" -o $(basename "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb")
+    $STD dpkg -i packages-microsoft-prod.deb
+    $STD apt-get update
+    $STD apt-get install -y aspnetcore-runtime-8.0
     rm packages-microsoft-prod.deb
   fi
-  bash <(curl -fsSL https://download.technitium.com/dns/install.sh) &>/dev/null
+  $STD bash <(curl -fsSL https://download.technitium.com/dns/install.sh)
   msg_ok "Updated Successfully"
   exit
 }

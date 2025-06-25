@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
-# Author: tteck (tteckster)
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 community-scripts ORG
+# Author: tteck (tteckster) | Co-Author: Slaviša Arežina (tremor021)
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://www.qbittorrent.org/
 
-# App Default Values
 APP="qBittorrent"
-var_tags="torrent"
-var_cpu="2"
-var_ram="2048"
-var_disk="8"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-torrent}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-8}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -32,10 +27,36 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  msg_info "Updating ${APP} LXC"
-  apt-get update &>/dev/null
-  apt-get -y upgrade &>/dev/null
-  msg_ok "Updated ${APP} LXC"
+  if [[ ! -f /opt/${APP}_version.txt ]]; then
+    touch /opt/${APP}_version.txt
+    mkdir -p $HOME/.config/qBittorrent/
+    mkdir -p /opt/qbittorrent/
+    mv /.config/qBittorrent $HOME/.config/
+    $STD apt-get remove --purge -y qbittorrent-nox
+    sed -i 's@ExecStart=/usr/bin/qbittorrent-nox@ExecStart=/opt/qbittorrent/qbittorrent-nox@g' /etc/systemd/system/qbittorrent-nox.service
+    systemctl daemon-reload
+  fi
+  FULLRELEASE=$(curl -fsSL https://api.github.com/repos/userdocs/qbittorrent-nox-static/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
+  RELEASE=$(echo $FULLRELEASE | cut -c 9-13)
+  if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
+    msg_info "Stopping Service"
+    systemctl stop qbittorrent-nox
+    msg_ok "Stopped Service"
+
+    msg_info "Updating ${APP} to v${RELEASE}"
+    rm -f /opt/qbittorrent/qbittorrent-nox
+    curl -fsSL "https://github.com/userdocs/qbittorrent-nox-static/releases/download/${FULLRELEASE}/x86_64-qbittorrent-nox" -o /opt/qbittorrent/qbittorrent-nox
+    chmod +x /opt/qbittorrent/qbittorrent-nox
+    echo "${RELEASE}" >/opt/${APP}_version.txt
+    msg_ok "Updated $APP to v${RELEASE}"
+
+    msg_info "Starting Service"
+    systemctl start qbittorrent-nox
+    msg_ok "Started Service"
+    msg_ok "Updated Successfully"
+  else
+    msg_ok "No update required. ${APP} is already at v${RELEASE}"
+  fi
   exit
 }
 

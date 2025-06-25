@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck
 # Co-Author: MickLesk (Canbiz)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/diced/zipline
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -15,58 +14,47 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Dependencies"
-$STD apt-get install -y \
-  postgresql \
-  gpg \
-  curl \
-  sudo \
-  mc
-msg_ok "Installed Dependencies"
-
-msg_info "Setting up Node.js Repository"
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >/etc/apt/sources.list.d/nodesource.list
-msg_ok "Set up Node.js Repository"
-
-msg_info "Installing Node.js"
-$STD apt-get update
-$STD apt-get install -y nodejs
-$STD npm install -g yarn
-msg_ok "Installed Node.js"
+NODE_VERSION="22" NODE_MODULE="pnpm@latest" install_node_and_modules
+PG_VERSION="16" install_postgresql
 
 msg_info "Setting up PostgreSQL"
 DB_NAME=ziplinedb
 DB_USER=zipline
 DB_PASS="$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | cut -c1-13)"
-SECRET_KEY="$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | cut -c1-13)"
+SECRET_KEY="$(openssl rand -base64 42 | tr -dc 'a-zA-Z0-9')"
 $STD sudo -u postgres psql -c "CREATE ROLE $DB_USER WITH LOGIN PASSWORD '$DB_PASS';"
 $STD sudo -u postgres psql -c "CREATE DATABASE $DB_NAME WITH OWNER $DB_USER ENCODING 'UTF8' TEMPLATE template0;"
 $STD sudo -u postgres psql -c "ALTER ROLE $DB_USER SET client_encoding TO 'utf8';"
 $STD sudo -u postgres psql -c "ALTER ROLE $DB_USER SET default_transaction_isolation TO 'read committed';"
 $STD sudo -u postgres psql -c "ALTER ROLE $DB_USER SET timezone TO 'UTC'"
-echo "" >>~/zipline.creds
-echo -e "Zipline Database User: $DB_USER" >>~/zipline.creds
-echo -e "Zipline Database Password: $DB_PASS" >>~/zipline.creds
-echo -e "Zipline Database Name: $DB_NAME" >>~/zipline.creds
-echo -e "Zipline Secret: $SECRET_KEY" >>~/zipline.creds
+{
+  echo "Zipline-Credentials"
+  echo "Zipline Database User: $DB_USER"
+  echo "Zipline Database Password: $DB_PASS"
+  echo "Zipline Database Name: $DB_NAME"
+  echo "Zipline Secret Key: $SECRET_KEY"
+} >>~/zipline.creds
 msg_ok "Set up PostgreSQL"
 
 msg_info "Installing Zipline (Patience)"
 cd /opt
-RELEASE=$(curl -s https://api.github.com/repos/diced/zipline/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-wget -q "https://github.com/diced/zipline/archive/refs/tags/v${RELEASE}.zip"
-unzip -q v${RELEASE}.zip
-mv zipline-${RELEASE} /opt/zipline
+RELEASE=$(curl -fsSL https://api.github.com/repos/diced/zipline/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
+curl -fsSL "https://github.com/diced/zipline/archive/refs/tags/v${RELEASE}.zip" -o "v${RELEASE}.zip"
+$STD unzip v"${RELEASE}".zip
+mv zipline-"${RELEASE}" /opt/zipline
 cd /opt/zipline
-mv .env.local.example .env
-sudo sed -i "s|CORE_SECRET=.*|CORE_SECRET=\"$SECRET_KEY\"|" /opt/zipline/.env
-sudo sed -i "s|CORE_RETURN_HTTPS=.*|CORE_RETURN_HTTPS=false|" /opt/zipline/.env
-sudo sed -i "s|CORE_DATABASE_URL=.*|CORE_DATABASE_URL=\"postgres://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME\"|" /opt/zipline/.env
+cat <<EOF >/opt/zipline/.env
+DATABASE_URL=postgres://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME
+CORE_SECRET=$SECRET_KEY
+CORE_HOSTNAME=0.0.0.0
+CORE_PORT=3000
 CORE_RETURN_HTTPS=false
-$STD yarn install
-$STD yarn build
+DATASOURCE_TYPE=local
+DATASOURCE_LOCAL_DIRECTORY=/opt/zipline-upload
+EOF
+mkdir -p /opt/zipline-upload
+$STD pnpm install
+$STD pnpm build
 echo "${RELEASE}" >"/opt/${APPLICATION}_version.txt"
 msg_ok "Installed Zipline"
 
@@ -78,19 +66,19 @@ After=network.target
 
 [Service]
 WorkingDirectory=/opt/zipline
-ExecStart=/usr/bin/yarn start
+ExecStart=/usr/bin/pnpm start
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now zipline.service
+systemctl enable -q --now zipline
 msg_ok "Created Service"
 
 motd_ssh
 customize
-
 msg_info "Cleaning up"
+rm -f /opt/v${RELEASE}.zip
 $STD apt-get -y autoremove
 $STD apt-get -y autoclean
 msg_ok "Cleaned"

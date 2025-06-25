@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://changedetection.io/
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -15,9 +15,6 @@ update_os
 
 msg_info "Installing Dependencies (Patience)"
 $STD apt-get install -y \
-  curl \
-  sudo \
-  mc \
   git \
   build-essential \
   dumb-init \
@@ -43,28 +40,18 @@ $STD apt-get install -y \
   qpdf \
   xdg-utils \
   xvfb \
-  ca-certificates \
-  gnupg
+  ca-certificates
 msg_ok "Installed Dependencies"
 
-msg_info "Updating Python3"
+msg_info "Setup Python3"
 $STD apt-get install -y \
   python3 \
   python3-dev \
   python3-pip
 rm -rf /usr/lib/python3.*/EXTERNALLY-MANAGED
-msg_ok "Updated Python3"
+msg_ok "Setup Python3"
 
-msg_info "Setting up Node.js Repository"
-mkdir -p /etc/apt/keyrings
-curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" >/etc/apt/sources.list.d/nodesource.list
-msg_ok "Set up Node.js Repository"
-
-msg_info "Installing Node.js"
-$STD apt-get update
-$STD apt-get install -y nodejs
-msg_ok "Installed Node.js"
+NODE_VERSION="22" install_node_and_modules
 
 msg_info "Installing Change Detection"
 mkdir /opt/changedetection
@@ -76,7 +63,10 @@ mkdir /opt/browserless
 $STD python3 -m pip install playwright
 $STD git clone https://github.com/browserless/chrome /opt/browserless
 $STD npm install --prefix /opt/browserless
-$STD /opt/browserless/node_modules/playwright-core/cli.js install --with-deps chrome chromium firefox webkit
+$STD /opt/browserless/node_modules/playwright-core/cli.js install --with-deps &>/dev/null
+$STD /opt/browserless/node_modules/playwright-core/cli.js install --force chrome &>/dev/null
+$STD /opt/browserless/node_modules/playwright-core/cli.js install chromium firefox webkit &>/dev/null
+$STD /opt/browserless/node_modules/playwright-core/cli.js install --force msedge
 $STD npm run build --prefix /opt/browserless
 $STD npm run build:function --prefix /opt/browserless
 $STD npm prune production --prefix /opt/browserless
@@ -137,6 +127,7 @@ cat <<EOF >/etc/systemd/system/browserless.service
 Description=browserless service
 After=network.target
 [Service]
+Environment=CONNECTION_TIMEOUT=60000
 WorkingDirectory=/opt/browserless
 ExecStart=/opt/browserless/scripts/start.sh
 SyslogIdentifier=browserless

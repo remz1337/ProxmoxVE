@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
+# Copyright (c) 2021-2025 tteck
 # Author: tteck
 # Co-Author: MountyMapleSyrup (MountyMapleSyrup)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://gitlab.com/LazyLibrarian/LazyLibrarian
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -15,22 +15,28 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-$STD apt-get install -y git
+$STD apt-get install -y \
+    git \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    imagemagick
 msg_ok "Installed Dependencies"
 
-msg_info "Installing Python3 Dependencies"
-$STD apt-get install -y pip
-$STD apt-get install -y python3-irc
+msg_info "Setup Python3"
+$STD apt-get install -y \
+    pip \
+    python3-irc
 $STD pip install jaraco.stream
 $STD pip install python-Levenshtein
 $STD pip install soupsieve
-msg_ok "Installed Python3 Dependencies"
+$STD pip install pypdf
+msg_ok "Setup Python3"
 
 msg_info "Installing LazyLibrarian"
 $STD git clone https://gitlab.com/LazyLibrarian/LazyLibrarian /opt/LazyLibrarian
+cd /opt/LazyLibrarian
+$STD pip install .
 msg_ok "Installed LazyLibrarian"
 
 msg_info "Creating Service"

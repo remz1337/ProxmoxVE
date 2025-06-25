@@ -1,25 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://changedetection.io/
 
-# App Default Values
 APP="Change Detection"
-var_tags="monitoring;crawler"
-var_cpu="2"
-var_ram="1024"
-var_disk="8"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-monitoring;crawler}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-10}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -28,28 +23,45 @@ function update_script() {
   header_info
   check_container_storage
   check_container_resources
+
   if [[ ! -f /etc/systemd/system/changedetection.service ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  msg_info "Updating ${APP} LXC"
+
   if ! dpkg -s libjpeg-dev >/dev/null 2>&1; then
-    apt-get update
-    apt-get install -y libjpeg-dev
+    msg_info "Installing Dependencies"
+    $STD apt-get update
+    $STD apt-get install -y libjpeg-dev
+    msg_ok "Updated Dependencies"
   fi
-  pip3 install changedetection.io --upgrade &>/dev/null
-  pip3 install playwright --upgrade &>/dev/null
+
+  msg_info "Updating ${APP}"
+  $STD pip3 install changedetection.io --upgrade
+  msg_ok "Updated ${APP}"
+
+  msg_info "Updating Playwright"
+  $STD pip3 install playwright --upgrade
+  msg_ok "Updated Playwright"
+
   if [[ -f /etc/systemd/system/browserless.service ]]; then
-    git -C /opt/browserless/ fetch --all &>/dev/null
-    git -C /opt/browserless/ reset --hard origin/main &>/dev/null
-    npm update --prefix /opt/browserless &>/dev/null
-    npm run build --prefix /opt/browserless &>/dev/null
-    npm run build:function --prefix /opt/browserless &>/dev/null
-    npm prune production --prefix /opt/browserless &>/dev/null
+    msg_info "Updating Browserless (Patience)"
+    $STD git -C /opt/browserless/ fetch --all
+    $STD git -C /opt/browserless/ reset --hard origin/main
+    $STD npm update --prefix /opt/browserless
+    $STD /opt/browserless/node_modules/playwright-core/cli.js install --with-deps
+    # Update Chrome separately, as it has to be done with the force option. Otherwise the installation of other browsers will not be done if Chrome is already installed.
+    $STD /opt/browserless/node_modules/playwright-core/cli.js install --force chrome
+    $STD /opt/browserless/node_modules/playwright-core/cli.js install chromium firefox webkit
+    $STD npm run build --prefix /opt/browserless
+    $STD npm run build:function --prefix /opt/browserless
+    $STD npm prune production --prefix /opt/browserless
     systemctl restart browserless
+    msg_ok "Updated Browserless"
   else
     msg_error "No Browserless Installation Found!"
   fi
+
   systemctl restart changedetection
   msg_ok "Updated Successfully"
   exit

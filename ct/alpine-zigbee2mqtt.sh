@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2024 tteck
+source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+# Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://www.zigbee2mqtt.io/
 
-# App Default Values
 APP="Alpine-Zigbee2MQTT"
-var_tags="alpine;zigbee;mqtt;smarthome"
-var_disk="0.3"
-var_cpu="1"
-var_ram="256"
-var_os="alpine"
-var_version="3.20"
-var_unprivileged="0"
+var_tags="${var_tags:-alpine;zigbee;mqtt;smarthome}"
+var_disk="${var_disk:-0.3}"
+var_cpu="${var_cpu:-1}"
+var_ram="${var_ram:-256}"
+var_os="${var_os:-alpine}"
+var_version="${var_version:-3.21}"
+var_unprivileged="${var_unprivileged:-0}"
 
-# App Output & Base Settings
 header_info "$APP"
-base_settings
-
-# Core
 variables
 color
 catch_errors
@@ -40,7 +36,7 @@ function update_script() {
     header_info
     case $CHOICE in
     1)
-      apk update && apk upgrade
+      $STD apk -U upgrade
       exit
       ;;
     esac

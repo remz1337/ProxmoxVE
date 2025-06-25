@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
-# Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# Copyright (c) 2021-2025 community-scripts ORG
+# Author: tteck (tteckster) | Co-Author: Slaviša Arežina (tremor021)
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://github.com/keycloak/keycloak
 
-source /dev/stdin <<< "$FUNCTIONS_FILE_PATH"
+source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
 verb_ip6
 catch_errors
@@ -40,20 +40,21 @@ $STD sudo -u postgres psql -c "CREATE DATABASE $DB_NAME WITH OWNER $DB_USER ENCO
 $STD sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
 msg_ok "Installed PostgreSQL"
 
-RELEASE=$(curl -s https://api.github.com/repos/keycloak/keycloak/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
-msg_info "Installing Keycloak v$RELEASE"
-cd /opt
-wget -q https://github.com/keycloak/keycloak/releases/download/$RELEASE/keycloak-$RELEASE.tar.gz
-$STD tar -xvf keycloak-$RELEASE.tar.gz
-mv keycloak-$RELEASE keycloak
+msg_info "Installing Keycloak"
+temp_file=$(mktemp)
+RELEASE=$(curl -fsSL https://api.github.com/repos/keycloak/keycloak/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
+curl -fsSL "https://github.com/keycloak/keycloak/releases/download/$RELEASE/keycloak-$RELEASE.tar.gz" -o "$temp_file"
+tar xzf $temp_file
+mv keycloak-$RELEASE /opt/keycloak
 msg_ok "Installed Keycloak"
 
 msg_info "Creating Service"
-service_path="/etc/systemd/system/keycloak.service"
-echo "[Unit]
-Description=Keycloak
+cat <<EOF >/etc/systemd/system/keycloak.service
+[Unit]
+Description=Keycloak Service
 Requires=network.target
 After=syslog.target network-online.target
+
 [Service]
 Type=idle
 User=root
@@ -62,24 +63,28 @@ ExecStart=/opt/keycloak/bin/kc.sh start
 ExecStop=/opt/keycloak/bin/kc.sh stop
 Restart=always
 RestartSec=3
+Environment="JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64"
 Environment="KC_DB=postgres"
 Environment="KC_DB_USERNAME=$DB_USER"
 Environment="KC_DB_PASSWORD=$DB_PASS"
 Environment="KC_HTTP_ENABLED=true"
+Environment="KC_BOOTSTRAP_ADMIN_USERNAME=tmpadm"
+Environment="KC_BOOTSTRAP_ADMIN_PASSWORD=admin123"
+# Comment following line and uncomment the next 2 if working behind a reverse proxy
 Environment="KC_HOSTNAME_STRICT=false"
 #Environment="KC_HOSTNAME=keycloak.example.com"
 #Environment="KC_PROXY_HEADERS=xforwarded"
-Environment="KC_BOOTSTRAP_ADMIN_USERNAME=tmpadm"
-Environment="KC_BOOTSTRAP_ADMIN_PASSWORD=admin123"
 [Install]
-WantedBy=multi-user.target" >$service_path
-$STD systemctl enable --now keycloak.service
+WantedBy=multi-user.target
+EOF
+systemctl enable -q --now keycloak
 msg_ok "Created Service"
 
 motd_ssh
 customize
 
 msg_info "Cleaning up"
+rm -f $temp_file
 $STD apt-get -y autoremove
 $STD apt-get -y autoclean
 msg_ok "Cleaned"
