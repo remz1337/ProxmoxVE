@@ -5,7 +5,7 @@
 
 1) [adguard.sh](https://github.com/remz1337/ProxmoxVE/blob/remz/ct/adguard.sh): This script collects system parameters. (Also holds the function to update the application.)
 2) [build.func](https://github.com/remz1337/ProxmoxVE/blob/remz/misc/build.func): Adds user settings and integrates collected information.
-3) [create_lxc.sh](https://github.com/remz1337/ProxmoxVE/blob/remz/ct/create_lxc.sh): Constructs the LXC container.
+3) [create_lxc.sh](https://github.com/remz1337/ProxmoxVE/blob/remz/misc/create_lxc.sh): Constructs the LXC container.
 4) [adguard-install.sh](https://github.com/remz1337/ProxmoxVE/blob/remz/install/adguard-install.sh): Executes functions from [install.func](https://github.com/remz1337/ProxmoxVE/blob/remz/misc/install.func), and installs the application.
 5) [adguard.sh](https://github.com/remz1337/ProxmoxVE/blob/remz/ct/adguard.sh) (again): To display the completion message.
 
