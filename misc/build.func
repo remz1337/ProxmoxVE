@@ -4,6 +4,11 @@
 # License: MIT
 # https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 
+echo "DEBUG EXPORT PWD:"
+export PHS_DIR="$PWD"
+echo "PHS DIR:$PHS_DIR"
+#exit
+
 variables() {
   NSAPP=$(echo ${APP,,} | tr -d ' ') # This function sets the NSAPP variable by converting the value of the APP variable to lowercase and removing any spaces.
   var_install="${NSAPP}-install"     # sets the var_install variable by appending "-install" to the value of NSAPP.
@@ -769,10 +774,16 @@ build_container() {
 
   TEMP_DIR=$(mktemp -d)
   pushd $TEMP_DIR >/dev/null
+
+  echo "DEBUG PWD:"
+  echo "$(pwd)"
+
   if [ "$var_os" == "alpine" ]; then
-    export FUNCTIONS_FILE_PATH="$(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/alpine-install.func)"
+#    export FUNCTIONS_FILE_PATH="$(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/alpine-install.func)"
+    export FUNCTIONS_FILE_PATH=$(cat ../misc/alpine-install.func)
   else
-    export FUNCTIONS_FILE_PATH="$(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/install.func)"
+#    export FUNCTIONS_FILE_PATH="$(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/install.func)"
+    export FUNCTIONS_FILE_PATH="$(cat ${PHS_DIR}/misc/install.func)"
   fi
   export CACHER="$APT_CACHER"
   export CACHER_IP="$APT_CACHER_IP"
@@ -804,7 +815,9 @@ build_container() {
   # Check for missing required environment variables
   phs_validate_required_config
   # This executes create_lxc.sh and creates the container and .conf file
-  bash -c "$(wget -qLO - https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/create_lxc.sh)" || exit
+  #bash -c "$(wget -qLO - https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/create_lxc.sh)" || exit
+#  bash ../ct/create_lxc.sh || exit
+  bash "${PHS_DIR}/ct/create_lxc.sh" || exit
 
   LXC_CONFIG=/etc/pve/lxc/${CTID}.conf
   if [ "$CT_TYPE" == "0" ]; then
@@ -867,8 +880,11 @@ EOF'
     pct exec "$CTID" -- ash -c "apk add bash >/dev/null"
   fi
   # This executes post_create_lxc.sh for additional configurations (default user, shared mount directory, postfix satellite)
-  source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/post_create_lxc.sh)
-  lxc-attach -n "$CTID" -- bash -c "$(wget -qLO - https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/install/$var_install.sh)" || exit
+#  source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/post_create_lxc.sh)
+#  source ../ct/post_create_lxc.sh
+  source "${PHS_DIR}/ct/post_create_lxc.sh"
+#  lxc-attach -n "$CTID" -- bash -c "$(wget -qLO - https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/install/$var_install.sh)" || exit
+  lxc-attach -n "$CTID" -- bash -c "$(cat ${PHS_DIR}/install/$var_install.sh)" || exit
 
 }
 
