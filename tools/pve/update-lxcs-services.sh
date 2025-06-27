@@ -75,18 +75,31 @@ function needs_reboot() {
 function update_container_service() {
   #1) Detect service using the service name in the update command
   #eg. https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/frigate.sh
-  #service=$(cat /usr/bin/update | sed 's|.*/ct/||g' | sed 's|\.sh||g')
-  
+  pushd $(mktemp -d)
+  pct pull "$container" /usr/bin/update update 2>/dev/null
+  service=$(cat update | sed 's|.*/ct/||g' | sed 's|\.sh).*||g')
+  popd
+
   #1.1) If update script not detected, return
+  if [ -z "${service}" ]; then
+    echo "Update script not found"
+	return
+  else
+    echo "Detected service: ${service}"
+  fi
   
   #2) Extract service build/update resource requirements from config/installation file
   #var_cpu="${var_cpu:-4}"
+  #var_cpu="4"
+  #var_cpu=4
   #var_ram="${var_ram:-4096}"
   #pct set $CTID -memory 1024
   #pct set $CTID -cores 2
-  #script=$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/${service}.sh)
+  script=$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/${service}.sh)
   #build_cpu=$(echo "$script" | grep "var_cpu" | sed 's|.*:-||g' | sed 's|}.*||g')
   #build_ram=$(echo "$script" | grep "var_ram" | sed 's|.*:-||g' | sed 's|}.*||g')
+  build_cpu=$(echo "$script" | grep -m 1 "var_cpu" | sed 's|.*=||g' | sed 's|"||g' | sed 's|.*var_cpu:-||g' | sed 's|}||g')
+  build_ram=$(echo "$script" | grep -m 1 "var_ram" | sed 's|.*=||g' | sed 's|"||g' | sed 's|.*var_ram:-||g' | sed 's|}||g')
   #run_cpu=(echo "$script" | grep "pct set \$CTID -cores" | sed 's|.*cores ||g')
   #run_ram=(echo "$script" | grep "pct set \$CTID -memory" | sed 's|.*memory ||g')
   
