@@ -100,8 +100,8 @@ function update_container_service() {
   #build_ram=$(echo "$script" | grep "var_ram" | sed 's|.*:-||g' | sed 's|}.*||g')
   build_cpu=$(echo "$script" | grep -m 1 "var_cpu" | sed 's|.*=||g' | sed 's|"||g' | sed 's|.*var_cpu:-||g' | sed 's|}||g')
   build_ram=$(echo "$script" | grep -m 1 "var_ram" | sed 's|.*=||g' | sed 's|"||g' | sed 's|.*var_ram:-||g' | sed 's|}||g')
-  #run_cpu=(echo "$script" | grep "pct set \$CTID -cores" | sed 's|.*cores ||g')
-  #run_ram=(echo "$script" | grep "pct set \$CTID -memory" | sed 's|.*memory ||g')
+  run_cpu=$(echo "$script" | grep -m 1 "pct set \$CTID -cores" | sed 's|.*cores ||g')
+  run_ram=$(echo "$script" | grep -m 1 "pct set \$CTID -memory" | sed 's|.*memory ||g')
   
   #Test if all values are valid (>0)
   #if no run values, assume same as build
