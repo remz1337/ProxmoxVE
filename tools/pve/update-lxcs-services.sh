@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 # Copyright (c) 2021-2025 tteck
-# Author: tteck (tteckster)
-# License: MIT
-# https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# Author: tteck (tteckster) | Co-Author: remz1337
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 
 function header_info() {
   clear
