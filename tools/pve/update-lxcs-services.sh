@@ -73,6 +73,18 @@ function needs_reboot() {
 # }
 
 function update_container_service() {
+  container=$1
+  header_info
+  name=$(pct exec "$container" hostname)
+  os=$(pct config "$container" | awk '/^ostype/ {print $2}')
+  if [[ "$os" == "ubuntu" || "$os" == "debian" || "$os" == "fedora" ]]; then
+    disk_info=$(pct exec "$container" df /boot | awk 'NR==2{gsub("%","",$5); printf "%s %.1fG %.1fG %.1fG", $5, $3/1024/1024, $2/1024/1024, $4/1024/1024 }')
+    read -ra disk_info_array <<<"$disk_info"
+    echo -e "${BL}[Info]${GN} Updating ${BL}$container${CL} : ${GN}$name${CL} - ${YW}Boot Disk: ${disk_info_array[0]}% full [${disk_info_array[1]}/${disk_info_array[2]} used, ${disk_info_array[3]} free]${CL}\n"
+  else
+    echo -e "${BL}[Info]${GN} Updating ${BL}$container${CL} : ${GN}$name${CL} - ${YW}[No disk info for ${os}]${CL}\n"
+  fi
+
   #1) Detect service using the service name in the update command
   #eg. https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/frigate.sh
   pushd $(mktemp -d)
@@ -96,42 +108,57 @@ function update_container_service() {
   #pct set $CTID -memory 1024
   #pct set $CTID -cores 2
   script=$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/${service}.sh)
+  config=$(pct config "$container")
   #build_cpu=$(echo "$script" | grep "var_cpu" | sed 's|.*:-||g' | sed 's|}.*||g')
   #build_ram=$(echo "$script" | grep "var_ram" | sed 's|.*:-||g' | sed 's|}.*||g')
   build_cpu=$(echo "$script" | grep -m 1 "var_cpu" | sed 's|.*=||g' | sed 's|"||g' | sed 's|.*var_cpu:-||g' | sed 's|}||g')
   build_ram=$(echo "$script" | grep -m 1 "var_ram" | sed 's|.*=||g' | sed 's|"||g' | sed 's|.*var_ram:-||g' | sed 's|}||g')
   run_cpu=$(echo "$script" | grep -m 1 "pct set \$CTID -cores" | sed 's|.*cores ||g')
   run_ram=$(echo "$script" | grep -m 1 "pct set \$CTID -memory" | sed 's|.*memory ||g')
-  
+  current_cpu=$(echo "$config" | grep -m 1 "cores:" | sed 's|cores: ||g')
+  current_ram=$(echo "$config" | grep -m 1 "memory:" | sed 's|memory: ||g')
+
   #Test if all values are valid (>0)
   #if no run values, assume same as build
   #if no build values, assume current values are ok
-  
+  if [ -z "${run_cpu}" ] || [ "$run_cpu" -le 0 ]; then
+    echo "No valid value found for run_cpu. Assuming same as current configuration."
+	run_cpu=$current_cpu
+  fi
+
+  if [ -z "${run_ram}" ] || [ "$run_ram" -le 0 ]; then
+    echo "No valid value found for run_ram. Assuming same as current configuration."
+	run_ram=$current_ram
+  fi
+
+  if [ -z "${build_cpu}" ] || [ "$build_cpu" -le 0 ]; then
+    echo "No valid value found for build_cpu. Assuming same as current configuration."
+	build_cpu=$current_cpu
+  fi
+
+  if [ -z "${build_ram}" ] || [ "$build_ram" -le 0 ]; then
+    echo "No valid value found for build_ram. Assuming same as current configuration."
+	build_ram=$current_ram
+  fi
+
+  UPDATE_BUILD_RESOURCES=0
+  if [ "$build_cpu" -gt "$run_cpu" ] || [ "$build_ram" -gt "$run_ram" ]; then
+    UPDATE_BUILD_RESOURCES=1
+  fi
+
   #3) if build resources are different than run resources, then:
   #3.1) Shutdown LXC
   #3.2) Update resources for build
   #3.3) Start LXC
+  if [ "$UPDATE_BUILD_RESOURCES" -eq "1" ]; then
+    #pct shutdown "$container"
+	#sleep 2
+	pct set "$container" --cores "$build_cpu" --memory "$build_ram"
+	pct restart "$container"
+	sleep 2
+  fi
   
   #4) Update service, using the update command
-  
-  #5) if build resources are different than run resources, then:
-  #5.1) Shutdown LXC
-  #5.2) Update resources back to normal (run)
-  #5.3) Start LXC
-  
-  
-  
-  container=$1
-  header_info
-  name=$(pct exec "$container" hostname)
-  os=$(pct config "$container" | awk '/^ostype/ {print $2}')
-  if [[ "$os" == "ubuntu" || "$os" == "debian" || "$os" == "fedora" ]]; then
-    disk_info=$(pct exec "$container" df /boot | awk 'NR==2{gsub("%","",$5); printf "%s %.1fG %.1fG %.1fG", $5, $3/1024/1024, $2/1024/1024, $4/1024/1024 }')
-    read -ra disk_info_array <<<"$disk_info"
-    echo -e "${BL}[Info]${GN} Updating ${BL}$container${CL} : ${GN}$name${CL} - ${YW}Boot Disk: ${disk_info_array[0]}% full [${disk_info_array[1]}/${disk_info_array[2]} used, ${disk_info_array[3]} free]${CL}\n"
-  else
-    echo -e "${BL}[Info]${GN} Updating ${BL}$container${CL} : ${GN}$name${CL} - ${YW}[No disk info for ${os}]${CL}\n"
-  fi
   case "$os" in
   alpine) pct exec "$container" -- ash -c "update" ;;
   archlinux) pct exec "$container" -- bash -c "update" ;;
@@ -139,6 +166,18 @@ function update_container_service() {
   ubuntu | debian | devuan) pct exec "$container" -- bash -c "update" ;;
   opensuse) pct exec "$container" -- bash -c "update" ;;
   esac
+
+  #5) if build resources are different than run resources, then:
+  #5.1) Shutdown LXC
+  #5.2) Update resources back to normal (run)
+  #5.3) Start LXC
+  if [ "$UPDATE_BUILD_RESOURCES" -eq "1" ]; then
+    #pct shutdown "$container"
+	#sleep 2
+	pct set "$container" --cores "$run_cpu" --memory "$run_ram"
+	#pct restart "$container"
+	#sleep 2
+  fi
 }
 
 containers_needing_reboot=()
