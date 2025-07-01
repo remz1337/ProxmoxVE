@@ -160,6 +160,7 @@ if [ $nvidia_installed == 1 ]; then
   ldconfig
   # Temporarily get my patched frigate tensorrt.py plugin (with support for TensorRT v10)
   #curl -s https://raw.githubusercontent.com/remz1337/frigate/dev/frigate/detectors/plugins/tensorrt.py > /opt/frigate/frigate/detectors/plugins/tensorrt.py
+  rm -rf /var/nv-tensorrt-local-repo-*
   msg_ok "Installed TensorRT"
 
   msg_info "Installing TensorRT Object Detection Model (Patience)"
