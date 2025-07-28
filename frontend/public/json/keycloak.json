@@ -28,8 +28,8 @@
     }
   ],
   "default_credentials": {
-    "username": tmpadm,
-    "password": admin123
+    "username": "tmpadm",
+    "password": "admin123"
   },
   "notes": [
     {
