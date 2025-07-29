@@ -23,14 +23,14 @@ function update_script() {
   header_info
   check_container_storage
   check_container_resources
-  if [[ ! -f /etc/systemd/system/keycloak.service ]]; then
+  if [[ ! -d /opt/keycloak ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
 
-  msg_info "Stopping ${APP}"
+  msg_info "Stopping Keycloak"
   systemctl stop keycloak
-  msg_ok "Stopped ${APP}"
+  msg_ok "Stopped Keycloak"
 
   msg_info "Updating packages"
   $STD apt-get update
@@ -53,9 +53,9 @@ function update_script() {
   rm -rf keycloak.old
   msg_ok "Updated ${APP} LXC"
 
-  msg_info "Restating Keycloak"
+  msg_info "Restarting Keycloak"
   systemctl restart keycloak
-  msg_ok "Restated Keycloak"
+  msg_ok "Restarted Keycloak"
   exit
 }
 
