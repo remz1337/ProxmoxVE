@@ -33,8 +33,8 @@ function update_script() {
   msg_ok "Stopped ${APP}"
 
   msg_info "Updating packages"
-  apt-get update &>/dev/null
-  apt-get -y upgrade &>/dev/null
+  $STD apt-get update
+  $STD apt-get -y upgrade
   msg_ok "Updated packages"
 
   msg_info "Backup old Keycloak"
