@@ -16,14 +16,14 @@ update_os
 JAVA_VERSION=21 setup_java
 PG_VERSION=16 setup_postgresql
 
-msg_info "Configuring PostgreSQL user"
+msg_info "Configuring PostgreSQL"
 DB_NAME="keycloak"
 DB_USER="keycloak"
 DB_PASS="$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | cut -c1-13)"
 $STD sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
 $STD sudo -u postgres psql -c "CREATE DATABASE $DB_NAME WITH OWNER $DB_USER ENCODING 'UTF8';"
 $STD sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;"
-msg_ok "Configured PostgreSQL user"
+msg_ok "Configured PostgreSQL"
 
 fetch_and_deploy_gh_release "keycloak" "keycloak/keycloak" "prebuild" "latest" "/opt/keycloak" "keycloak-*.tar.gz"
 
@@ -63,7 +63,6 @@ motd_ssh
 customize
 
 msg_info "Cleaning up"
-rm -f $temp_file
 $STD apt-get -y autoremove
 $STD apt-get -y autoclean
 msg_ok "Cleaned"
