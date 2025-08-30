@@ -106,7 +106,7 @@ msg_info "Downloading OpenVino Model"
 mkdir /models
 cd /models
 wget -q http://download.tensorflow.org/models/object_detection/ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz
-$STD tar -xvf ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz
+$STD tar -zxvf ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz --no-same-owner
 $STD python3 /opt/frigate/docker/main/build_ov_model.py
 msg_ok "Downloaded OpenVino Model"
 
