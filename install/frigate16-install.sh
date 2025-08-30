@@ -260,11 +260,19 @@ if [ $nvidia_installed == 1 ]; then
   $STD apt update
   $STD apt install -qqy "cuda-toolkit-$TARGET_CUDA_VER"
   $STD apt install -qqy "cudnn-cuda-$NVD_MAJOR_CUDA"
-  export PATH=/usr/local/cuda/bin:${PATH:+:${PATH}}
-  export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-  echo "PATH=${PATH}"  >> /etc/bash.bashrc
-  echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> /etc/bash.bashrc
+  #export PATH=/usr/local/cuda/bin:${PATH:+:${PATH}}
+  #export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+  #echo "PATH=${PATH}"  >> /etc/bash.bashrc
+  #echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> /etc/bash.bashrc
+  
+  echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc
+  echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
+  source ~/.bashrc
+
+  
+  
   ldconfig
+  pip3 install onnxruntime-gpu==1.20.*
   msg_ok "Installed Nvidia Dependencies"
 
   #######From TensorRT Dockerfile
@@ -276,15 +284,24 @@ if [ $nvidia_installed == 1 ]; then
   #ldconfig
 
   ######## To download more models
-  #cd /
-  #git clone https://github.com/NateMeyer/tensorrt_demos
-  #cd tensorrt_demos/yolo
-  #./download_yolo.sh
-  #python3 yolo_to_onnx.py -m yolov7-tiny-416
+  cd /
+  git clone https://github.com/NateMeyer/tensorrt_demos
+  cd /tensorrt_demos/yolo
+  ./download_yolo.sh
+  pip3 install onnx==1.16.*
+  python3 yolo_to_onnx.py -m yolov7-tiny-416
 
   ###### Cleanup model layers
-  #wget https://raw.githubusercontent.com/microsoft/onnxruntime/refs/heads/main/tools/python/remove_initializer_from_input.py
-  #python3 remove_initializer_from_input.py --input yolov7-320.onnx --output model_fixed.onnx
+  wget -q https://raw.githubusercontent.com/microsoft/onnxruntime/refs/heads/main/tools/python/remove_initializer_from_input.py
+  python3 remove_initializer_from_input.py --input yolov7-tiny-416.onnx --output yolov7-tiny-416.onnx
+  
+  ######### ********** MEMCPY IS PASSING STUFF TO CPU, NEED TO FIX THE ONNX MODEL
+  ######### Try a different YOLO to ONNX converter
+  ######## OR Maybe just a mismatch in cuda... Investigate the YOLO_TO_ONNX.PY script...
+  
+  wget -q https://raw.githubusercontent.com/WongKinYiu/yolov7/refs/heads/main/export.py
+  python export.py --weights yolov7-tiny-416.pt --grid --end2end --dynamic-batch --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --max-wh 640
+
 
   cat <<EOF >>/config/config.yml
 detectors:
