@@ -65,15 +65,16 @@ apt install -y dkms pve-headers wget
 rm NVIDIA-Linux-x86_64-*.run
 
 #DRIVER_VERSION="550.67"
-LATEST_VERSION=$(curl -s https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt)
+#LATEST_VERSION=$(curl -s https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt)
+LATEST_VERSION=$(curl -s "https://www.nvidia.com/en-us/drivers/unix/" | grep -oP -m1 "Linux x86_64.*Latest Production Branch Version:.*?\/a>" | sed 's|.*">||g' | sed 's|<.*||g')
 INSTALL_VERSION=${LATEST_VERSION% *}
 
 echo -e "Nvidia latest drivers version: ${INSTALL_VERSION}"
 
 #NVD_MAJOR=${NVD_VER%%.*}
-NVD_MINOR=${NVD_VER#*.}
+NVD_MINOR=$(echo ${NVD_VER} | cut -d'.' -f2)
 INSTALL_MAJOR=${INSTALL_VERSION%%.*}
-INSTALL_MINOR=${INSTALL_VERSION#*.}
+INSTALL_MINOR=$(echo ${INSTALL_VERSION} | cut -d'.' -f2)
 
 if [ $INSTALL_MAJOR -gt $NVD_MAJOR ]; then
   echo "New major version available"
