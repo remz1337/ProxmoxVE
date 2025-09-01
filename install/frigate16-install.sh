@@ -279,29 +279,33 @@ if [ $nvidia_installed == 1 ]; then
   
   ldconfig
   #pip3 install onnxruntime-gpu==1.20.*
-  pip3 uninstall -y onnx onnxruntime onnxruntime-openvino
-  pip3 install onnxruntime-gpu
+  $STD pip3 uninstall -y onnx onnxruntime onnxruntime-openvino
+  $STD pip3 install onnxruntime-gpu
   msg_ok "Installed Nvidia Dependencies"
 
 
 ########## TRYING D-FINE
   cd /
-  git clone https://github.com/Peterande/D-FINE
+  $STD git clone https://github.com/Peterande/D-FINE
   cd /D-FINE
-  pip3 install -r requirements.txt
-  pip3 install onnxsim
+  $STD pip3 install -r requirements.txt
+  $STD pip3 install onnxsim
   mkdir -p models
   cd models
   #wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj365.pth
-  wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth
+  #wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth
+  wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth
   #wget -q https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml
   sed -i 's|data = torch.rand(32, 3, 640, 640)|data = torch.rand(1, 3, 640, 640)|g' /D-FINE/tools/deployment/export_onnx.py
-  #sed -e 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
+  #sed -i 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
+  #sed -i 's|opset_version=[[:digit:]]\+|opset_version=18|g' /D-FINE/tools/deployment/export_onnx.py
   #python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml -r /D-FINE/models/dfine_s_obj365.pth
 
   ######## This line is throwing a segfault but still converting the model...
   set +e
-  python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r /D-FINE/models/dfine_s_obj2coco.pth
+  #$STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r /D-FINE/models/dfine_s_obj2coco.pth
+  #$STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r /D-FINE/models/dfine_s_obj2coco.pth
+  $STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/dfine_hgnetv2_n_coco.yml -r /D-FINE/models/dfine_n_coco.pth
   set -e
   ####dynamo=True
   #### the new torch.export-based ONNX exporter will be the default. To switch now, set dynamo=True in torch.onnx.export
@@ -349,7 +353,7 @@ model:
   height: 640
   input_tensor: nchw
   input_dtype: float
-  path: /D-FINE/models/dfine_s_obj2coco.onnx
+  path: /D-FINE/models/dfine_n_coco.onnx
   labelmap_path: /labelmap/coco-80.txt
 EOF
 elif grep -q -o -m1 -E 'avx[^ ]* | sse4_2' /proc/cpuinfo; then
