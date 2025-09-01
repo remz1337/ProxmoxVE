@@ -251,7 +251,7 @@ if [ $nvidia_installed == 1 ]; then
   $STD dpkg -i cuda-keyring_1.1-1_all.deb
   $STD apt install -y software-properties-common
   $STD apt update
-  $STD add-apt-repository contrib
+  $STD add-apt-repository -y contrib
   rm cuda-keyring_1.1-1_all.deb
 #  if grep -qR "Acquire::http::Proxy" /etc/apt/apt.conf.d/ && [ -f "/etc/apt/sources.list.d/cuda-${os}-x86_64.list" ]; then
 #    sed -i "s|https://developer|http://HTTPS///developer|g" /etc/apt/sources.list.d/cuda-${os}-x86_64.list
@@ -279,7 +279,7 @@ if [ $nvidia_installed == 1 ]; then
   
   ldconfig
   #pip3 install onnxruntime-gpu==1.20.*
-  pip3 uninstall onnx onnxruntime onnxruntime-openvino
+  pip3 uninstall -y onnx onnxruntime onnxruntime-openvino
   pip3 install onnxruntime-gpu
   msg_ok "Installed Nvidia Dependencies"
 
@@ -298,10 +298,15 @@ if [ $nvidia_installed == 1 ]; then
   sed -i 's|data = torch.rand(32, 3, 640, 640)|data = torch.rand(1, 3, 640, 640)|g' /D-FINE/tools/deployment/export_onnx.py
   #sed -e 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
   #python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml -r /D-FINE/models/dfine_s_obj365.pth
+
+  ######## This line is throwing a segfault but still converting the model...
+  set +e
   python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r /D-FINE/models/dfine_m_obj2coco.pth
+  set -e
   ####dynamo=True
   #### the new torch.export-based ONNX exporter will be the default. To switch now, set dynamo=True in torch.onnx.export
   #pip3 install onnxscript #### FOR DYNAMO=TRUE
+
 
   #######From TensorRT Dockerfile
   #cd /opt/frigate/
@@ -332,6 +337,8 @@ if [ $nvidia_installed == 1 ]; then
   #python export.py --weights yolov7-tiny-416.pt --grid --end2end --dynamic-batch --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --max-wh 640
 
   cat <<EOF >>/config/config.yml
+ffmpeg:
+  hwaccel_args: preset-nvidia
 detectors:
   onnx:
     type: onnx
@@ -358,6 +365,8 @@ elif grep -q -o -m1 -E 'avx[^ ]* | sse4_2' /proc/cpuinfo; then
 #  curl -fsSL "https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt" -o "openvino-model/coco_91cl_bkgr.txt"
 #  sed -i 's/truck/car/g' openvino-model/coco_91cl_bkgr.txt
   cat <<EOF >>/config/config.yml
+ffmpeg:
+  hwaccel_args: preset-vaapi
 detectors:
   ov:
     type: openvino
@@ -373,6 +382,8 @@ EOF
   msg_ok "Installed Openvino Object Detection Model"
 else
   cat <<EOF >>/config/config.yml
+ffmpeg:
+  hwaccel_args: auto
 model:
   path: /cpu_model.tflite
 EOF
