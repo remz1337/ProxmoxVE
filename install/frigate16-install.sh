@@ -257,6 +257,11 @@ if [ $nvidia_installed == 1 ]; then
 #    sed -i "s|https://developer|http://HTTPS///developer|g" /etc/apt/sources.list.d/cuda-${os}-x86_64.list
 #  fi
 #  $STD apt update && sleep 1
+  #Cap to CUDA 12
+  if [[ "${NVD_MAJOR_CUDA}" -gt 12 ]]; then
+    TARGET_CUDA_VER=12
+	NVD_MAJOR_CUDA=12
+  fi
   $STD apt update
   $STD apt install -qqy "cuda-toolkit-$TARGET_CUDA_VER"
   $STD apt install -qqy "cudnn-cuda-$NVD_MAJOR_CUDA"
@@ -264,16 +269,39 @@ if [ $nvidia_installed == 1 ]; then
   #export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
   #echo "PATH=${PATH}"  >> /etc/bash.bashrc
   #echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> /etc/bash.bashrc
-  
-  echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc
-  echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
+  #echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc
+  #echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
+  export PATH=/usr/local/cuda/bin:${PATH:+:${PATH}}
+  export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+  echo "PATH=${PATH}"  >> ~/.bashrc
+  echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
   source ~/.bashrc
-
-  
   
   ldconfig
-  pip3 install onnxruntime-gpu==1.20.*
+  #pip3 install onnxruntime-gpu==1.20.*
+  pip3 uninstall onnx onnxruntime onnxruntime-openvino
+  pip3 install onnxruntime-gpu
   msg_ok "Installed Nvidia Dependencies"
+
+
+########## TRYING D-FINE
+  cd /
+  git clone https://github.com/Peterande/D-FINE
+  cd /D-FINE
+  pip3 install -r requirements.txt
+  pip3 install onnxsim
+  mkdir -p models
+  cd models
+  #wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj365.pth
+  wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_m_obj2coco.pth
+  #wget -q https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml
+  sed -i 's|data = torch.rand(32, 3, 640, 640)|data = torch.rand(1, 3, 640, 640)|g' /D-FINE/tools/deployment/export_onnx.py
+  #sed -e 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
+  #python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml -r /D-FINE/models/dfine_s_obj365.pth
+  python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r /D-FINE/models/dfine_m_obj2coco.pth
+  ####dynamo=True
+  #### the new torch.export-based ONNX exporter will be the default. To switch now, set dynamo=True in torch.onnx.export
+  #pip3 install onnxscript #### FOR DYNAMO=TRUE
 
   #######From TensorRT Dockerfile
   #cd /opt/frigate/
@@ -284,24 +312,24 @@ if [ $nvidia_installed == 1 ]; then
   #ldconfig
 
   ######## To download more models
-  cd /
-  git clone https://github.com/NateMeyer/tensorrt_demos
-  cd /tensorrt_demos/yolo
-  ./download_yolo.sh
-  pip3 install onnx==1.16.*
-  python3 yolo_to_onnx.py -m yolov7-tiny-416
+  #cd /
+  #git clone https://github.com/NateMeyer/tensorrt_demos
+  #cd /tensorrt_demos/yolo
+  #./download_yolo.sh
+  #pip3 install onnx==1.16.*
+  #pip3 install onnx
+  #python3 yolo_to_onnx.py -m yolov7-tiny-416
 
   ###### Cleanup model layers
-  wget -q https://raw.githubusercontent.com/microsoft/onnxruntime/refs/heads/main/tools/python/remove_initializer_from_input.py
-  python3 remove_initializer_from_input.py --input yolov7-tiny-416.onnx --output yolov7-tiny-416.onnx
+  #wget -q https://raw.githubusercontent.com/microsoft/onnxruntime/refs/heads/main/tools/python/remove_initializer_from_input.py
+  #python3 remove_initializer_from_input.py --input yolov7-tiny-416.onnx --output yolov7-tiny-416.onnx
   
   ######### ********** MEMCPY IS PASSING STUFF TO CPU, NEED TO FIX THE ONNX MODEL
   ######### Try a different YOLO to ONNX converter
   ######## OR Maybe just a mismatch in cuda... Investigate the YOLO_TO_ONNX.PY script...
   
-  wget -q https://raw.githubusercontent.com/WongKinYiu/yolov7/refs/heads/main/export.py
-  python export.py --weights yolov7-tiny-416.pt --grid --end2end --dynamic-batch --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --max-wh 640
-
+  #wget -q https://raw.githubusercontent.com/WongKinYiu/yolov7/refs/heads/main/export.py
+  #python export.py --weights yolov7-tiny-416.pt --grid --end2end --dynamic-batch --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --max-wh 640
 
   cat <<EOF >>/config/config.yml
 detectors:
@@ -309,19 +337,14 @@ detectors:
     type: onnx
 
 model:
-  model_type: yolo-generic
-  width: 416 # <--- should match the imgsize set during model export
-  height: 416 # <--- should match the imgsize set during model export
+  model_type: dfine
+  width: 640
+  height: 640
   input_tensor: nchw
   input_dtype: float
-  path: /tensorrt_demos/yolo/yolov7-tiny-416.onnx
+  path: /D-FINE/models/dfine_m_obj2coco.onnx
   labelmap_path: /labelmap/coco-80.txt
 EOF
-  
-  
-  
-  
-  
 elif grep -q -o -m1 -E 'avx[^ ]* | sse4_2' /proc/cpuinfo; then
   msg_ok "AVX or SSE 4.2 Support Detected"
   msg_info "Installing Openvino Object Detection Model (Resilience)"
