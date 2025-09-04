@@ -356,7 +356,41 @@ if [ $nvidia_installed == 1 ]; then
   #python export.py --weights yolov7-tiny-416.pt --grid --end2end --dynamic-batch --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --max-wh 640
 
 
-  ########### CHECK IF ONNX CAN LEVERAGE TENSORRT
+  # ########### CHECK IF ONNX CAN LEVERAGE TENSORRT
+  # TRT_VER=$(pip freeze | grep tensorrt== | sed "s|tensorrt==||g")
+  # TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
+  # TRT_MAJOR=${TRT_VER%%.*}
+  # #There can be slight mismatch between the installed drivers' CUDA version and the available download link, so dynamically retrieve the right link using the latest CUDA version mentioned in the TensorRT documentation
+  # trt_cuda=$(curl --silent https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing-debian | grep "https://developer.nvidia.com/cuda-toolkit-archive" | sed -n '1p')
+  # trt_cuda=$(echo "$trt_cuda" | sed 's|.*archive">||' | sed 's|</a>.*||' | sed 's| update |.|')
+  # trt_cuda=${trt_cuda}_1
+  # trt_url="https://developer.download.nvidia.com/compute/tensorrt/${TRT_VER}/local_installers//nv-tensorrt-local-repo-ubuntu2204-${TRT_VER}-cuda-${trt_cuda}.0-1_amd64.deb"
+  # $STD wget -qO nv-tensorrt-local-repo-amd64.deb $trt_url
+  # $STD dpkg -i nv-tensorrt-local-repo-amd64.deb
+  # #Nvidia only provides DEB package for Ubuntu, but still works with Debian
+  # #cp /var/nv-tensorrt-local-repo-ubuntu2204-${TRT_VER}-cuda-${NVD_VER_CUDA}/nv-tensorrt-local-*-keyring.gpg /usr/share/keyrings/
+  # cp /var/nv-tensorrt-local-repo-*/nv-tensorrt-local-*-keyring.gpg /usr/share/keyrings/
+  # rm nv-tensorrt-local-repo-amd64.deb
+  # $STD apt update
+  # # Needed on top of the python install for the NvInfer.h header
+  # $STD apt install -y tensorrt-dev
+  
+  
+  # pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
+  # pip3 install tensorrt
+  # pip3 install nvidia-pyindex
+  # pip3 install nvidia-tensorrt
+  # pip3 install pycuda 
+  
+  # apt-get install python3-libnvinfer-dev
+  # #pip3 install --extra-index-url 'https://pypi.nvidia.com' numpy tensorrt cuda-python cython nvidia-cuda-runtime-cu12 nvidia-cuda-runtime-cu11 nvidia-cublas-cu11 nvidia-cudnn-cu11 onnx protobuf
+
+  # export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/tensorrt_libs:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+  # echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
+  
+  # #pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti_cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia_cuda_nvcc_cu12 nvidia-cuda-nvrtc-cu12 nvidia_cuda_runtime_cu12 nvidia_cusolver_cu12 nvidia_cusparse_cu12 nvidia_nccl_cu12 nvidia_nvjitlink_cu12 tensorflow onnx onnxruntime-gpu protobuf
+  # cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
+  # ldconfig
 
   cat <<EOF >>/config/config.yml
 ffmpeg:
