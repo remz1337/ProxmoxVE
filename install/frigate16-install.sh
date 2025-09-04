@@ -258,10 +258,10 @@ if [ $nvidia_installed == 1 ]; then
 #  fi
 #  $STD apt update && sleep 1
   #Cap to CUDA 12
-  if [[ "${NVD_MAJOR_CUDA}" -gt 12 ]]; then
-    TARGET_CUDA_VER=12
-	NVD_MAJOR_CUDA=12
-  fi
+#  if [[ "${NVD_MAJOR_CUDA}" -gt 12 ]]; then
+#    TARGET_CUDA_VER=12
+#	NVD_MAJOR_CUDA=12
+#  fi
   $STD apt update
   $STD apt install -qqy "cuda-toolkit-$TARGET_CUDA_VER"
   $STD apt install -qqy "cudnn-cuda-$NVD_MAJOR_CUDA"
@@ -297,8 +297,8 @@ if [ $nvidia_installed == 1 ]; then
   wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth
   #wget -q https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml
   sed -i 's|data = torch.rand(32, 3, 640, 640)|data = torch.rand(1, 3, 640, 640)|g' /D-FINE/tools/deployment/export_onnx.py
-  #sed -i 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
-  #sed -i 's|opset_version=[[:digit:]]\+|opset_version=18|g' /D-FINE/tools/deployment/export_onnx.py
+  sed -i 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
+  sed -i 's|opset_version=[[:digit:]]\+|opset_version=18|g' /D-FINE/tools/deployment/export_onnx.py
   #python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml -r /D-FINE/models/dfine_s_obj365.pth
 
   ######## This line is throwing a segfault but still converting the model...
