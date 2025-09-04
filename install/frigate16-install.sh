@@ -289,7 +289,7 @@ if [ $nvidia_installed == 1 ]; then
   $STD git clone https://github.com/Peterande/D-FINE
   cd /D-FINE
   $STD pip3 install -r requirements.txt
-  $STD pip3 install onnxsim
+  $STD pip3 install onnxsim onnxscript
   mkdir -p models
   cd models
   #wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj365.pth
@@ -300,6 +300,21 @@ if [ $nvidia_installed == 1 ]; then
   sed -i 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
   sed -i 's|opset_version=[[:digit:]]\+|opset_version=18|g' /D-FINE/tools/deployment/export_onnx.py
   #python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml -r /D-FINE/models/dfine_s_obj365.pth
+
+  ###### CHANGE MODEL TO 320x320
+  sed -i 's|640, 640|320, 320|g' /D-FINE/configs/dfine/include/dfine_hgnetv2.yml
+  sed -i 's|640, 640|320, 320|g' /D-FINE/tools/deployment/export_onnx.py
+  sed -i 's|load_state_dict(state)|load_state_dict(new_checkpoint, strict=False)|g' /D-FINE/tools/deployment/export_onnx.py
+  sed -i '/state = checkpoint\["model"\]/a \
+\
+        # We remove the anchors and valid_mask saved parameters here\
+        new_checkpoint = {}\
+        for k in state:\
+          if "anchors" in k or "valid_mask" in k:\
+            print(k)\
+            continue\
+          new_checkpoint[k] = state[k]' /D-FINE/tools/deployment/export_onnx.py
+
 
   ######## This line is throwing a segfault but still converting the model...
   set +e
@@ -340,6 +355,9 @@ if [ $nvidia_installed == 1 ]; then
   #wget -q https://raw.githubusercontent.com/WongKinYiu/yolov7/refs/heads/main/export.py
   #python export.py --weights yolov7-tiny-416.pt --grid --end2end --dynamic-batch --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --max-wh 640
 
+
+  ########### CHECK IF ONNX CAN LEVERAGE TENSORRT
+
   cat <<EOF >>/config/config.yml
 ffmpeg:
   hwaccel_args: preset-nvidia
@@ -349,8 +367,8 @@ detectors:
 
 model:
   model_type: dfine
-  width: 640
-  height: 640
+  width: 320
+  height: 320
   input_tensor: nchw
   input_dtype: float
   path: /D-FINE/models/dfine_n_coco.onnx
