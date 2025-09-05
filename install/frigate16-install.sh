@@ -378,19 +378,37 @@ if [ $nvidia_installed == 1 ]; then
   
   # pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
   # pip3 install tensorrt
-  # pip3 install nvidia-pyindex
-  # pip3 install nvidia-tensorrt
-  # pip3 install pycuda 
+  pip3 install nvidia-pyindex
+  pip3 install nvidia-tensorrt
+  
+ 
+  export CUDA_ROOT=/usr/local/cuda
+  echo "CUDA_ROOT=${CUDA_ROOT}"  >> ~/.bashrc
+  #pip3 install pycuda
+  #pip3 install cupy
   
   # apt-get install python3-libnvinfer-dev
   # #pip3 install --extra-index-url 'https://pypi.nvidia.com' numpy tensorrt cuda-python cython nvidia-cuda-runtime-cu12 nvidia-cuda-runtime-cu11 nvidia-cublas-cu11 nvidia-cudnn-cu11 onnx protobuf
 
-  # export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/tensorrt_libs:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-  # echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
+  export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/tensorrt_libs:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+  echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
+  
+  pip3 install cuda-python
   
   # #pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti_cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia_cuda_nvcc_cu12 nvidia-cuda-nvrtc-cu12 nvidia_cuda_runtime_cu12 nvidia_cusolver_cu12 nvidia_cusparse_cu12 nvidia_nccl_cu12 nvidia_nvjitlink_cu12 tensorflow onnx onnxruntime-gpu protobuf
-  # cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
-  # ldconfig
+  #cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
+  #ldconfig
+  
+  
+  #sed -i 's|if platform.machine() == "x86_64"|if platform.machine() == "x69_69"|g' /opt/frigate/frigate/detectors/plugins/tensorrt.py
+  
+  ####### Test with python: import tensorrt && from cuda import cuda
+  
+  python -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
+  polygraphy convert dfine_n_coco.onnx -o dfine_n_coco.trt --convert-to trt
+  
+  
+  
 
   cat <<EOF >>/config/config.yml
 ffmpeg:
