@@ -357,14 +357,25 @@ if [ $nvidia_installed == 1 ]; then
 
 
   # ########### CHECK IF ONNX CAN LEVERAGE TENSORRT
-  # TRT_VER=$(pip freeze | grep tensorrt== | sed "s|tensorrt==||g")
+  # TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
   # TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
+  
+  TRT_VER_NUM=$(echo ${TRT_VER} | sed 's|\.||g')
+  MAX_TRT_VER="10.13.2" #See https://developer.nvidia.com/tensorrt/download/10x
+  MAX_TRT_VER_NUM=$(echo ${MAX_TRT_VER} | sed 's|\.||g')
+  if [ "$TRT_VER_NUM" -gt "$MAX_TRT_VER_NUM" ]; then
+    echo "Maximum available TensorRT debian package version available at the time of writing this script: ${MAX_TRT_VER_NUM}"
+	echo "Using version ${MAX_TRT_VER_NUM}. Please open a bug report if a newer version is available on https://developer.nvidia.com/tensorrt/download/10x"
+	TRT_VER=${MAX_TRT_VER}
+  fi
+  
   # TRT_MAJOR=${TRT_VER%%.*}
   # #There can be slight mismatch between the installed drivers' CUDA version and the available download link, so dynamically retrieve the right link using the latest CUDA version mentioned in the TensorRT documentation
   # trt_cuda=$(curl --silent https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing-debian | grep "https://developer.nvidia.com/cuda-toolkit-archive" | sed -n '1p')
   # trt_cuda=$(echo "$trt_cuda" | sed 's|.*archive">||' | sed 's|</a>.*||' | sed 's| update |.|')
+  # trt_cuda=$(cut -d. -f1-2 <<<${trt_cuda})
   # trt_cuda=${trt_cuda}_1
-  # trt_url="https://developer.download.nvidia.com/compute/tensorrt/${TRT_VER}/local_installers//nv-tensorrt-local-repo-ubuntu2204-${TRT_VER}-cuda-${trt_cuda}.0-1_amd64.deb"
+  # trt_url="https://developer.download.nvidia.com/compute/tensorrt/${TRT_VER}/local_installers/nv-tensorrt-local-repo-ubuntu2404-${TRT_VER}-cuda-${trt_cuda}.0-1_amd64.deb"
   # $STD wget -qO nv-tensorrt-local-repo-amd64.deb $trt_url
   # $STD dpkg -i nv-tensorrt-local-repo-amd64.deb
   # #Nvidia only provides DEB package for Ubuntu, but still works with Debian
@@ -396,6 +407,7 @@ if [ $nvidia_installed == 1 ]; then
   pip3 install cuda-python
   
   # #pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti_cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia_cuda_nvcc_cu12 nvidia-cuda-nvrtc-cu12 nvidia_cuda_runtime_cu12 nvidia_cusolver_cu12 nvidia_cusparse_cu12 nvidia_nccl_cu12 nvidia_nvjitlink_cu12 tensorflow onnx onnxruntime-gpu protobuf
+  pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti nvidia-cublas nvidia-cudnn nvidia-cufft nvidia-curand nvidia_cuda_nvcc nvidia-cuda-nvrtc nvidia_cuda_runtime nvidia_cusolver nvidia_cusparse nvidia_nccl nvidia_nvjitlink tensorflow onnx onnxruntime-gpu protobuf
   #cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
   #ldconfig
   
