@@ -279,10 +279,10 @@ if [ $nvidia_installed == 1 ]; then
   
   ldconfig
   #pip3 install onnxruntime-gpu==1.20.*
-  $STD pip3 uninstall -y onnx onnxruntime onnxruntime-openvino
+  $STD pip3 uninstall -y onnxruntime onnxruntime-openvino
   $STD pip3 install onnxruntime-gpu
   msg_ok "Installed Nvidia Dependencies"
-
+  
 
 ########## TRYING D-FINE
   cd /
@@ -360,14 +360,14 @@ if [ $nvidia_installed == 1 ]; then
   # TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
   # TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
   
-  TRT_VER_NUM=$(echo ${TRT_VER} | sed 's|\.||g')
-  MAX_TRT_VER="10.13.2" #See https://developer.nvidia.com/tensorrt/download/10x
-  MAX_TRT_VER_NUM=$(echo ${MAX_TRT_VER} | sed 's|\.||g')
-  if [ "$TRT_VER_NUM" -gt "$MAX_TRT_VER_NUM" ]; then
-    echo "Maximum available TensorRT debian package version available at the time of writing this script: ${MAX_TRT_VER_NUM}"
-	echo "Using version ${MAX_TRT_VER_NUM}. Please open a bug report if a newer version is available on https://developer.nvidia.com/tensorrt/download/10x"
-	TRT_VER=${MAX_TRT_VER}
-  fi
+  # TRT_VER_NUM=$(echo ${TRT_VER} | sed 's|\.||g')
+  # MAX_TRT_VER="10.13.2" #See https://developer.nvidia.com/tensorrt/download/10x
+  # MAX_TRT_VER_NUM=$(echo ${MAX_TRT_VER} | sed 's|\.||g')
+  # if [ "$TRT_VER_NUM" -gt "$MAX_TRT_VER_NUM" ]; then
+    # echo "Maximum available TensorRT debian package version available at the time of writing this script: ${MAX_TRT_VER_NUM}"
+	# echo "Using version ${MAX_TRT_VER_NUM}. Please open a bug report if a newer version is available on https://developer.nvidia.com/tensorrt/download/10x"
+	# TRT_VER=${MAX_TRT_VER}
+  # fi
   
   # TRT_MAJOR=${TRT_VER%%.*}
   # #There can be slight mismatch between the installed drivers' CUDA version and the available download link, so dynamically retrieve the right link using the latest CUDA version mentioned in the TensorRT documentation
@@ -387,37 +387,89 @@ if [ $nvidia_installed == 1 ]; then
   # $STD apt install -y tensorrt-dev
   
   
-  # pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
-  # pip3 install tensorrt
-  pip3 install nvidia-pyindex
-  pip3 install nvidia-tensorrt
+  pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
+  pip3 install tensorrt
+  #pip3 install nvidia-pyindex
+  #pip3 install nvidia-tensorrt
   
+  pip3 install cuda-core[cu${TARGET_CUDA_VER}]
  
   export CUDA_ROOT=/usr/local/cuda
   echo "CUDA_ROOT=${CUDA_ROOT}"  >> ~/.bashrc
   #pip3 install pycuda
   #pip3 install cupy
   
-  # apt-get install python3-libnvinfer-dev
+  apt-get install python3-libnvinfer-dev
   # #pip3 install --extra-index-url 'https://pypi.nvidia.com' numpy tensorrt cuda-python cython nvidia-cuda-runtime-cu12 nvidia-cuda-runtime-cu11 nvidia-cublas-cu11 nvidia-cudnn-cu11 onnx protobuf
 
   export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/tensorrt_libs:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
   echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
   
-  pip3 install cuda-python
+  #pip3 install cuda-python
   
   # #pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti_cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia_cuda_nvcc_cu12 nvidia-cuda-nvrtc-cu12 nvidia_cuda_runtime_cu12 nvidia_cusolver_cu12 nvidia_cusparse_cu12 nvidia_nccl_cu12 nvidia_nvjitlink_cu12 tensorflow onnx onnxruntime-gpu protobuf
-  pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti nvidia-cublas nvidia-cudnn nvidia-cufft nvidia-curand nvidia_cuda_nvcc nvidia-cuda-nvrtc nvidia_cuda_runtime nvidia_cusolver nvidia_cusparse nvidia_nccl nvidia_nvjitlink tensorflow onnx onnxruntime-gpu protobuf
+  #pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti nvidia-cublas nvidia-cudnn nvidia-cufft nvidia-curand nvidia_cuda_nvcc nvidia-cuda-nvrtc nvidia_cuda_runtime nvidia_cusolver nvidia_cusparse nvidia_nccl nvidia_nvjitlink tensorflow onnx onnxruntime-gpu protobuf
   #cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
   #ldconfig
   
   
-  #sed -i 's|if platform.machine() == "x86_64"|if platform.machine() == "x69_69"|g' /opt/frigate/frigate/detectors/plugins/tensorrt.py
+  sed -i 's|if platform.machine() == "x86_64"|if platform.machine() == "x69_69"|g' /opt/frigate/frigate/detectors/plugins/tensorrt.py
   
   ####### Test with python: import tensorrt && from cuda import cuda
   
-  python -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
+  python3 -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
   polygraphy convert dfine_n_coco.onnx -o dfine_n_coco.trt --convert-to trt
+  
+  
+  
+  
+   msg_info "Installing TensorRT Object Detection Model (Patience)"
+  cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
+  mkdir -p /usr/local/src/tensorrt_demos
+  cd /usr/local/src
+  fix_tensorrt="$(cat << EOF
+#!/bin/bash
+sed -i 's|/usr/local/TensorRT-.*/|/usr/local/lib/python3.11/dist-packages/tensorrt_libs/|g' /usr/local/src/tensorrt_demos/plugins/Makefile
+EOF
+)"
+  echo "${fix_tensorrt}" > /opt/frigate/fix_tensorrt.sh
+  if [ $TRT_MAJOR -gt 8 ]; then
+    echo "sed -i 's|-lnvparsers ||g' /usr/local/src/tensorrt_demos/plugins/Makefile" >> /opt/frigate/fix_tensorrt.sh
+    echo "sed -i 's|-lnvToolsExt ||g' /usr/local/src/tensorrt_demos/plugins/Makefile" >> /opt/frigate/fix_tensorrt.sh
+  fi
+  sed -i '18,21 s|.|#&|' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
+  sed -i '9 i bash \/opt\/frigate\/fix_tensorrt.sh' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
+  #Temporarly get my fork patched for TensorRT v10
+  #sed -i 's|NateMeyer|remz1337|g' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
+  $STD apt install -qqy python-is-python3 g++
+
+  
+  
+  $STD bash /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
+  cd /opt/frigate
+  export YOLO_MODELS="yolov4-tiny-288,yolov4-tiny-416,yolov7-tiny-416,yolov7-320"
+  export TRT_VER="$TRT_VER"
+  $STD bash /opt/frigate/docker/tensorrt/detector/rootfs/etc/s6-overlay/s6-rc.d/trt-model-prepare/run
+  cat <<EOF >>/config/config.yml
+ffmpeg:
+  hwaccel_args: preset-nvidia-h264
+  output_args:
+    record: preset-record-generic-audio-aac
+detectors:
+  tensorrt:
+    type: tensorrt
+#    device: 0
+model:
+  path: /config/model_cache/tensorrt/yolov7-tiny-416.trt
+  input_tensor: nchw
+  input_pixel_format: rgb
+  width: 416
+  height: 416
+EOF
+  msg_ok "Installed TensorRT Object Detection Model"
+  
+  
+  
   
   
   
