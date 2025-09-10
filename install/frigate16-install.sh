@@ -311,6 +311,9 @@ if [ $nvidia_installed == 1 ]; then
   $STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/dfine_hgnetv2_n_coco.yml -r /D-FINE/models/dfine_n_coco.pth
   set -e
   
+  ### Other models YOLOX:
+  #wget https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_tiny.onnx
+  
     # cat <<EOF >>/config/config.yml
 # ffmpeg:
   # hwaccel_args: preset-nvidia
@@ -368,8 +371,8 @@ if [ $nvidia_installed == 1 ]; then
 
 
   # ########### CHECK IF ONNX CAN LEVERAGE TENSORRT
-  # TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
-  # TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
+  TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
+  TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
   
   # TRT_VER_NUM=$(echo ${TRT_VER} | sed 's|\.||g')
   # MAX_TRT_VER="10.13.2" #See https://developer.nvidia.com/tensorrt/download/10x
@@ -380,7 +383,7 @@ if [ $nvidia_installed == 1 ]; then
 	# TRT_VER=${MAX_TRT_VER}
   # fi
   
-  # TRT_MAJOR=${TRT_VER%%.*}
+  TRT_MAJOR=${TRT_VER%%.*}
   # #There can be slight mismatch between the installed drivers' CUDA version and the available download link, so dynamically retrieve the right link using the latest CUDA version mentioned in the TensorRT documentation
   # trt_cuda=$(curl --silent https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing-debian | grep "https://developer.nvidia.com/cuda-toolkit-archive" | sed -n '1p')
   # trt_cuda=$(echo "$trt_cuda" | sed 's|.*archive">||' | sed 's|</a>.*||' | sed 's| update |.|')
@@ -410,7 +413,7 @@ if [ $nvidia_installed == 1 ]; then
   #pip3 install pycuda
   #pip3 install cupy
   
-  apt-get install python3-libnvinfer-dev
+  apt-get install -y python3-libnvinfer-dev
   # #pip3 install --extra-index-url 'https://pypi.nvidia.com' numpy tensorrt cuda-python cython nvidia-cuda-runtime-cu12 nvidia-cuda-runtime-cu11 nvidia-cublas-cu11 nvidia-cudnn-cu11 onnx protobuf
 
   export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/tensorrt_libs:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
@@ -434,7 +437,7 @@ if [ $nvidia_installed == 1 ]; then
   
   
   
-   msg_info "Installing TensorRT Object Detection Model (Patience)"
+  msg_info "Installing TensorRT Object Detection Model (Patience)"
   cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
   mkdir -p /usr/local/src/tensorrt_demos
   cd /usr/local/src
