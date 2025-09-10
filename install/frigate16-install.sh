@@ -258,19 +258,13 @@ if [ $nvidia_installed == 1 ]; then
 #  fi
 #  $STD apt update && sleep 1
   #Cap to CUDA 12
-#  if [[ "${NVD_MAJOR_CUDA}" -gt 12 ]]; then
-#    TARGET_CUDA_VER=12
-#	NVD_MAJOR_CUDA=12
-#  fi
+  if [[ "${NVD_MAJOR_CUDA}" -gt 12 ]]; then
+    TARGET_CUDA_VER=12
+    NVD_MAJOR_CUDA=12
+  fi
   $STD apt update
   $STD apt install -qqy "cuda-toolkit-$TARGET_CUDA_VER"
   $STD apt install -qqy "cudnn-cuda-$NVD_MAJOR_CUDA"
-  #export PATH=/usr/local/cuda/bin:${PATH:+:${PATH}}
-  #export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-  #echo "PATH=${PATH}"  >> /etc/bash.bashrc
-  #echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> /etc/bash.bashrc
-  #echo 'export PATH=/usr/local/cuda/bin:$PATH' >> ~/.bashrc
-  #echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
   export PATH=/usr/local/cuda/bin:${PATH:+:${PATH}}
   export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
   echo "PATH=${PATH}"  >> ~/.bashrc
@@ -284,7 +278,7 @@ if [ $nvidia_installed == 1 ]; then
   msg_ok "Installed Nvidia Dependencies"
   
 
-########## TRYING D-FINE
+########## TRYING D-FINE ONNX
   cd /
   $STD git clone https://github.com/Peterande/D-FINE
   cd /D-FINE
@@ -292,14 +286,10 @@ if [ $nvidia_installed == 1 ]; then
   $STD pip3 install onnxsim onnxscript
   mkdir -p models
   cd models
-  #wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj365.pth
-  #wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_s_obj2coco.pth
   wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth
-  #wget -q https://github.com/Peterande/D-FINE/blob/master/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml
   sed -i 's|data = torch.rand(32, 3, 640, 640)|data = torch.rand(1, 3, 640, 640)|g' /D-FINE/tools/deployment/export_onnx.py
   sed -i 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
   sed -i 's|opset_version=[[:digit:]]\+|opset_version=18|g' /D-FINE/tools/deployment/export_onnx.py
-  #python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_s_obj365.yml -r /D-FINE/models/dfine_s_obj365.pth
 
   ###### CHANGE MODEL TO 320x320
   sed -i 's|640, 640|320, 320|g' /D-FINE/configs/dfine/include/dfine_hgnetv2.yml
@@ -318,14 +308,35 @@ if [ $nvidia_installed == 1 ]; then
 
   ######## This line is throwing a segfault but still converting the model...
   set +e
-  #$STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r /D-FINE/models/dfine_s_obj2coco.pth
-  #$STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/objects365/dfine_hgnetv2_m_obj2coco.yml -r /D-FINE/models/dfine_s_obj2coco.pth
   $STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/dfine_hgnetv2_n_coco.yml -r /D-FINE/models/dfine_n_coco.pth
   set -e
-  ####dynamo=True
-  #### the new torch.export-based ONNX exporter will be the default. To switch now, set dynamo=True in torch.onnx.export
-  #pip3 install onnxscript #### FOR DYNAMO=TRUE
+  
+    # cat <<EOF >>/config/config.yml
+# ffmpeg:
+  # hwaccel_args: preset-nvidia
+# detectors:
+  # onnx:
+    # type: onnx
 
+# model:
+  # model_type: dfine
+  # width: 320
+  # height: 320
+  # input_tensor: nchw
+  # input_dtype: float
+  # path: /D-FINE/models/dfine_n_coco.onnx
+  # labelmap_path: /labelmap/coco-80.txt
+# EOF
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 
   #######From TensorRT Dockerfile
   #cd /opt/frigate/
@@ -417,8 +428,8 @@ if [ $nvidia_installed == 1 ]; then
   
   ####### Test with python: import tensorrt && from cuda import cuda
   
-  python3 -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
-  polygraphy convert dfine_n_coco.onnx -o dfine_n_coco.trt --convert-to trt
+  #python3 -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
+  #polygraphy convert dfine_n_coco.onnx -o dfine_n_coco.trt --convert-to trt
   
   
   
@@ -441,13 +452,14 @@ EOF
   sed -i '9 i bash \/opt\/frigate\/fix_tensorrt.sh' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
   #Temporarly get my fork patched for TensorRT v10
   #sed -i 's|NateMeyer|remz1337|g' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  $STD apt install -qqy python-is-python3 g++
+  #$STD apt install -qqy python-is-python3 g++
 
   
   
   $STD bash /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
   cd /opt/frigate
-  export YOLO_MODELS="yolov4-tiny-288,yolov4-tiny-416,yolov7-tiny-416,yolov7-320"
+  #export YOLO_MODELS="yolov4-tiny-288,yolov4-tiny-416,yolov7-tiny-416,yolov7-320"
+  export YOLO_MODELS="yolov7-tiny-416"
   export TRT_VER="$TRT_VER"
   $STD bash /opt/frigate/docker/tensorrt/detector/rootfs/etc/s6-overlay/s6-rc.d/trt-model-prepare/run
   cat <<EOF >>/config/config.yml
@@ -467,29 +479,6 @@ model:
   height: 416
 EOF
   msg_ok "Installed TensorRT Object Detection Model"
-  
-  
-  
-  
-  
-  
-
-  cat <<EOF >>/config/config.yml
-ffmpeg:
-  hwaccel_args: preset-nvidia
-detectors:
-  onnx:
-    type: onnx
-
-model:
-  model_type: dfine
-  width: 320
-  height: 320
-  input_tensor: nchw
-  input_dtype: float
-  path: /D-FINE/models/dfine_n_coco.onnx
-  labelmap_path: /labelmap/coco-80.txt
-EOF
 elif grep -q -o -m1 -E 'avx[^ ]* | sse4_2' /proc/cpuinfo; then
   msg_ok "AVX or SSE 4.2 Support Detected"
   msg_info "Installing Openvino Object Detection Model (Resilience)"
