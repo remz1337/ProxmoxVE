@@ -5,7 +5,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://frigate.video/
 
-APP="Frigate16"
+APP="Frigate162"
 var_tags="${var_tags:-nvr}"
 var_cpu="${var_cpu:-4}"
 var_ram="${var_ram:-4096}"
