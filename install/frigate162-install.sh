@@ -293,7 +293,7 @@ if [ $nvidia_installed == 1 ]; then
   fi
   check_cuda_version
   TARGET_CUDA_VER=$(echo $NVD_VER_CUDA | sed 's|\.|-|g')
-  $STD apt install -y gnupg
+  $STD apt update && apt install -y gnupg
   $STD apt-key del 7fa2af80
   wget -q https://developer.download.nvidia.com/compute/cuda/repos/${os}/x86_64/cuda-keyring_1.1-1_all.deb
   $STD dpkg -i cuda-keyring_1.1-1_all.deb
