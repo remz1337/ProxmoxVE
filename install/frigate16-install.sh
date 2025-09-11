@@ -20,6 +20,7 @@ msg_ok "Installed Dependencies"
 
 msg_info "Setting Up Hardware Acceleration"
 $STD apt-get -y install {va-driver-all,ocl-icd-libopencl1,intel-opencl-icd,vainfo,intel-gpu-tools}
+#apt install -y vainfo libva-drm2 libva-x11-2
 if [[ "$CTTYPE" == "0" ]]; then
   chgrp video /dev/dri
   chmod 755 /dev/dri
@@ -70,7 +71,7 @@ msg_ok "Downloaded Frigate source"
 msg_info "Building Nginx with Custom Modules"
 #Overwrite version check as debian 12 LXC doesn't have the debian.list file for some reason
 sed -i 's|if.*"$VERSION_ID" == "12".*|if \[\[ "$VERSION_ID" == "12" \]\] \&\ \[\[ -f /etc/apt/sources.list.d/debian.list \]\]; then|g' /opt/frigate/docker/main/build_nginx.sh
-$STD  bash /opt/frigate/docker/main/build_nginx.sh
+$STD bash /opt/frigate/docker/main/build_nginx.sh
 sed -e '/s6-notifyoncheck/ s/^#*/#/' -i /opt/frigate/docker/main/rootfs/etc/s6-overlay/s6-rc.d/nginx/run
 ln -sf /usr/local/nginx/sbin/nginx /usr/local/bin/nginx
 msg_ok "Built Nginx"
@@ -95,21 +96,6 @@ $STD bash /opt/frigate/docker/main/install_tempio.sh
 ln -sf /usr/local/tempio/bin/tempio /usr/local/bin/tempio
 msg_ok "Installed Tempio"
 
-msg_info "Installing OpenVino Runtime and Dev library"
-wget -q https://bootstrap.pypa.io/get-pip.py -O get-pip.py
-sed -i 's/args.append("setuptools")/args.append("setuptools==77.0.3")/' get-pip.py
-$STD python3 get-pip.py "pip"
-$STD pip3 install -r /opt/frigate/docker/main/requirements-ov.txt
-msg_ok "Installed OpenVino Runtime and Dev library"
-
-msg_info "Downloading OpenVino Model"
-mkdir /models
-cd /models
-wget -q http://download.tensorflow.org/models/object_detection/ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz
-$STD tar -zxvf ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz --no-same-owner
-$STD python3 /opt/frigate/docker/main/build_ov_model.py
-msg_ok "Downloaded OpenVino Model"
-
 msg_info "Building libUSB without udev"
 cd /opt
 wget -q https://github.com/libusb/libusb/archive/v1.0.26.zip -O v1.0.26.zip
@@ -129,32 +115,10 @@ $STD install -c -m 644 libusb-1.0.pc '/usr/local/lib/pkgconfig'
 ldconfig
 msg_ok "Built libUSB"
 
-msg_info "Building Models"
-cd /
-# Get model and labels
-wget -qO edgetpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite
-wget -qO cpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess.tflite
-cp /opt/frigate/labelmap.txt /labelmap.txt
-# Copy OpenVino model
-#cp -r /opt/frigate/models/public/ssdlite_mobilenet_v2 openvino-model
-mkdir /openvino-model
-cp -r /models/ssdlite_mobilenet_v2.xml openvino-model/
-cp -r /models/ssdlite_mobilenet_v2.bin openvino-model/
-wget -q https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt -O openvino-model/coco_91cl_bkgr.txt
-sed -i 's/truck/car/g' openvino-model/coco_91cl_bkgr.txt
-# Get Audio Model and labels
-#wget -qO - https://www.kaggle.com/api/v1/models/google/yamnet/tfLite/classification-tflite/1/download | tar xvz
-wget -qO yamnet-tflite-classification-tflite-v1.tar.gz https://www.kaggle.com/api/v1/models/google/yamnet/tfLite/classification-tflite/1/download
-tar xzf yamnet-tflite-classification-tflite-v1.tar.gz
-rm -rf yamnet-tflite-classification-tflite-v1.tar.gz
-mv 1.tflite cpu_audio_model.tflite
-cp /opt/frigate/audio-labelmap.txt /audio-labelmap.txt
-msg_ok "Built Models"
-
-msg_info "Building Wheels"
+msg_info "Installing Frigate Dependencies"
 $STD update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 $STD pip3 install -r /opt/frigate/docker/main/requirements.txt
-msg_ok "Built Wheels"
+msg_ok "Installed Frigate Dependencies"
 
 msg_info "Building pysqlite3"
 sed -i 's|^SQLITE3_VERSION=.*|SQLITE3_VERSION="version-3.46.0"|g' /opt/frigate/docker/main/build_pysqlite3.sh
@@ -162,6 +126,39 @@ $STD bash /opt/frigate/docker/main/build_pysqlite3.sh
 $STD pip3 wheel --wheel-dir=/wheels -r /opt/frigate/docker/main/requirements-wheels.txt
 msg_ok "Built pysqlite3"
 
+msg_info "Installing NodeJS"
+#NODE_VERSION="22" NODE_MODULE="yarn" setup_nodejs
+$STD curl -SLO https://deb.nodesource.com/nsolid_setup_deb.sh
+chmod 500 nsolid_setup_deb.sh
+$STD ./nsolid_setup_deb.sh 20
+$STD apt-get install nodejs -y
+$STD npm install -g npm@10
+msg_ok "Installed NodeJS"
+
+# This should be moved to conditional block, only needed if Coral TPU is detected
+msg_info "Downloading Coral TPU Model"
+mkdir -p /models
+cd /models
+wget -qO edgetpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite
+msg_ok "Downloaded Coral TPU Model"
+
+msg_info "Downloading CPU Model"
+mkdir -p /models
+cd /models
+wget -qO cpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess.tflite
+msg_ok "Downloaded CPU Model"
+
+msg_info "Building Audio Models"
+# Get Audio Model and labels
+#wget -qO - https://www.kaggle.com/api/v1/models/google/yamnet/tfLite/classification-tflite/1/download | tar xvz
+wget -qO yamnet-tflite-classification-tflite-v1.tar.gz https://www.kaggle.com/api/v1/models/google/yamnet/tfLite/classification-tflite/1/download
+$STD tar xzf yamnet-tflite-classification-tflite-v1.tar.gz
+rm -rf yamnet-tflite-classification-tflite-v1.tar.gz
+mv 1.tflite cpu_audio_model.tflite
+#cp /opt/frigate/audio-labelmap.txt /audio-labelmap.txt
+msg_ok "Built Audio Models"
+
+# This should be moved to conditional block, only needed if Hailo AI module is detected
 msg_info "Building HailoRT"
 $STD bash /opt/frigate/docker/main/install_hailort.sh
 cp -a /opt/frigate/docker/main/rootfs/. /
@@ -175,14 +172,64 @@ ldconfig
 $STD pip3 install -U /wheels/*.whl
 msg_ok "Built HailoRT"
 
-msg_info "Installing NodeJS"
-#NODE_VERSION="22" NODE_MODULE="yarn" setup_nodejs
-$STD curl -SLO https://deb.nodesource.com/nsolid_setup_deb.sh
-chmod 500 nsolid_setup_deb.sh
-$STD ./nsolid_setup_deb.sh 20
-$STD apt-get install nodejs -y
-$STD npm install -g npm@10
-msg_ok "Installed NodeJS"
+msg_info "Installing OpenVino Runtime and Dev library"
+wget -q https://bootstrap.pypa.io/get-pip.py -O get-pip.py
+sed -i 's/args.append("setuptools")/args.append("setuptools==77.0.3")/' get-pip.py
+$STD python3 get-pip.py "pip"
+$STD pip3 install -r /opt/frigate/docker/main/requirements-ov.txt
+msg_ok "Installed OpenVino Runtime and Dev library"
+
+msg_info "Downloading OpenVino Model"
+mkdir -p /models
+cd /models
+wget -q http://download.tensorflow.org/models/object_detection/ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz
+$STD tar -zxvf ssdlite_mobilenet_v2_coco_2018_05_09.tar.gz --no-same-owner
+$STD python3 /opt/frigate/docker/main/build_ov_model.py
+#cp -r /opt/frigate/models/public/ssdlite_mobilenet_v2 openvino-model
+mkdir /openvino-model
+cp -r /models/ssdlite_mobilenet_v2.xml openvino-model/
+cp -r /models/ssdlite_mobilenet_v2.bin openvino-model/
+wget -q https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt -O openvino-model/coco_91cl_bkgr.txt
+sed -i 's/truck/car/g' openvino-model/coco_91cl_bkgr.txt
+msg_ok "Downloaded OpenVino Model"
+
+# Optional model to test
+msg_info "Building D-FINE Model"
+cd /
+$STD git clone https://github.com/Peterande/D-FINE
+cd /D-FINE
+$STD pip3 install -r requirements.txt
+$STD pip3 install onnxsim onnxscript
+mkdir -p models
+cd models
+wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth
+sed -i 's|data = torch.rand(32, 3, 640, 640)|data = torch.rand(1, 3, 640, 640)|g' /D-FINE/tools/deployment/export_onnx.py
+sed -i 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
+sed -i 's|opset_version=[[:digit:]]\+|opset_version=18|g' /D-FINE/tools/deployment/export_onnx.py
+sed -i 's|640, 640|320, 320|g' /D-FINE/configs/dfine/include/dfine_hgnetv2.yml
+sed -i 's|640, 640|320, 320|g' /D-FINE/tools/deployment/export_onnx.py
+sed -i 's|load_state_dict(state)|load_state_dict(new_checkpoint, strict=False)|g' /D-FINE/tools/deployment/export_onnx.py
+sed -i '/state = checkpoint\["model"\]/a \
+\
+        # We remove the anchors and valid_mask saved parameters here\
+        new_checkpoint = {}\
+        for k in state:\
+          if "anchors" in k or "valid_mask" in k:\
+            print(k)\
+            continue\
+          new_checkpoint[k] = state[k]' /D-FINE/tools/deployment/export_onnx.py
+set +e
+######## This line is throwing a segfault but still converting the model successfully...
+$STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/dfine_hgnetv2_n_coco.yml -r /D-FINE/models/dfine_n_coco.pth
+set -e
+msg_ok "Built D-FINE Model"
+
+# Optional model to test
+msg_info "Downloading YoloX Model"
+mkdir -p /models
+cd /models
+wget -qO yolox_tiny.onnx https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_tiny.onnx
+msg_ok "Downloaded YoloX Model"
 
 msg_info "Installing Frigate"
 cd /opt/frigate
@@ -209,7 +256,6 @@ mqtt:
 cameras:
   test:
     ffmpeg:
-      #hwaccel_args: preset-vaapi
       inputs:
         - path: /media/frigate/person-bicycle-car-detection.mp4
           input_args: -re -stream_loop -1 -fflags +genpts
@@ -228,7 +274,6 @@ detect:
   enabled: false
 EOF
 msg_ok "Installed Frigate"
-
 
 source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/nvidia.func)
 nvidia_installed=$(check_nvidia_drivers_installed)
@@ -270,174 +315,24 @@ if [ $nvidia_installed == 1 ]; then
   echo "PATH=${PATH}"  >> ~/.bashrc
   echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
   source ~/.bashrc
-  
   ldconfig
-  #pip3 install onnxruntime-gpu==1.20.*
   $STD pip3 uninstall -y onnxruntime onnxruntime-openvino
   $STD pip3 install onnxruntime-gpu
   msg_ok "Installed Nvidia Dependencies"
-  
 
-########## TRYING D-FINE ONNX
-  cd /
-  $STD git clone https://github.com/Peterande/D-FINE
-  cd /D-FINE
-  $STD pip3 install -r requirements.txt
-  $STD pip3 install onnxsim onnxscript
-  mkdir -p models
-  cd models
-  wget -q https://github.com/Peterande/storage/releases/download/dfinev1.0/dfine_n_coco.pth
-  sed -i 's|data = torch.rand(32, 3, 640, 640)|data = torch.rand(1, 3, 640, 640)|g' /D-FINE/tools/deployment/export_onnx.py
-  sed -i 's|dynamic_axes=dynamic_axes|dynamo=True|g' /D-FINE/tools/deployment/export_onnx.py
-  sed -i 's|opset_version=[[:digit:]]\+|opset_version=18|g' /D-FINE/tools/deployment/export_onnx.py
-
-  ###### CHANGE MODEL TO 320x320
-  sed -i 's|640, 640|320, 320|g' /D-FINE/configs/dfine/include/dfine_hgnetv2.yml
-  sed -i 's|640, 640|320, 320|g' /D-FINE/tools/deployment/export_onnx.py
-  sed -i 's|load_state_dict(state)|load_state_dict(new_checkpoint, strict=False)|g' /D-FINE/tools/deployment/export_onnx.py
-  sed -i '/state = checkpoint\["model"\]/a \
-\
-        # We remove the anchors and valid_mask saved parameters here\
-        new_checkpoint = {}\
-        for k in state:\
-          if "anchors" in k or "valid_mask" in k:\
-            print(k)\
-            continue\
-          new_checkpoint[k] = state[k]' /D-FINE/tools/deployment/export_onnx.py
-
-
-  ######## This line is throwing a segfault but still converting the model...
-  set +e
-  $STD python3 /D-FINE/tools/deployment/export_onnx.py -c /D-FINE/configs/dfine/dfine_hgnetv2_n_coco.yml -r /D-FINE/models/dfine_n_coco.pth
-  set -e
-  
-  ### Other models YOLOX:
-  #wget https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_tiny.onnx
-  
-    # cat <<EOF >>/config/config.yml
-# ffmpeg:
-  # hwaccel_args: preset-nvidia
-# detectors:
-  # onnx:
-    # type: onnx
-
-# model:
-  # model_type: dfine
-  # width: 320
-  # height: 320
-  # input_tensor: nchw
-  # input_dtype: float
-  # path: /D-FINE/models/dfine_n_coco.onnx
-  # labelmap_path: /labelmap/coco-80.txt
-# EOF
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-
-  #######From TensorRT Dockerfile
-  #cd /opt/frigate/
-  #pip3 wheel --wheel-dir=/trt-wheels -c  /opt/frigate/docker/main/requirements-wheels.txt -r /opt/frigate/docker/tensorrt/requirements-amd64.txt
-  #pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
-  #pip3 install -U /trt-wheels/*.whl
-  #cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
-  #ldconfig
-
-  ######## To download more models
-  #cd /
-  #git clone https://github.com/NateMeyer/tensorrt_demos
-  #cd /tensorrt_demos/yolo
-  #./download_yolo.sh
-  #pip3 install onnx==1.16.*
-  #pip3 install onnx
-  #python3 yolo_to_onnx.py -m yolov7-tiny-416
-
-  ###### Cleanup model layers
-  #wget -q https://raw.githubusercontent.com/microsoft/onnxruntime/refs/heads/main/tools/python/remove_initializer_from_input.py
-  #python3 remove_initializer_from_input.py --input yolov7-tiny-416.onnx --output yolov7-tiny-416.onnx
-  
-  ######### ********** MEMCPY IS PASSING STUFF TO CPU, NEED TO FIX THE ONNX MODEL
-  ######### Try a different YOLO to ONNX converter
-  ######## OR Maybe just a mismatch in cuda... Investigate the YOLO_TO_ONNX.PY script...
-  
-  #wget -q https://raw.githubusercontent.com/WongKinYiu/yolov7/refs/heads/main/export.py
-  #python export.py --weights yolov7-tiny-416.pt --grid --end2end --dynamic-batch --simplify --topk-all 100 --iou-thres 0.65 --conf-thres 0.35 --max-wh 640
-
-
-  # ########### CHECK IF ONNX CAN LEVERAGE TENSORRT
+  msg_info "Installing TensorRT Object Detection Model (Patience)"
   TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
   TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
-  
-  # TRT_VER_NUM=$(echo ${TRT_VER} | sed 's|\.||g')
-  # MAX_TRT_VER="10.13.2" #See https://developer.nvidia.com/tensorrt/download/10x
-  # MAX_TRT_VER_NUM=$(echo ${MAX_TRT_VER} | sed 's|\.||g')
-  # if [ "$TRT_VER_NUM" -gt "$MAX_TRT_VER_NUM" ]; then
-    # echo "Maximum available TensorRT debian package version available at the time of writing this script: ${MAX_TRT_VER_NUM}"
-	# echo "Using version ${MAX_TRT_VER_NUM}. Please open a bug report if a newer version is available on https://developer.nvidia.com/tensorrt/download/10x"
-	# TRT_VER=${MAX_TRT_VER}
-  # fi
-  
   TRT_MAJOR=${TRT_VER%%.*}
-  # #There can be slight mismatch between the installed drivers' CUDA version and the available download link, so dynamically retrieve the right link using the latest CUDA version mentioned in the TensorRT documentation
-  # trt_cuda=$(curl --silent https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html#installing-debian | grep "https://developer.nvidia.com/cuda-toolkit-archive" | sed -n '1p')
-  # trt_cuda=$(echo "$trt_cuda" | sed 's|.*archive">||' | sed 's|</a>.*||' | sed 's| update |.|')
-  # trt_cuda=$(cut -d. -f1-2 <<<${trt_cuda})
-  # trt_cuda=${trt_cuda}_1
-  # trt_url="https://developer.download.nvidia.com/compute/tensorrt/${TRT_VER}/local_installers/nv-tensorrt-local-repo-ubuntu2404-${TRT_VER}-cuda-${trt_cuda}.0-1_amd64.deb"
-  # $STD wget -qO nv-tensorrt-local-repo-amd64.deb $trt_url
-  # $STD dpkg -i nv-tensorrt-local-repo-amd64.deb
-  # #Nvidia only provides DEB package for Ubuntu, but still works with Debian
-  # #cp /var/nv-tensorrt-local-repo-ubuntu2204-${TRT_VER}-cuda-${NVD_VER_CUDA}/nv-tensorrt-local-*-keyring.gpg /usr/share/keyrings/
-  # cp /var/nv-tensorrt-local-repo-*/nv-tensorrt-local-*-keyring.gpg /usr/share/keyrings/
-  # rm nv-tensorrt-local-repo-amd64.deb
-  # $STD apt update
-  # # Needed on top of the python install for the NvInfer.h header
-  # $STD apt install -y tensorrt-dev
-  
-  
-  pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
-  pip3 install tensorrt
-  #pip3 install nvidia-pyindex
-  #pip3 install nvidia-tensorrt
-  
-  pip3 install cuda-core[cu${TARGET_CUDA_VER}]
- 
+  $STD pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
+  $STD pip3 install tensorrt
+  $STD pip3 install cuda-core[cu${TARGET_CUDA_VER}]
   export CUDA_ROOT=/usr/local/cuda
   echo "CUDA_ROOT=${CUDA_ROOT}"  >> ~/.bashrc
-  #pip3 install pycuda
-  #pip3 install cupy
-  
-  apt-get install -y python3-libnvinfer-dev
-  # #pip3 install --extra-index-url 'https://pypi.nvidia.com' numpy tensorrt cuda-python cython nvidia-cuda-runtime-cu12 nvidia-cuda-runtime-cu11 nvidia-cublas-cu11 nvidia-cudnn-cu11 onnx protobuf
-
+  $STD apt-get install -y python3-libnvinfer-dev
   export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/tensorrt_libs:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
   echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
-  
-  #pip3 install cuda-python
-  
-  # #pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti_cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia_cuda_nvcc_cu12 nvidia-cuda-nvrtc-cu12 nvidia_cuda_runtime_cu12 nvidia_cusolver_cu12 nvidia_cusparse_cu12 nvidia_nccl_cu12 nvidia_nvjitlink_cu12 tensorflow onnx onnxruntime-gpu protobuf
-  #pip3 install --extra-index-url 'https://pypi.nvidia.com' cython nvidia_cuda_cupti nvidia-cublas nvidia-cudnn nvidia-cufft nvidia-curand nvidia_cuda_nvcc nvidia-cuda-nvrtc nvidia_cuda_runtime nvidia_cusolver nvidia_cusparse nvidia_nccl nvidia_nvjitlink tensorflow onnx onnxruntime-gpu protobuf
-  #cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
-  #ldconfig
-  
-  
   sed -i 's|if platform.machine() == "x86_64"|if platform.machine() == "x69_69"|g' /opt/frigate/frigate/detectors/plugins/tensorrt.py
-  
-  ####### Test with python: import tensorrt && from cuda import cuda
-  
-  #python3 -m pip install colored polygraphy --extra-index-url https://pypi.ngc.nvidia.com
-  #polygraphy convert dfine_n_coco.onnx -o dfine_n_coco.trt --convert-to trt
-  
-  
-  
-  
-  msg_info "Installing TensorRT Object Detection Model (Patience)"
   cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
   mkdir -p /usr/local/src/tensorrt_demos
   cd /usr/local/src
@@ -452,13 +347,7 @@ EOF
     echo "sed -i 's|-lnvToolsExt ||g' /usr/local/src/tensorrt_demos/plugins/Makefile" >> /opt/frigate/fix_tensorrt.sh
   fi
   sed -i '18,21 s|.|#&|' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  sed -i '9 i bash \/opt\/frigate\/fix_tensorrt.sh' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  #Temporarly get my fork patched for TensorRT v10
-  #sed -i 's|NateMeyer|remz1337|g' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
-  #$STD apt install -qqy python-is-python3 g++
-
-  
-  
+  sed -i '9 i bash \/opt\/frigate\/fix_tensorrt.sh' /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh 
   $STD bash /opt/frigate/docker/tensorrt/detector/tensorrt_libyolo.sh
   cd /opt/frigate
   #export YOLO_MODELS="yolov4-tiny-288,yolov4-tiny-416,yolov7-tiny-416,yolov7-320"
@@ -467,11 +356,11 @@ EOF
   $STD bash /opt/frigate/docker/tensorrt/detector/rootfs/etc/s6-overlay/s6-rc.d/trt-model-prepare/run
   cat <<EOF >>/config/config.yml
 ffmpeg:
-  hwaccel_args: preset-nvidia-h264
-  output_args:
-    record: preset-record-generic-audio-aac
+  hwaccel_args: preset-nvidia
+#  output_args:
+#    record: preset-record-generic-audio-aac
 detectors:
-  tensorrt:
+  detector01:
     type: tensorrt
 #    device: 0
 model:
@@ -484,23 +373,13 @@ EOF
   msg_ok "Installed TensorRT Object Detection Model"
 elif grep -q -o -m1 -E 'avx[^ ]* | sse4_2' /proc/cpuinfo; then
   msg_ok "AVX or SSE 4.2 Support Detected"
-  msg_info "Installing Openvino Object Detection Model (Resilience)"
-#  $STD pip install -r /opt/frigate/docker/main/requirements-ov.txt
-#  cd /opt/frigate/models
-#  export ENABLE_ANALYTICS=NO
-#  $STD /usr/local/bin/omz_downloader --name ssdlite_mobilenet_v2 --num_attempts 2
-#  $STD /usr/local/bin/omz_converter --name ssdlite_mobilenet_v2 --precision FP16 --mo /usr/local/bin/mo
-#  cd /
-#  cp -r /opt/frigate/models/public/ssdlite_mobilenet_v2 openvino-model
-#  curl -fsSL "https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt" -o "openvino-model/coco_91cl_bkgr.txt"
-#  sed -i 's/truck/car/g' openvino-model/coco_91cl_bkgr.txt
+  msg_info "Configuring Openvino Object Detection Model"
   cat <<EOF >>/config/config.yml
 ffmpeg:
-  hwaccel_args: preset-vaapi
+  hwaccel_args: "auto"
 detectors:
-  ov:
+  detector01:
     type: openvino
-    device: CPU
 model:
   width: 300
   height: 300
@@ -509,16 +388,17 @@ model:
   path: /openvino-model/ssdlite_mobilenet_v2.xml
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 EOF
-  msg_ok "Installed Openvino Object Detection Model"
+  msg_ok "Configured Openvino Object Detection Model"
 else
+  msg_info "Configuring CPU Object Detection Model"
   cat <<EOF >>/config/config.yml
 ffmpeg:
-  hwaccel_args: auto
+  hwaccel_args: "auto"
 model:
   path: /cpu_model.tflite
 EOF
+  msg_ok "Configured CPU Object Detection Model"
 fi
-
 
 msg_info "Creating Services"
 cat <<EOF >/etc/systemd/system/create_directories.service
