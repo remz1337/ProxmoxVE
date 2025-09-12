@@ -152,6 +152,7 @@ msg_info "Downloading CPU Model"
 mkdir -p /models
 cd /models
 wget -qO cpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess.tflite
+cp /opt/frigate/labelmap.txt /labelmap.txt
 msg_ok "Downloaded CPU Model"
 
 msg_info "Building Audio Models"
@@ -161,7 +162,7 @@ wget -qO yamnet-tflite-classification-tflite-v1.tar.gz https://www.kaggle.com/ap
 $STD tar xzf yamnet-tflite-classification-tflite-v1.tar.gz
 rm -rf yamnet-tflite-classification-tflite-v1.tar.gz
 mv 1.tflite cpu_audio_model.tflite
-#cp /opt/frigate/audio-labelmap.txt /audio-labelmap.txt
+cp /opt/frigate/audio-labelmap.txt /audio-labelmap.txt
 msg_ok "Built Audio Models"
 
 # This should be moved to conditional block, only needed if Hailo AI module is detected
@@ -326,7 +327,7 @@ if [ $nvidia_installed == 1 ]; then
   msg_info "Installing TensorRT Object Detection Model (Patience)"
   $STD pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
   $STD pip3 install tensorrt
-  $STD pip3 install cuda-core[cu${TARGET_CUDA_VER}]
+  $STD pip3 install cuda-core[cu${NVD_MAJOR_CUDA}]
   TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
   TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
   TRT_MAJOR=${TRT_VER%%.*}
@@ -336,6 +337,7 @@ if [ $nvidia_installed == 1 ]; then
   export LD_LIBRARY_PATH=/usr/local/lib/python3.11/dist-packages/tensorrt_libs:${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
   echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
   sed -i 's|if platform.machine() == "x86_64"|if platform.machine() == "x69_69"|g' /opt/frigate/frigate/detectors/plugins/tensorrt.py
+  sed -i 's|from cuda import cuda|import cuda.bindings.driver as cuda|g' /opt/frigate/frigate/detectors/plugins/tensorrt.py
   cp -a /opt/frigate/docker/tensorrt/detector/rootfs/. /
   mkdir -p /usr/local/src/tensorrt_demos
   cd /usr/local/src
