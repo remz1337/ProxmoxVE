@@ -324,12 +324,12 @@ if [ $nvidia_installed == 1 ]; then
   msg_ok "Installed Nvidia Dependencies"
 
   msg_info "Installing TensorRT Object Detection Model (Patience)"
-  TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
-  TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
-  TRT_MAJOR=${TRT_VER%%.*}
   $STD pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
   $STD pip3 install tensorrt
   $STD pip3 install cuda-core[cu${TARGET_CUDA_VER}]
+  TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
+  TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
+  TRT_MAJOR=${TRT_VER%%.*}
   export CUDA_ROOT=/usr/local/cuda
   echo "CUDA_ROOT=${CUDA_ROOT}"  >> ~/.bashrc
   $STD apt-get install -y python3-libnvinfer-dev
