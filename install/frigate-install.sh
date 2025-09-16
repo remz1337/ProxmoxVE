@@ -143,8 +143,7 @@ msg_ok "Installed NodeJS"
 
 # This should be moved to conditional block, only needed if Coral TPU is detected
 msg_info "Downloading Coral TPU Model"
-mkdir -p /models
-cd /models
+cd /
 wget -qO edgetpu_model.tflite https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite
 msg_ok "Downloaded Coral TPU Model"
 
