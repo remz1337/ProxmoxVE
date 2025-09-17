@@ -32,7 +32,7 @@ password:
 cert: false
 EOF
 systemctl restart code-server@"$USER"
-msg_ok "Installed Code-Server v${VERSION} on $hostname"
+msg_ok "Installed Code-Server v${VERSION}"
 
 motd_ssh
 customize
