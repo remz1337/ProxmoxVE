@@ -14,7 +14,7 @@ network_check
 update_os
 
 msg_info "Installing Dependencies (Patience)"
-$STD apt-get install -y {git}
+$STD apt-get install -y git
 msg_ok "Installed Dependencies"
 
 msg_info "Setting up environment"
@@ -105,6 +105,8 @@ msg_ok "Downloaded DeepResearch"
 msg_info "Installing DeepResearch"
 cd DeepResearch
 $STD pip3 install -r requirements.txt
+#Test with
+#vllm serve "Alibaba-NLP/Tongyi-DeepResearch-30B-A3B"
 msg_ok "Installed DeepResearch"
 
 msg_info "Creating Services"
