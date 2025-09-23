@@ -18,19 +18,22 @@ $STD apt-get install -y apt-transport-https
 $STD apt-get install -y lsb-release
 msg_ok "Installed Dependencies"
 
-msg_info "Installing Nginx"
-curl -fsSL "https://nginx.org/keys/nginx_signing.key" | gpg --dearmor >/usr/share/keyrings/nginx-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/debian $(lsb_release -cs) nginx" >/etc/apt/sources.list.d/nginx.list
-$STD apt-get update
-$STD apt-get install -y nginx=1.26.3*
-msg_ok "Installed Nginx"
-
 RELEASE=$(curl -fsSL https://api.github.com/repos/bunkerity/bunkerweb/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-msg_info "Installing BunkerWeb v${RELEASE} (Patience)"
-curl -fsSL "https://repo.bunkerweb.io/bunkerity/bunkerweb/gpgkey" | gpg --dearmor >/etc/apt/keyrings/bunkerity_bunkerweb-archive-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/bunkerity_bunkerweb-archive-keyring.gpg] https://repo.bunkerweb.io/bunkerity/bunkerweb/debian/ bookworm main" >/etc/apt/sources.list.d/bunkerity_bunkerweb.list
-$STD apt-get update
-$STD apt-get install -y bunkerweb=${RELEASE}
+msg_warn "WARNING: This script will run an external installer from a third-party source (install-bunkerweb.sh)."
+msg_warn "The following code is NOT maintained or audited by our repository."
+msg_warn "If you have any doubts or concerns, please review the installer code before proceeding:"
+msg_custom "${TAB3}${GATEWAY}${BGN}${CL}" "\e[1;34m" "→  https://github.com/bunkerity/bunkerweb/raw/v${RELEASE}/misc/install-bunkerweb.sh"
+echo
+read -r -p "${TAB3}Do you want to continue? [y/N]: " CONFIRM
+if [[ ! "$CONFIRM" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+  msg_error "Aborted by user. No changes have been made."
+  exit 10
+fi
+msg_info "Installing BunkerWeb (Patience)"
+curl -fsSL -o install-bunkerweb.sh https://github.com/bunkerity/bunkerweb/raw/v${RELEASE}/misc/install-bunkerweb.sh
+chmod +x install-bunkerweb.sh
+$STD ./install-bunkerweb.sh --yes
+$STD apt-mark unhold bunkerweb nginx
 cat <<EOF >/etc/apt/preferences.d/bunkerweb
 Package: bunkerweb
 Pin: version ${RELEASE}

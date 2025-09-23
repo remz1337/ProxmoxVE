@@ -40,14 +40,11 @@ $STD sudo -u postgres psql -c "ALTER ROLE $DB_USER SET timezone TO 'UTC';"
 } >>~/outline.creds
 msg_ok "Set up PostgreSQL Database"
 
-msg_info "Setup Outline (Patience)"
+fetch_and_deploy_gh_release "outline" "outline/outline" "tarball"
+
+msg_info "Configuring Outline (Patience)"
 SECRET_KEY="$(openssl rand -hex 32)"
-temp_file=$(mktemp)
 LOCAL_IP="$(hostname -I | awk '{print $1}')"
-RELEASE=$(curl -fsSL https://api.github.com/repos/outline/outline/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-curl -fsSL "https://github.com/outline/outline/archive/refs/tags/v${RELEASE}.tar.gz" -o "$temp_file"
-tar zxf $temp_file
-mv outline-${RELEASE} /opt/outline
 cd /opt/outline
 cp .env.sample .env
 export NODE_ENV=development
@@ -55,15 +52,14 @@ sed -i 's/NODE_ENV=production/NODE_ENV=development/g' /opt/outline/.env
 sed -i "s/generate_a_new_key/${SECRET_KEY}/g" /opt/outline/.env
 sed -i "s/user:pass@postgres/${DB_USER}:${DB_PASS}@localhost/g" /opt/outline/.env
 sed -i 's/redis:6379/localhost:6379/g' /opt/outline/.env
-sed -i "32s#URL=#URL=http://${LOCAL_IP}#g" /opt/outline/.env
+sed -i "5s#URL=#URL=http://${LOCAL_IP}#g" /opt/outline/.env
 sed -i 's/FORCE_HTTPS=true/FORCE_HTTPS=false/g' /opt/outline/.env
-$STD yarn install --frozen-lockfile
 export NODE_OPTIONS="--max-old-space-size=3584"
-$STD yarn build
-sed -i 's/NODE_ENV=development/NODE_ENV=production/g' /opt/outline/.env
+$STD yarn install --frozen-lockfile
 export NODE_ENV=production
-echo "${RELEASE}" >"/opt/${APPLICATION}_version.txt"
-msg_ok "Setup Outline"
+sed -i 's/NODE_ENV=development/NODE_ENV=production/g' /opt/outline/.env
+$STD yarn build
+msg_ok "Configured Outline"
 
 msg_info "Creating Service"
 cat <<EOF >/etc/systemd/system/outline.service
@@ -89,7 +85,6 @@ motd_ssh
 customize
 
 msg_info "Cleaning up"
-rm -rf $temp_file
 $STD apt-get -y autoremove
 $STD apt-get -y autoclean
 msg_ok "Cleaned"

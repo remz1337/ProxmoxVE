@@ -27,9 +27,7 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-
-  RELEASE=$(curl -fsSL https://api.github.com/repos/Lissy93/dashy/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
-  if [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]] || [[ ! -f /opt/${APP}_version.txt ]]; then
+  if check_for_gh_release "dashy" "Lissy93/dashy"; then
     msg_info "Stopping ${APP}"
     systemctl stop dashy
     msg_ok "Stopped ${APP}"
@@ -43,15 +41,14 @@ function update_script() {
     fi
     msg_ok "Backed up conf.yml"
 
-    msg_info "Updating ${APP} to ${RELEASE}"
     rm -rf /opt/dashy
-    mkdir -p /opt/dashy
-    curl -fsSL "https://github.com/Lissy93/dashy/archive/refs/tags/${RELEASE}.tar.gz" | tar -xz -C /opt/dashy --strip-components=1
+    fetch_and_deploy_gh_release "dashy" "Lissy93/dashy"
+
+    msg_info "Updating ${APP}"
     cd /opt/dashy
     npm install
     npm run build
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated ${APP} to ${RELEASE}"
+    msg_ok "Updated ${APP}"
 
     msg_info "Restoring conf.yml"
     cd ~
@@ -66,8 +63,6 @@ function update_script() {
     systemctl start dashy
     msg_ok "Started Dashy"
     msg_ok "Updated Successfully"
-  else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
   fi
   exit
 }

@@ -20,31 +20,33 @@ color
 catch_errors
 
 function update_script() {
-    header_info
-    check_container_storage
-    check_container_resources
-    if [[ ! -d /opt/umami ]]; then
-        msg_error "No ${APP} Installation Found!"
-        exit
-    fi
+  header_info
+  check_container_storage
+  check_container_resources
+  if [[ ! -d /opt/umami ]]; then
+    msg_error "No ${APP} Installation Found!"
+    exit
+  fi
 
+  if check_for_gh_release "umami" "umami-software/umami"; then
     msg_info "Stopping ${APP}"
     systemctl stop umami
     msg_ok "Stopped $APP"
 
+    fetch_and_deploy_gh_release "umami" "umami-software/umami" "tarball"
+
     msg_info "Updating ${APP}"
     cd /opt/umami
-    git pull
-    yarn install
-    yarn build
+    $STD yarn install
+    $STD yarn run build
     msg_ok "Updated ${APP}"
 
     msg_info "Starting ${APP}"
     systemctl start umami
     msg_ok "Started ${APP}"
-
     msg_ok "Updated Successfully"
-    exit
+  fi
+  exit
 }
 
 start

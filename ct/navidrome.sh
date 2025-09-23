@@ -20,39 +20,27 @@ color
 catch_errors
 
 function update_script() {
-    header_info
-    check_container_storage
-    check_container_resources
-    if [[ ! -d /var/lib/navidrome ]]; then
-        msg_error "No ${APP} Installation Found!"
-        exit
-    fi
-    RELEASE=$(curl -fsSL https://api.github.com/repos/navidrome/navidrome/releases/latest | grep "tag_name" | awk -F '"' '{print $4}')
-    if [[ ! -f /opt/${APP}_version.txt ]]; then touch /opt/${APP}_version.txt; fi
-    if [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
-        msg_info "Stopping Services"
-        systemctl stop navidrome
-        msg_ok "Services Stopped"
-
-        msg_info "Updating ${APP} to ${RELEASE}"
-        TMP_DEB=$(mktemp --suffix=.deb)
-        curl -fsSL -o "${TMP_DEB}" "https://github.com/navidrome/navidrome/releases/download/${RELEASE}/navidrome_${RELEASE#v}_linux_amd64.deb"
-        $STD apt-get install -y "${TMP_DEB}"
-        echo "${RELEASE}" >/opt/"${APP}_version.txt"
-        msg_ok "Updated Navidrome"
-
-        msg_info "Starting Services"
-        systemctl start navidrome
-        msg_ok "Started Services"
-
-        msg_info "Cleaning Up"
-        rm -f "${TMP_DEB}"
-        msg_ok "Cleaned"
-        msg_ok "Updated Successfully"
-    else
-        msg_ok "No update required. ${APP} is already at ${RELEASE}"
-    fi
+  header_info
+  check_container_storage
+  check_container_resources
+  if [[ ! -d /var/lib/navidrome ]]; then
+    msg_error "No ${APP} Installation Found!"
     exit
+  fi
+
+  if check_for_gh_release "navidrome" "navidrome/navidrome"; then
+    msg_info "Stopping Services"
+    systemctl stop navidrome
+    msg_ok "Services Stopped"
+
+    fetch_and_deploy_gh_release "navidrome" "navidrome/navidrome" "binary"
+
+    msg_info "Starting Services"
+    systemctl start navidrome
+    msg_ok "Started Services"
+    msg_ok "Updated Successfully"
+  fi
+  exit
 }
 
 start

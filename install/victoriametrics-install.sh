@@ -13,15 +13,27 @@ setting_up_container
 network_check
 update_os
 
+msg_info "Getting latest version of VictoriaMetrics"
+victoriametrics_filename=$(curl -fsSL "https://api.github.com/repos/VictoriaMetrics/VictoriaMetrics/releases/latest" |
+  jq -r '.assets[].name' |
+  grep -E '^victoria-metrics-linux-amd64-v[0-9.]+\.tar\.gz$')
+vmutils_filename=$(curl -fsSL "https://api.github.com/repos/VictoriaMetrics/VictoriaMetrics/releases/latest" |
+  jq -r '.assets[].name' |
+  grep -E '^vmutils-linux-amd64-v[0-9.]+\.tar\.gz$')
+msg_ok "Got latest version of VictoriaMetrics"
+
+fetch_and_deploy_gh_release "victoriametrics" "VictoriaMetrics/VictoriaMetrics" "prebuild" "latest" "/opt/victoriametrics" "$victoriametrics_filename"
+fetch_and_deploy_gh_release "vmutils" "VictoriaMetrics/VictoriaMetrics" "prebuild" "latest" "/opt/victoriametrics" "$vmutils_filename"
+
+read -r -p "${TAB3}Would you like to add VictoriaLogs? <y/N> " prompt
+
+if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
+  fetch_and_deploy_gh_release "victorialogs" "VictoriaMetrics/VictoriaLogs" "prebuild" "latest" "/opt/victoriametrics" "victoria-logs-linux-amd64*.tar.gz"
+  fetch_and_deploy_gh_release "vlutils" "VictoriaMetrics/VictoriaLogs" "prebuild" "latest" "/opt/victoriametrics" "vlutils-linux-amd64*.tar.gz"
+fi
+
 msg_info "Setup VictoriaMetrics"
-temp_dir=$(mktemp -d)
-cd $temp_dir
 mkdir -p /opt/victoriametrics/data
-RELEASE=$(curl -fsSL https://api.github.com/repos/VictoriaMetrics/VictoriaMetrics/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-curl -fsSL "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v${RELEASE}/victoria-metrics-linux-amd64-v${RELEASE}.tar.gz" -o "victoria-metrics-linux-amd64-v${RELEASE}.tar.gz"
-curl -fsSL "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v${RELEASE}/vmutils-linux-amd64-v${RELEASE}.tar.gz" -o "vmutils-linux-amd64-v${RELEASE}.tar.gz"
-tar -xf victoria-metrics-linux-amd64-v${RELEASE}.tar.gz -C /opt/victoriametrics
-tar -xf vmutils-linux-amd64-v${RELEASE}.tar.gz -C /opt/victoriametrics
 chmod +x /opt/victoriametrics/*
 msg_ok "Setup VictoriaMetrics"
 
@@ -41,13 +53,30 @@ ExecStart=/opt/victoriametrics/victoria-metrics-prod --storageDataPath="/opt/vic
 WantedBy=multi-user.target
 EOF
 systemctl enable -q --now victoriametrics
+
+if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
+  cat <<EOF >/etc/systemd/system/victoriametrics-logs.service
+[Unit]
+Description=VictoriaMetrics Service
+
+[Service]
+Type=simple
+Restart=always
+User=root
+WorkingDirectory=/opt/victoriametrics
+ExecStart=/opt/victoriametrics/victoria-logs-prod
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl enable -q --now victoriametrics-logs
+fi
 msg_ok "Created Service"
 
 motd_ssh
 customize
 
 msg_info "Cleaning up"
-rm -rf $temp_dir
 $STD apt-get -y autoremove
 $STD apt-get -y autoclean
 msg_ok "Cleaned"

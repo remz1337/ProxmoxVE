@@ -60,10 +60,18 @@ body:
         - Alpine
         - Debian 11
         - Debian 12
-        - Ubuntu 20.04
+        - Debian 13
         - Ubuntu 22.04
         - Ubuntu 24.04
         - Ubuntu 24.10
+    validations:
+      required: true
+
+  - type: input
+    id: pve_version
+    attributes:
+      label: 📈 Which Proxmox version are you on?
+      placeholder: "run pveversion in your PVE node console"
     validations:
       required: true
 

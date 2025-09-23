@@ -27,34 +27,37 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-
-  RELEASE=$(curl -fsSL https://api.github.com/repos/seanmorley15/AdventureLog/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-  if [[ "${RELEASE}" != "$(cat ~/.adventurelog 2>/dev/null)" ]] || [[ ! -f ~/.adventurelog ]]; then
+  if ! command -v memcached >/dev/null 2>&1; then
+    $STD apt-get update
+    $STD apt-get install -y memcached libmemcached-tools
+  fi
+  if check_for_gh_release "adventurelog" "seanmorley15/adventurelog"; then
     msg_info "Stopping Services"
     systemctl stop adventurelog-backend
     systemctl stop adventurelog-frontend
     msg_ok "Services Stopped"
 
+    msg_info "Backup Old Installation"
+    cp -r /opt/adventurelog /opt/adventurelog-backup
+    rm -rf /opt/adventurelog
+    msg_ok "Backup done"
+
     fetch_and_deploy_gh_release "adventurelog" "seanmorley15/adventurelog"
     PYTHON_VERSION="3.12" setup_uv
 
-    msg_info "Updating ${APP} to v${RELEASE}"
-    # Backend Migration
+    msg_info "Updating ${APP}"
     cp /opt/adventurelog-backup/backend/server/.env /opt/adventurelog/backend/server/.env
     cp -r /opt/adventurelog-backup/backend/server/media /opt/adventurelog/backend/server/media
-
     cd /opt/adventurelog/backend/server
     if [[ ! -x .venv/bin/python ]]; then
       $STD uv venv .venv
       $STD .venv/bin/python -m ensurepip --upgrade
     fi
-
     $STD .venv/bin/python -m pip install --upgrade pip
     $STD .venv/bin/python -m pip install -r requirements.txt
     $STD .venv/bin/python -m manage collectstatic --noinput
     $STD .venv/bin/python -m manage migrate
 
-    # Frontend Migration
     cp /opt/adventurelog-backup/frontend/.env /opt/adventurelog/frontend/.env
     cd /opt/adventurelog/frontend
     $STD pnpm i
@@ -68,13 +71,9 @@ function update_script() {
     msg_ok "Services Started"
 
     msg_info "Cleaning Up"
-    rm -rf /opt/v${RELEASE}.zip
     rm -rf /opt/adventurelog-backup
     msg_ok "Cleaned"
-
     msg_ok "Updated Successfully"
-  else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
   fi
   exit
 }

@@ -8,7 +8,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 APP="PeaNUT"
 var_tags="${var_tags:-network;ups;}"
 var_cpu="${var_cpu:-2}"
-var_ram="${var_ram:-3072}"
+var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-7}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-12}"
@@ -27,24 +27,29 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -fsSL https://api.github.com/repos/Brandawg93/PeaNUT/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
-  if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
-    msg_info "Updating $APP to ${RELEASE}"
+
+  NODE_VERSION="22" NODE_MODULE="pnpm" setup_nodejs
+
+  if check_for_gh_release "peanut" "Brandawg93/PeaNUT"; then
+    msg_info "Stopping $APP"
     systemctl stop peanut
-    curl -fsSL "https://api.github.com/repos/Brandawg93/PeaNUT/tarball/${RELEASE}" -o "peanut.tar.gz"
-    tar -xzf peanut.tar.gz -C /opt/peanut --strip-components=1
-    rm peanut.tar.gz
+    msg_ok "Stopped $APP"
+
+    fetch_and_deploy_gh_release "peanut" "Brandawg93/PeaNUT" "tarball" "latest" "/opt/peanut"
+
+    msg_info "Updating $APP"
     cd /opt/peanut
     $STD pnpm i
-    $STD pnpm run build
+    $STD pnpm run build:local
     cp -r .next/static .next/standalone/.next/
     mkdir -p /opt/peanut/.next/standalone/config
     ln -sf /etc/peanut/settings.yml /opt/peanut/.next/standalone/config/settings.yml
+    msg_ok "Updated $APP"
+
+    msg_info "Starting $APP"
     systemctl start peanut
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated $APP to ${RELEASE}"
-  else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
+    msg_ok "Started $APP"
+    msg_ok "Updated Successfully"
   fi
   exit
 }

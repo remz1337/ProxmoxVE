@@ -23,12 +23,12 @@ fetch_and_deploy_gh_release "wizarr" "wizarrrr/wizarr"
 
 msg_info "Configure ${APPLICATION}"
 cd /opt/wizarr
-uv -q sync --locked
-$STD uv -q run pybabel compile -d app/translations
+$STD /usr/local/bin/uv sync --frozen
+$STD /usr/local/bin/uv run --frozen pybabel compile -d app/translations
 $STD npm --prefix app/static install
 $STD npm --prefix app/static run build:css
 mkdir -p ./.cache
-$STD uv -q run flask db upgrade
+$STD /usr/local/bin/uv run --frozen flask db upgrade
 msg_ok "Configure ${APPLICATION}"
 
 msg_info "Creating env, start script and service"
@@ -42,7 +42,7 @@ EOF
 cat <<EOF >/opt/wizarr/start.sh
 #!/usr/bin/env bash
 
-uv run gunicorn \
+uv run --frozen gunicorn \
     --config gunicorn.conf.py \
     --preload \
     --workers 4 \

@@ -15,14 +15,7 @@ update_os
 
 setup_uv
 
-msg_info "Configuring apt and installing dependencies"
-echo "deb http://deb.debian.org/debian testing main contrib" >/etc/apt/sources.list.d/immich.list
-cat <<EOF >/etc/apt/preferences.d/immich
-Package: *
-Pin: release a=testing
-Pin-Priority: -10
-EOF
-
+msg_info "Installing dependencies"
 $STD apt-get update
 $STD apt-get install --no-install-recommends -y \
   git \
@@ -30,8 +23,12 @@ $STD apt-get install --no-install-recommends -y \
   autoconf \
   build-essential \
   python3-dev \
+  automake \
   cmake \
   jq \
+  libtool \
+  libltdl-dev \
+  libgdk-pixbuf-2.0-dev \
   libbrotli-dev \
   libde265-dev \
   libexif-dev \
@@ -39,43 +36,43 @@ $STD apt-get install --no-install-recommends -y \
   libglib2.0-dev \
   libgsf-1-dev \
   libjpeg62-turbo-dev \
-  librsvg2-dev \
   libspng-dev \
+  liblcms2-dev \
+  libopenexr-dev \
+  libgif-dev \
+  librsvg2-dev \
+  libexpat1 \
+  libgcc-s1 \
+  libgomp1 \
+  liblqr-1-0 \
+  libltdl7 \
+  libmimalloc3 \
+  libopenjp2-7 \
   meson \
   ninja-build \
   pkg-config \
-  cpanminus \
-  libde265-0 \
-  libexif12 \
-  libexpat1 \
-  libgcc-s1 \
-  libglib2.0-0 \
-  libgomp1 \
-  libgsf-1-114 \
-  liblcms2-dev \
-  liblqr-1-0 \
-  libltdl7 \
-  libmimalloc2.0 \
-  libopenexr-dev \
-  libgif-dev \
-  libopenjp2-7 \
-  librsvg2-2 \
-  libspng0 \
   mesa-utils \
   mesa-va-drivers \
   mesa-vulkan-drivers \
   ocl-icd-libopencl1 \
   tini \
-  zlib1g
-$STD apt-get install -y \
-  libgdk-pixbuf-2.0-dev librsvg2-dev libtool
+  zlib1g \
+  libio-compress-brotli-perl \
+  libwebp7 \
+  libwebpdemux2 \
+  libwebpmux3 \
+  libhwy1t64 \
+  libdav1d-dev \
+  libhwy-dev \
+  libwebp-dev \
+  libaom-dev
 curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg
 DPKG_ARCHITECTURE="$(dpkg --print-architecture)"
 export DPKG_ARCHITECTURE
 cat <<EOF >/etc/apt/sources.list.d/jellyfin.sources
 Types: deb
 URIs: https://repo.jellyfin.org/debian
-Suites: bookworm
+Suites: trixie
 Components: main
 Architectures: ${DPKG_ARCHITECTURE}
 Signed-By: /etc/apt/keyrings/jellyfin.gpg
@@ -84,12 +81,20 @@ $STD apt-get update
 $STD apt-get install -y jellyfin-ffmpeg7
 ln -s /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/bin/ffmpeg
 ln -s /usr/lib/jellyfin-ffmpeg/ffprobe /usr/bin/ffprobe
+if [[ "$CTTYPE" == "0" ]]; then
+  chgrp video /dev/dri
+  chmod 755 /dev/dri
+  chmod 660 /dev/dri/*
+  $STD adduser "$(id -u -n)" video
+  $STD adduser "$(id -u -n)" render
+fi
 msg_ok "Dependencies Installed"
 
-read -r -p "Install OpenVINO dependencies for Intel HW-accelerated machine-learning? y/N " prompt
+read -r -p "${TAB3}Install OpenVINO dependencies for Intel HW-accelerated machine-learning? y/N " prompt
 if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   msg_info "Installing OpenVINO dependencies"
   touch ~/.openvino
+  $STD apt-get install -y --no-install-recommends patchelf
   tmp_dir=$(mktemp -d)
   $STD pushd "$tmp_dir"
   curl -fsSLO https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.17384.11/intel-igc-core_1.0.17384.11_amd64.deb
@@ -97,24 +102,20 @@ if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   curl -fsSLO https://github.com/intel/compute-runtime/releases/download/24.31.30508.7/intel-opencl-icd_24.31.30508.7_amd64.deb
   curl -fsSLO https://github.com/intel/compute-runtime/releases/download/24.31.30508.7/libigdgmm12_22.4.1_amd64.deb
   $STD apt install -y ./*.deb
+  $STD apt-mark hold libigdgmm12
   $STD popd
   rm -rf "$tmp_dir"
   dpkg -l | grep "intel-opencl-icd" | awk '{print $3}' >~/.intel_version
-  if [[ "$CTTYPE" == "0" ]]; then
-    chgrp video /dev/dri
-    chmod 755 /dev/dri
-    chmod 660 /dev/dri/*
-    $STD adduser "$(id -u -n)" video
-    $STD adduser "$(id -u -n)" render
-  fi
   msg_ok "Installed OpenVINO dependencies"
 fi
 
-NODE_VERSION="22" setup_nodejs
+PNPM_VERSION="$(curl -fsSL "https://raw.githubusercontent.com/immich-app/immich/refs/heads/main/package.json" | jq -r '.packageManager | split("@")[1]')"
+NODE_VERSION="22" NODE_MODULE="pnpm@${PNPM_VERSION}" setup_nodejs
 PG_VERSION="16" PG_MODULES="pgvector" setup_postgresql
 
 msg_info "Setting up Postgresql Database"
-VCHORD_RELEASE="$(curl -fsSL https://api.github.com/repos/tensorchord/vectorchord/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')"
+VCHORD_RELEASE="0.4.3"
+# VCHORD_RELEASE="$(curl -fsSL https://api.github.com/repos/tensorchord/vectorchord/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')"
 curl -fsSL "https://github.com/tensorchord/VectorChord/releases/download/${VCHORD_RELEASE}/postgresql-16-vchord_${VCHORD_RELEASE}-1_amd64.deb" -o vchord.deb
 $STD apt install -y ./vchord.deb
 rm vchord.deb
@@ -136,27 +137,6 @@ $STD sudo -u postgres psql -c "ALTER USER $DB_USER WITH SUPERUSER;"
 } >>~/"$APPLICATION".creds
 msg_ok "Set up Postgresql Database"
 
-msg_info "Installing Packages from Testing Repo"
-export APT_LISTCHANGES_FRONTEND=none
-export DEBIAN_FRONTEND=noninteractive
-$STD apt-get install -t testing --no-install-recommends -y \
-  libio-compress-brotli-perl \
-  libwebp7 \
-  libwebpdemux2 \
-  libwebpmux3 \
-  libhwy1t64 \
-  libdav1d-dev \
-  libhwy-dev \
-  libwebp-dev
-if [[ -f ~/.openvino ]]; then
-  $STD apt-get install -t testing -y patchelf
-fi
-msg_ok "Packages from Testing Repo Installed"
-
-# Fix default DB collation issue after libc update
-$STD sudo -u postgres psql -c "ALTER DATABASE postgres REFRESH COLLATION VERSION;"
-$STD sudo -u postgres psql -c "ALTER DATABASE $DB_NAME REFRESH COLLATION VERSION;"
-
 msg_info "Compiling Custom Photo-processing Library (extreme patience)"
 LD_LIBRARY_PATH=/usr/local/lib
 export LD_RUN_PATH=/usr/local/lib
@@ -167,6 +147,7 @@ SOURCE_DIR=${STAGING_DIR}/image-source
 $STD git clone -b main "$BASE_REPO" "$BASE_DIR"
 mkdir -p "$SOURCE_DIR"
 
+msg_info "(1/5) Compiling libjxl"
 cd "$STAGING_DIR"
 SOURCE=${SOURCE_DIR}/libjxl
 JPEGLI_LIBJPEG_LIBRARY_SOVERSION="62"
@@ -204,7 +185,9 @@ ldconfig /usr/local/lib
 $STD make clean
 cd "$STAGING_DIR"
 rm -rf "$SOURCE"/{build,third_party}
+msg_ok "(1/5) Compiled libjxl"
 
+msg_info "(2/5) Compiling libheif"
 SOURCE=${SOURCE_DIR}/libheif
 : "${LIBHEIF_REVISION:=$(jq -cr '.revision' $BASE_DIR/server/sources/libheif.json)}"
 $STD git clone https://github.com/strukturag/libheif.git "$SOURCE"
@@ -218,7 +201,7 @@ $STD cmake --preset=release-noplugins \
   -DWITH_LIBSHARPYUV=ON \
   -DWITH_LIBDE265=ON \
   -DWITH_AOM_DECODER=OFF \
-  -DWITH_AOM_ENCODER=OFF \
+  -DWITH_AOM_ENCODER=ON \
   -DWITH_X265=OFF \
   -DWITH_EXAMPLES=OFF \
   ..
@@ -227,7 +210,9 @@ ldconfig /usr/local/lib
 $STD make clean
 cd "$STAGING_DIR"
 rm -rf "$SOURCE"/build
+msg_ok "(2/5) Compiled libheif"
 
+msg_info "(3/5) Compiling libraw"
 SOURCE=${SOURCE_DIR}/libraw
 : "${LIBRAW_REVISION:=$(jq -cr '.revision' $BASE_DIR/server/sources/libraw.json)}"
 $STD git clone https://github.com/libraw/libraw.git "$SOURCE"
@@ -240,19 +225,23 @@ $STD make install
 ldconfig /usr/local/lib
 $STD make clean
 cd "$STAGING_DIR"
+msg_ok "(3/5) Compiled libraw"
 
+msg_info "(4/5) Compiling imagemagick"
 SOURCE=$SOURCE_DIR/imagemagick
 : "${IMAGEMAGICK_REVISION:=$(jq -cr '.revision' $BASE_DIR/server/sources/imagemagick.json)}"
 $STD git clone https://github.com/ImageMagick/ImageMagick.git "$SOURCE"
 cd "$SOURCE"
 $STD git reset --hard "$IMAGEMAGICK_REVISION"
-$STD ./configure --with-modules
+$STD ./configure --with-modules CPPFLAGS="-DMAGICK_LIBRAW_VERSION_TAIL=202502"
 $STD make -j"$(nproc)"
 $STD make install
 ldconfig /usr/local/lib
 $STD make clean
 cd "$STAGING_DIR"
+msg_ok "(4/5) Compiled imagemagick"
 
+msg_info "(5/5) Compiling libvips"
 SOURCE=$SOURCE_DIR/libvips
 : "${LIBVIPS_REVISION:=$(jq -cr '.revision' $BASE_DIR/server/sources/libvips.json)}"
 $STD git clone https://github.com/libvips/libvips.git "$SOURCE"
@@ -264,6 +253,7 @@ $STD ninja install
 ldconfig /usr/local/lib
 cd "$STAGING_DIR"
 rm -rf "$SOURCE"/build
+msg_ok "(5/5) Compiled libvips"
 {
   echo "imagemagick: $IMAGEMAGICK_REVISION"
   echo "libheif: $LIBHEIF_REVISION"
@@ -271,7 +261,7 @@ rm -rf "$SOURCE"/build
   echo "libraw: $LIBRAW_REVISION"
   echo "libvips: $LIBVIPS_REVISION"
 } >~/.immich_library_revisions
-msg_ok "Custom Photo-processing Library Compiled"
+msg_ok "Custom Photo-processing Libraries Compiled Successfully"
 
 INSTALL_DIR="/opt/${APPLICATION}"
 UPLOAD_DIR="${INSTALL_DIR}/upload"
@@ -280,40 +270,52 @@ APP_DIR="${INSTALL_DIR}/app"
 ML_DIR="${APP_DIR}/machine-learning"
 GEO_DIR="${INSTALL_DIR}/geodata"
 mkdir -p "$INSTALL_DIR"
-mkdir -p {"${APP_DIR}","${UPLOAD_DIR}","${GEO_DIR}","${ML_DIR}","${INSTALL_DIR}"/cache}
+mkdir -p {"${APP_DIR}","${UPLOAD_DIR}","${GEO_DIR}","${INSTALL_DIR}"/cache}
 
-fetch_and_deploy_gh_release "immich" "immich-app/immich" "tarball" "latest" "$SRC_DIR"
+fetch_and_deploy_gh_release "immich" "immich-app/immich" "tarball" "v1.142.1" "$SRC_DIR"
 
-msg_info "Installing ${APPLICATION} (more patience please)"
+msg_info "Installing ${APPLICATION} (patience)"
 
 cd "$SRC_DIR"/server
-$STD npm install -g node-gyp node-pre-gyp
-$STD npm ci
-$STD npm run build
-$STD npm prune --omit=dev --omit=optional
-cd "$SRC_DIR"/open-api/typescript-sdk
-$STD npm ci
-$STD npm run build
-cd "$SRC_DIR"/web
-$STD npm ci
-$STD npm run build
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+export CI=1
+corepack enable
+
+# server build
+export SHARP_IGNORE_GLOBAL_LIBVIPS=true
+$STD pnpm --filter immich --frozen-lockfile build
+unset SHARP_IGNORE_GLOBAL_LIBVIPS
+export SHARP_FORCE_GLOBAL_LIBVIPS=true
+$STD pnpm --filter immich --frozen-lockfile --prod --no-optional deploy "$APP_DIR"
+cp "$APP_DIR"/package.json "$APP_DIR"/bin
+sed -i 's|^start|./start|' "$APP_DIR"/bin/immich-admin
+
+# openapi & web build
 cd "$SRC_DIR"
-cp -a server/{node_modules,dist,bin,resources,package.json,package-lock.json,start*.sh} "$APP_DIR"/
+echo "packageImportMethod: hardlink" >>./pnpm-workspace.yaml
+$STD pnpm --filter @immich/sdk --filter immich-web --frozen-lockfile --force install
+$STD pnpm --filter @immich/sdk --filter immich-web build
 cp -a web/build "$APP_DIR"/www
 cp LICENSE "$APP_DIR"
-msg_ok "Installed Immich Web Components"
+
+# cli build
+$STD pnpm --filter @immich/sdk --filter @immich/cli --frozen-lockfile install
+$STD pnpm --filter @immich/sdk --filter @immich/cli build
+$STD pnpm --filter @immich/cli --prod --no-optional deploy "$APP_DIR"/cli
+msg_ok "Installed Immich Server and Web Components"
 
 cd "$SRC_DIR"/machine-learning
+$STD useradd -U -s /usr/sbin/nologin -r -M -d "$INSTALL_DIR" immich
+mkdir -p "$ML_DIR" && chown -R immich:immich "$INSTALL_DIR"
 export VIRTUAL_ENV="${ML_DIR}/ml-venv"
-$STD uv venv "$VIRTUAL_ENV"
 if [[ -f ~/.openvino ]]; then
   msg_info "Installing HW-accelerated machine-learning"
-  uv -q sync --extra openvino --no-cache --active
+  $STD sudo --preserve-env=VIRTUAL_ENV -nu immich uv sync --extra openvino --active -n -p python3.11 --managed-python
   patchelf --clear-execstack "${VIRTUAL_ENV}/lib/python3.11/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-311-x86_64-linux-gnu.so"
   msg_ok "Installed HW-accelerated machine-learning"
 else
   msg_info "Installing machine-learning"
-  uv -q sync --extra cpu --no-cache --active
+  $STD sudo --preserve-env=VIRTUAL_ENV -nu immich uv sync --extra cpu --active -n -p python3.11 --managed-python
   msg_ok "Installed machine-learning"
 fi
 cd "$SRC_DIR"
@@ -324,17 +326,11 @@ fi
 ln -sf "$APP_DIR"/resources "$INSTALL_DIR"
 
 cd "$APP_DIR"
-grep -Rl /usr/src | xargs -n1 sed -i "s|\/usr/src|$INSTALL_DIR|g"
-grep -RlE "'/build'" | xargs -n1 sed -i "s|'/build'|'$APP_DIR'|g"
+grep -rl /usr/src | xargs -n1 sed -i "s|\/usr/src|$INSTALL_DIR|g"
+grep -rlE "'/build'" | xargs -n1 sed -i "s|'/build'|'$APP_DIR'|g"
 sed -i "s@\"/cache\"@\"$INSTALL_DIR/cache\"@g" "$ML_DIR"/immich_ml/config.py
 ln -s "$UPLOAD_DIR" "$APP_DIR"/upload
 ln -s "$UPLOAD_DIR" "$ML_DIR"/upload
-
-msg_info "Installing Immich CLI"
-$STD npm install --build-from-source sharp
-rm -rf "$APP_DIR"/node_modules/@img/sharp-{libvips*,linuxmusl-x64}
-$STD npm i -g @immich/cli
-msg_ok "Installed Immich CLI"
 
 msg_info "Installing GeoNames data"
 cd "$GEO_DIR"
@@ -358,11 +354,9 @@ mkdir -p /var/log/immich
 touch /var/log/immich/{web.log,ml.log}
 msg_ok "Installed ${APPLICATION}"
 
-msg_info "Creating user, env file, scripts & services"
-$STD useradd -U -s /usr/sbin/nologin -r -M -d "$INSTALL_DIR" immich
-if [[ -f ~/.openvino ]]; then
-  usermod -aG video,render immich
-fi
+msg_info "Modifying user, creating env file, scripts & services"
+usermod -aG video,render immich
+
 cat <<EOF >"${INSTALL_DIR}"/.env
 TZ=$(cat /etc/timezone)
 IMMICH_VERSION=release
@@ -392,7 +386,16 @@ set +a
 
 python3 -m immich_ml
 EOF
-chmod +x "$ML_DIR"/ml_start.sh
+cat <<EOF >"$APP_DIR"/bin/start.sh
+#!/usr/bin/env bash
+
+set -a
+. ${INSTALL_DIR}/.env
+set +a
+
+/usr/bin/node ${APP_DIR}/dist/main.js "\$@"
+EOF
+chmod +x "$ML_DIR"/ml_start.sh "$APP_DIR"/bin/start.sh
 cat <<EOF >/etc/systemd/system/"${APPLICATION}"-web.service
 [Unit]
 Description=${APPLICATION} Web Service
@@ -440,9 +443,8 @@ WantedBy=multi-user.target
 EOF
 chown -R immich:immich "$INSTALL_DIR" /var/log/immich
 systemctl enable -q --now "$APPLICATION"-ml.service "$APPLICATION"-web.service
-msg_ok "Created user, env file, scripts and services"
+msg_ok "Modified user, created env file, scripts and services"
 
-sed -i "$ a VERSION_ID=12" /etc/os-release # otherwise the motd_ssh function will fail
 motd_ssh
 customize
 

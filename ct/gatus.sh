@@ -28,39 +28,32 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -s https://api.github.com/repos/TwiN/gatus/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-  if [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]] || [[ ! -f /opt/${APP}_version.txt ]]; then
-    msg_info "Updating $APP"
-
+  if check_for_gh_release "gatus" "TwiN/gatus"; then
     msg_info "Stopping $APP"
     systemctl stop gatus
     msg_ok "Stopped $APP"
 
-    msg_info "Updating $APP to v${RELEASE}"
+    if [[ :$PATH: != *":/usr/local/bin:"* ]]; then
+      echo 'export PATH="/usr/local/bin:$PATH"' >>~/.bashrc
+      source ~/.bashrc
+    fi
+
     mv /opt/gatus/config/config.yaml /opt
-    rm -rf /opt/gatus/*
-    temp_file=$(mktemp)
-    curl -fsSL "https://github.com/TwiN/gatus/archive/refs/tags/v${RELEASE}.tar.gz" -o "$temp_file"
-    tar zxf "$temp_file" --strip-components=1 -C /opt/gatus
+    rm -rf /opt/gatus
+    fetch_and_deploy_gh_release "gatus" "TwiN/gatus"
+
+    msg_info "Updating $APP"
     cd /opt/gatus
     $STD go mod tidy
     CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o gatus .
     setcap CAP_NET_RAW+ep gatus
     mv /opt/config.yaml config
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated $APP to v${RELEASE}"
+    msg_ok "Updated $APP"
 
     msg_info "Starting $APP"
     systemctl start gatus
     msg_ok "Started $APP"
-
-    msg_info "Cleaning Up"
-    rm -f "$temp_file"
-    msg_ok "Cleanup Completed"
-
     msg_ok "Update Successful"
-  else
-    msg_ok "No update required. ${APP} is already at v${RELEASE}"
   fi
   exit
 }

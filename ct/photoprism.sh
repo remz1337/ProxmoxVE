@@ -27,19 +27,29 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  msg_info "Stopping PhotoPrism"
-  sudo systemctl stop photoprism
-  msg_ok "Stopped PhotoPrism"
+  if check_for_gh_release "photoprism" "photoprism/photoprism"; then
+    msg_info "Stopping PhotoPrism"
+    systemctl stop photoprism
+    msg_ok "Stopped PhotoPrism"
 
-  msg_info "Updating PhotoPrism"
-  $STD apt-get install -y libvips42
-  curl -fsSL https://dl.photoprism.app/pkg/linux/amd64.tar.gz | tar -xzf - -C /opt/photoprism --strip-components=1
-  msg_ok "Updated PhotoPrism"
+    fetch_and_deploy_gh_release "photoprism" "photoprism/photoprism" "prebuild" "latest" "/opt/photoprism" "*linux-amd64.tar.gz"
 
-  msg_info "Starting PhotoPrism"
-  sudo systemctl start photoprism
-  msg_ok "Started PhotoPrism"
-  msg_ok "Update Successful"
+    LIBHEIF_URL=$(curl -fsSL "https://dl.photoprism.app/dist/libheif/" | grep -oP "libheif-$(lsb_release -cs)-amd64-v[0-9\.]+\.tar\.gz" | sort -V | tail -n 1)
+    if [[ "${LIBHEIF_URL}" != "$(cat ~/.photoprism_libheif 2>/dev/null)" ]] || [[ ! -f ~/.photoprism_libheif ]]; then
+      msg_info "Updating PhotoPrism LibHeif"
+      $STD apt-get install -y libvips42
+      curl -fsSL "https://dl.photoprism.app/dist/libheif/$LIBHEIF_URL" -o /tmp/libheif.tar.gz
+      tar -xzf /tmp/libheif.tar.gz -C /usr/local
+      ldconfig
+      echo "${LIBHEIF_URL}" >~/.photoprism_libheif
+      msg_ok "Updated PhotoPrism LibHeif"
+    fi
+
+    msg_info "Starting PhotoPrism"
+    systemctl start photoprism
+    msg_ok "Started PhotoPrism"
+    msg_ok "Update Successful"
+  fi
   exit
 }
 

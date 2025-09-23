@@ -28,30 +28,17 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-
-  RELEASE=$(curl -fsSL https://api.github.com/repos/oauth2-proxy/oauth2-proxy/releases/latest | jq -r .tag_name | sed 's/^v//')
-  if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
-    msg_info "Stopping ${APP} services"
+  if check_for_gh_release "oauth2-proxy" "oauth2-proxy/oauth2-proxy"; then
+    msg_info "Stopping Service"
     systemctl stop oauth2-proxy
-    msg_ok "Stopped ${APP}"
+    msg_ok "Stopped Service"
 
-    msg_info "Updating $APP to ${RELEASE}"
-    rm -f /opt/oauth2-proxy/oauth2-proxy
-    curl -fsSL "https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v${RELEASE}/oauth2-proxy-v${RELEASE}.linux-amd64.tar.gz" -o /opt/oauth2-proxy.tar.gz
-    tar -xzf /opt/oauth2-proxy.tar.gz
-    mv /opt/oauth2-proxy-v${RELEASE}.linux-amd64/oauth2-proxy /opt/oauth2-proxy
+    fetch_and_deploy_gh_release "oauth2-proxy" "oauth2-proxy/oauth2-proxy" "prebuild" "latest" "/opt/oauth2-proxy" "oauth2-proxy*linux-amd64.tar.gz"
+
+    msg_info "Starting Service"
     systemctl start oauth2-proxy
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated ${APP} to ${RELEASE}"
-
-    msg_info "Cleaning up"
-    rm -f "/opt/oauth2-proxy.tar.gz"
-    rm -rf "/opt/oauth2-proxy-v${RELEASE}.linux-amd64"
-    $STD apt-get -y autoremove
-    $STD apt-get -y autoclean
-    msg_ok "Cleaned"
-  else
-    msg_ok "${APP} is already up to date (${RELEASE})"
+    msg_ok "Started Service"
+    msg_ok "Updated successfully!\n"
   fi
 }
 

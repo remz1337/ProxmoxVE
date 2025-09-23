@@ -27,13 +27,12 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -fsSL https://api.github.com/repos/bitmagnet-io/bitmagnet/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-  if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
+  if check_for_gh_release "bitmagnet" "bitmagnet-io/bitmagnet"; then
     msg_info "Stopping Service"
     systemctl stop bitmagnet-web
     msg_ok "Stopped Service"
 
-    msg_info "Backing up database"
+    msg_info "Backing up data"
     rm -f /tmp/backup.sql
     $STD sudo -u postgres pg_dump \
       --column-inserts \
@@ -56,34 +55,26 @@ function update_script() {
       bitmagnet \
       >/tmp/backup.sql
     mv /tmp/backup.sql /opt/
-    msg_ok "Database backed up"
-
-    msg_info "Updating ${APP} to v${RELEASE}"
     [ -f /opt/bitmagnet/.env ] && cp /opt/bitmagnet/.env /opt/
     [ -f /opt/bitmagnet/config.yml ] && cp /opt/bitmagnet/config.yml /opt/
-    rm -rf /opt/bitmagnet/*
-    temp_file=$(mktemp)
-    curl -fsSL "https://github.com/bitmagnet-io/bitmagnet/archive/refs/tags/v${RELEASE}.tar.gz" -o "$temp_file"
-    tar zxf "$temp_file" --strip-components=1 -C /opt/bitmagnet
+    msg_ok "Data backed up"
+
+    rm -rf /opt/bitmagnet
+    fetch_and_deploy_gh_release "bitmagnet" "bitmagnet-io/bitmagnet"
+
+    msg_info "Updating ${APP}"
     cd /opt/bitmagnet
-    VREL=v$RELEASE
+    VREL=v$(curl -fsSL https://api.github.com/repos/bitmagnet-io/bitmagnet/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
     $STD go build -ldflags "-s -w -X github.com/bitmagnet-io/bitmagnet/internal/version.GitTag=$VREL"
     chmod +x bitmagnet
     [ -f "/opt/.env" ] && cp "/opt/.env" /opt/bitmagnet/
     [ -f "/opt/config.yml" ] && cp "/opt/config.yml" /opt/bitmagnet/
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated $APP to v${RELEASE}"
+    msg_ok "Updated $APP"
 
     msg_info "Starting Service"
     systemctl start bitmagnet-web
     msg_ok "Started Service"
-
-    msg_info "Cleaning up"
-    rm -f "$temp_file"
-    msg_ok "Cleaned"
     msg_ok "Updated Successfully"
-  else
-    msg_ok "No update required. ${APP} is already at v${RELEASE}"
   fi
   exit
 }

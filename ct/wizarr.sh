@@ -29,8 +29,9 @@ function update_script() {
     exit
   fi
 
-  RELEASE=$(curl -fsSL https://api.github.com/repos/wizarrrr/wizarr/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
-  if [[ "${RELEASE}" != "$(cat ~/.wizarr 2>/dev/null)" ]] || [[ ! -f ~/.wizarr ]]; then
+  setup_uv
+
+  if check_for_gh_release "wizarr" "wizarrrr/wizarr"; then
     msg_info "Stopping $APP"
     systemctl stop wizarr
     msg_ok "Stopped $APP"
@@ -38,21 +39,24 @@ function update_script() {
     msg_info "Creating Backup"
     BACKUP_FILE="/opt/wizarr_backup_$(date +%F).tar.gz"
     $STD tar -czf "$BACKUP_FILE" /opt/wizarr/{.env,start.sh} /opt/wizarr/database/ &>/dev/null
+    rm -rf /opt/wizarr/migrations/versions/*
     msg_ok "Backup Created"
 
-    setup_uv
     fetch_and_deploy_gh_release "wizarr" "wizarrrr/wizarr"
 
-    msg_info "Updating $APP to v${RELEASE}"
+    msg_info "Updating $APP"
     cd /opt/wizarr
-    uv -q sync --locked
-    $STD uv -q run pybabel compile -d app/translations
+    $STD /usr/local/bin/uv sync --frozen
+    $STD /usr/local/bin/uv run --frozen pybabel compile -d app/translations
     $STD npm --prefix app/static install
     $STD npm --prefix app/static run build:css
     mkdir -p ./.cache
     $STD tar -xf "$BACKUP_FILE" --directory=/
-    $STD uv -q run flask db upgrade
-    msg_ok "Updated $APP to v${RELEASE}"
+    $STD /usr/local/bin/uv run --frozen flask db upgrade
+    if ! grep -q 'frozen' /opt/wizarr/start.sh; then
+      sed -i 's/run/& --frozen/' /opt/wizarr/start.sh
+    fi
+    msg_ok "Updated $APP"
 
     msg_info "Starting $APP"
     systemctl start wizarr
@@ -60,11 +64,8 @@ function update_script() {
 
     msg_info "Cleaning Up"
     rm -rf "$BACKUP_FILE"
-    rm /tmp/"$RELEASE".zip
     msg_ok "Cleanup Completed"
-    msg_ok "Update Successful"
-  else
-    msg_ok "No update required. ${APP} is already at v${RELEASE}"
+    msg_ok "Updated Successfully"
   fi
   exit
 }

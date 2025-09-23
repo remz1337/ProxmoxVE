@@ -28,42 +28,28 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-
-  RELEASE=$(curl -fsSL https://api.github.com/repos/intri-in/manage-my-damn-life-nextjs/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
-  if [[ "${RELEASE}" != "$(cat /opt/mmdl_version.txt)" ]] || [[ ! -f /opt/mmdl_version.txt ]]; then
-    msg_info "Stopping $APP"
+  if check_for_gh_release "mmdl" "intri-in/manage-my-damn-life-nextjs"; then
+    msg_info "Stopping service"
     systemctl stop mmdl
-    msg_ok "Stopped $APP"
+    msg_ok "Stopped service"
 
     msg_info "Creating Backup"
     cp /opt/mmdl/.env /opt/mmdl.env
     msg_ok "Backup Created"
 
-    msg_info "Updating $APP to v${RELEASE}"
-    curl -fsSLO "https://github.com/intri-in/manage-my-damn-life-nextjs/archive/refs/tags/v${RELEASE}.zip"
-    rm -r /opt/mmdl
-    unzip -q v"$RELEASE".zip
-    mv manage-my-damn-life-nextjs-"$RELEASE"/ /opt/mmdl
-    mv /opt/mmdl.env /opt/mmdl/.env
+    fetch_and_deploy_gh_release "mmdl" "intri-in/manage-my-damn-life-nextjs" "tarball"
+
+    msg_info "Configuring ${APP}"
     cd /opt/mmdl
     $STD npm install
     $STD npm run migrate
     $STD npm run build
-    msg_ok "Updated $APP to v${RELEASE}"
+    msg_ok "Configured ${APP}"
 
-    msg_info "Starting $APP"
+    msg_info "Starting service"
     systemctl start mmdl
-    msg_ok "Started $APP"
-
-    msg_info "Cleaning Up"
-    rm -f ~/v"$RELEASE".zip
-    msg_ok "Cleanup Completed"
-
-    # Last Action
-    echo "$RELEASE" >/opt/mmdl_version.txt
+    msg_ok "Started service"
     msg_ok "Update Successful"
-  else
-    msg_ok "No update required. ${APP} is already at v${RELEASE}"
   fi
   exit
 }

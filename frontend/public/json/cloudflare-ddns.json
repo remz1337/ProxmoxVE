@@ -6,7 +6,7 @@
   ],
   "date_created": "2025-05-22",
   "type": "ct",
-  "updateable": false,
+  "updateable": true,
   "privileged": false,
   "interface_port": null,
   "documentation": "https://github.com/favonia/cloudflare-ddns/blob/main/README.markdown",
@@ -19,8 +19,8 @@
       "type": "default",
       "script": "ct/cloudflare-ddns.sh",
       "resources": {
-        "cpu": 1,
-        "ram": 512,
+        "cpu": 2,
+        "ram": 1024,
         "hdd": 2,
         "os": "Debian",
         "version": "12"

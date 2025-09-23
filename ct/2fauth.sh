@@ -28,9 +28,7 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -fsSL https://api.github.com/repos/Bubka/2FAuth/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
-  if [[ "${RELEASE}" != "$(cat ~/.2fauth 2>/dev/null || cat /opt/2fauth_version.txt 2>/dev/null)" ]]; then
-    msg_info "Updating $APP to ${RELEASE}"
+  if check_for_gh_release "2fauth" "Bubka/2FAuth"; then
     $STD apt-get update
     $STD apt-get -y upgrade
 
@@ -45,10 +43,11 @@ function update_script() {
       $STD apt-get install -y \
         lsb-release \
         gnupg2
-      PHP_VERSION="8.3" PHP_MODULE="common,ctype,fileinfo,fpm,mysql,cli" setup_php
+      PHP_VERSION="8.3" PHP_MODULE="common,ctype,fileinfo,mysql,cli" PHP_FPM="YES" setup_php
       sed -i 's/php8.2/php8.3/g' /etc/nginx/conf.d/2fauth.conf
     fi
     fetch_and_deploy_gh_release "2fauth" "Bubka/2FAuth"
+    setup_composer
     mv "/opt/2fauth-backup/.env" "/opt/2fauth/.env"
     mv "/opt/2fauth-backup/storage" "/opt/2fauth/storage"
     cd "/opt/2fauth" || return
@@ -60,18 +59,13 @@ function update_script() {
     $STD systemctl restart nginx
 
     msg_info "Cleaning Up"
-    rm -rf "v${RELEASE}.zip"
     if dpkg -l | grep -q 'php8.2'; then
       $STD apt-get remove --purge -y php8.2*
     fi
     $STD apt-get -y autoremove
     $STD apt-get -y autoclean
     msg_ok "Cleanup Completed"
-
-    echo "${RELEASE}" >/opt/2fauth_version.txt
-    msg_ok "Updated $APP to ${RELEASE}"
-  else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
+    msg_ok "Updated Successfully"
   fi
   exit
 }

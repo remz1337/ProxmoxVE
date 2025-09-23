@@ -27,19 +27,25 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -fsSL https://github.com/Jackett/Jackett/releases/latest | grep "title>Release" | cut -d " " -f 4)
-  if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
-    msg_info "Updating ${APP}"
-    curl -fsSL "https://github.com/Jackett/Jackett/releases/download/$RELEASE/Jackett.Binaries.LinuxAMDx64.tar.gz" -o $(basename "https://github.com/Jackett/Jackett/releases/download/$RELEASE/Jackett.Binaries.LinuxAMDx64.tar.gz")
+
+  if [ ! -f /opt/.env ]; then
+    sed -i 's|^Environment="DisableRootWarning=true"$|EnvironmentFile="/opt/.env"|' /etc/systemd/system/jackett.service
+    cat <<EOF >/opt/.env
+DisableRootWarning=true
+EOF
+  fi
+  if check_for_gh_release "Jackett" "Jackett/Jackett"; then
+    msg_info "Stopping Service"
     systemctl stop jackett
+    msg_ok "Stopped Service"
+
     rm -rf /opt/Jackett
-    tar -xzf Jackett.Binaries.LinuxAMDx64.tar.gz -C /opt
-    rm -rf Jackett.Binaries.LinuxAMDx64.tar.gz
+    fetch_and_deploy_gh_release "jackett" "Jackett/Jackett" "prebuild" "latest" "/opt/Jackett" "Jackett.Binaries.LinuxAMDx64.tar.gz"
+
+    msg_info "Starting Service"
     systemctl start jackett
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated ${APP} to ${RELEASE}"
-  else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
+    msg_ok "Started Service"
+    msg_ok "Updated Successfully"
   fi
   exit
 }

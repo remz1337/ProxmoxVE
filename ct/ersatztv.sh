@@ -7,7 +7,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 
 APP="ErsatzTV"
 var_tags="${var_tags:-iptv}"
-var_cpu="${var_cpu:-1}"
+var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-5}"
 var_os="${var_os:-debian}"
@@ -26,35 +26,38 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -fsSL https://api.github.com/repos/ErsatzTV/ErsatzTV/releases | grep -oP '"tag_name": "\K[^"]+' | head -n 1)
-  if [[ ! -f /opt/${APP}_version.txt && $(echo "x.x.x" >/opt/${APP}_version.txt) || "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
+  if check_for_gh_release "ersatztv" "ErsatzTV/ErsatzTV"; then
     msg_info "Stopping ErsatzTV"
     systemctl stop ersatzTV
     msg_ok "Stopped ErsatzTV"
 
-    msg_info "Updating ErsatzTV"
-    cp -R /opt/ErsatzTV/ ErsatzTV-backup
-    rm ErsatzTV-backup/ErsatzTV
-    rm -rf /opt/ErsatzTV
-    temp_file=$(mktemp)
-    curl -fsSL "https://github.com/ErsatzTV/ErsatzTV/releases/download/${RELEASE}/ErsatzTV-${RELEASE}-linux-x64.tar.gz" -o "$temp_file"
-    tar -xzf "$temp_file"
-    mv ErsatzTV-${RELEASE}-linux-x64 /opt/ErsatzTV
-    cp -R ErsatzTV-backup/* /opt/ErsatzTV/
-    rm -rf ErsatzTV-backup
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated ErsatzTV"
+    fetch_and_deploy_gh_release "ersatztv" "ErsatzTV/ErsatzTV" "prebuild" "latest" "/opt/ErsatzTV" "*linux-x64.tar.gz"
 
     msg_info "Starting ErsatzTV"
     systemctl start ersatzTV
     msg_ok "Started ErsatzTV"
 
-    msg_info "Cleaning Up"
-    rm -f ${temp_file}
-    msg_ok "Cleaned"
     msg_ok "Updated Successfully"
-  else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
+  fi
+
+  if check_for_gh_release "ersatztv-ffmpeg" "ErsatzTV/ErsatzTV-ffmpeg"; then
+    msg_info "Stopping ErsatzTV"
+    systemctl stop ersatzTV
+    msg_ok "Stopped ErsatzTV"
+
+    fetch_and_deploy_gh_release "ersatztv-ffmpeg" "ErsatzTV/ErsatzTV-ffmpeg" "prebuild" "latest" "/opt/ErsatzTV-ffmpeg" "*-linux64-gpl-7.1.tar.xz"
+
+    msg_info "Set ErsatzTV-ffmpeg links"
+    chmod +x /opt/ErsatzTV-ffmpeg/bin/*
+    ln -sf /opt/ErsatzTV-ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+    ln -sf /opt/ErsatzTV-ffmpeg/bin/ffplay /usr/local/bin/ffplay
+    ln -sf /opt/ErsatzTV-ffmpeg/bin/ffprobe /usr/local/bin/ffprobe
+    msg_ok "ffmpeg links set"
+
+    msg_info "Starting ErsatzTV"
+    systemctl start ersatzTV
+    msg_ok "Started ErsatzTV"
+    msg_ok "Updated Successfully"
   fi
   exit
 }

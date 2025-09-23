@@ -1,5 +1,5 @@
 {
-    "name": "Proxmox Backup Server",
+    "name": "Proxmox Backup Server (PBS)",
     "slug": "proxmox-backup-server",
     "categories": [
         1
@@ -34,6 +34,10 @@
     "notes": [
         {
             "text": "Set a root password if using autologin. This will be the PBS password. `passwd root`",
+            "type": "warning"
+        },
+        {
+            "text": "Advanced Install is only possible with disabled IPV6! Otherwise the installation sometimes stuck.",
             "type": "warning"
         }
     ]

@@ -23,22 +23,22 @@ function update_script() {
   header_info
   check_container_storage
   check_container_resources
+
   if [[ ! -f /etc/systemd/system/flaresolverr.service ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  RELEASE=$(curl -fsSL https://github.com/FlareSolverr/FlareSolverr/releases/latest | grep "title>Release" | cut -d " " -f 4)
-  if [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]] || [[ ! -f /opt/${APP}_version.txt ]]; then
-    msg_info "Updating $APP LXC"
+  if check_for_gh_release "flaresolverr" "FlareSolverr/FlareSolverr" "3.3.5"; then
+    msg_info "Stopping service"
     systemctl stop flaresolverr
-    curl -fsSL "https://github.com/FlareSolverr/FlareSolverr/releases/download/$RELEASE/flaresolverr_linux_x64.tar.gz" -o $(basename "https://github.com/FlareSolverr/FlareSolverr/releases/download/$RELEASE/flaresolverr_linux_x64.tar.gz")
-    tar -xzf flaresolverr_linux_x64.tar.gz -C /opt
-    rm flaresolverr_linux_x64.tar.gz
+    msg_ok "Stopped service"
+
+    rm -rf /opt/flaresolverr
+    fetch_and_deploy_gh_release "flaresolverr" "FlareSolverr/FlareSolverr" "prebuild" "v3.3.25" "/opt/flaresolverr" "flaresolverr_linux_x64.tar.gz"
+
+    msg_info "Starting service"
     systemctl start flaresolverr
-    echo "${RELEASE}" >/opt/${APP}_version.txt
-    msg_ok "Updated $APP LXC"
-  else
-    msg_ok "No update required. ${APP} is already at ${RELEASE}"
+    msg_ok "Started service"
   fi
   exit
 }

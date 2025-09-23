@@ -269,9 +269,11 @@ config_file() {
     if [ "$NET" == "dhcp" ]; then
       echo -e "${NETWORK}${BOLD}${DGN}IP Address: ${BGN}DHCP${CL}"
       echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}Default${CL}"
+      GATE=""
     elif [[ "$NET" =~ $ip_cidr_regex ]]; then
       echo -e "${NETWORK}${BOLD}${DGN}IP Address: ${BGN}$NET${CL}"
-      if [ ! -z "$GATE" ]; then
+      if [[ -n "$GATE" ]]; then
+        [[ "$GATE" =~ ",gw=" ]] && GATE="${GATE##,gw=}"
         if [[ "$GATE" =~ $ip_regex ]]; then
           echo -e "${GATEWAY}${BOLD}${DGN}Gateway IP Address: ${BGN}$GATE${CL}"
           GATE=",gw=$GATE"
@@ -424,19 +426,6 @@ config_file() {
     fi
   fi
 
-  if [[ "${DISABLEIP6-}" == "yes" ]]; then
-    echo -e "${DISABLEIPV6}${BOLD}${DGN}Disable IPv6: ${BGN}Yes${CL}"
-  elif [[ "${DISABLEIP6-}" == "no" ]]; then
-    echo -e "${DISABLEIPV6}${BOLD}${DGN}Disable IPv6: ${BGN}No${CL}"
-  else
-    if (whiptail --backtitle "Proxmox VE Helper Scripts" --defaultno --title "IPv6" --yesno "Disable IPv6?" 10 58); then
-      DISABLEIP6="yes"
-    else
-      DISABLEIP6="no"
-    fi
-    echo -e "${DISABLEIPV6}${BOLD}${DGN}Disable IPv6: ${BGN}$DISABLEIP6${CL}"
-  fi
-
   if [[ -n "${MTU-}" ]]; then
     if [[ "$MTU" =~ ^-?[0-9]+$ ]]; then
       echo -e "${DEFAULT}${BOLD}${DGN}Interface MTU Size: ${BGN}$MTU${CL}"
@@ -459,13 +448,32 @@ config_file() {
     fi
   fi
 
+  if [[ "$IPV6_METHOD" == "static" ]]; then
+    if [[ -n "$IPV6STATIC" ]]; then
+      IP6=",ip6=${IPV6STATIC}"
+      echo -e "${NETWORK}${BOLD}${DGN}IPv6 Address: ${BGN}${IPV6STATIC}${CL}"
+    else
+      msg_error "IPV6_METHOD is set to static but IPV6STATIC is empty"
+      exit
+    fi
+  elif [[ "$IPV6_METHOD" == "auto" ]]; then
+    IP6=",ip6=auto"
+    echo -e "${NETWORK}${BOLD}${DGN}IPv6 Address: ${BGN}auto${CL}"
+  else
+    IP6=""
+    echo -e "${NETWORK}${BOLD}${DGN}IPv6 Address: ${BGN}none${CL}"
+  fi
+
   if [[ -n "${SD-}" ]]; then
     if [[ "$SD" == "none" ]]; then
       SD=""
       echo -e "${SEARCH}${BOLD}${DGN}DNS Search Domain: ${BGN}Host${CL}"
     else
-      echo -e "${SEARCH}${BOLD}${DGN}DNS Search Domain: ${BGN}$SD${CL}"
-      SD="-searchdomain=$SD"
+      # Strip prefix if present for config file storage
+      local SD_VALUE="$SD"
+      [[ "$SD" =~ ^-searchdomain= ]] && SD_VALUE="${SD#-searchdomain=}"
+      echo -e "${SEARCH}${BOLD}${DGN}DNS Search Domain: ${BGN}$SD_VALUE${CL}"
+      SD="-searchdomain=$SD_VALUE"
     fi
   else
     if SD=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Set a DNS Search Domain (leave blank for HOST)" 8 58 --title "DNS Search Domain" 3>&1 1>&2 2>&3); then
@@ -487,11 +495,14 @@ config_file() {
       NS=""
       echo -e "${NETWORK}${BOLD}${DGN}DNS Server IP Address: ${BGN}Host${CL}"
     else
-      if [[ "$NS" =~ $ip_regex ]]; then
-        echo -e "${NETWORK}${BOLD}${DGN}DNS Server IP Address: ${BGN}$NS${CL}"
-        NS="-nameserver=$NS"
+      # Strip prefix if present for config file storage
+      local NS_VALUE="$NS"
+      [[ "$NS" =~ ^-nameserver= ]] && NS_VALUE="${NS#-nameserver=}"
+      if [[ "$NS_VALUE" =~ $ip_regex ]]; then
+        echo -e "${NETWORK}${BOLD}${DGN}DNS Server IP Address: ${BGN}$NS_VALUE${CL}"
+        NS="-nameserver=$NS_VALUE"
       else
-        msg_error "Invalid IP Address format for DNS Server. Needs to be 0.0.0.0, was ${NS}"
+        msg_error "Invalid IP Address format for DNS Server. Needs to be 0.0.0.0, was ${NS_VALUE}"
         exit
       fi
     fi
@@ -514,11 +525,14 @@ config_file() {
       MAC=""
       echo -e "${MACADDRESS}${BOLD}${DGN}MAC Address: ${BGN}Host${CL}"
     else
-      if [[ "$MAC" =~ ^([A-Fa-f0-9]{2}:){5}[A-Fa-f0-9]{2}$ ]]; then
-        echo -e "${MACADDRESS}${BOLD}${DGN}MAC Address: ${BGN}$MAC${CL}"
-        MAC=",hwaddr=$MAC"
+      # Strip prefix if present for config file storage
+      local MAC_VALUE="$MAC"
+      [[ "$MAC" =~ ^,hwaddr= ]] && MAC_VALUE="${MAC#,hwaddr=}"
+      if [[ "$MAC_VALUE" =~ ^([A-Fa-f0-9]{2}:){5}[A-Fa-f0-9]{2}$ ]]; then
+        echo -e "${MACADDRESS}${BOLD}${DGN}MAC Address: ${BGN}$MAC_VALUE${CL}"
+        MAC=",hwaddr=$MAC_VALUE"
       else
-        msg_error "MAC Address must be in the format xx:xx:xx:xx:xx:xx, was ${MAC}"
+        msg_error "MAC Address must be in the format xx:xx:xx:xx:xx:xx, was ${MAC_VALUE}"
         exit
       fi
     fi
@@ -541,11 +555,14 @@ config_file() {
       VLAN=""
       echo -e "${VLANTAG}${BOLD}${DGN}Vlan: ${BGN}Host${CL}"
     else
-      if [[ "$VLAN" =~ ^-?[0-9]+$ ]]; then
-        echo -e "${VLANTAG}${BOLD}${DGN}Vlan: ${BGN}$VLAN${CL}"
-        VLAN=",tag=$VLAN"
+      # Strip prefix if present for config file storage
+      local VLAN_VALUE="$VLAN"
+      [[ "$VLAN" =~ ^,tag= ]] && VLAN_VALUE="${VLAN#,tag=}"
+      if [[ "$VLAN_VALUE" =~ ^-?[0-9]+$ ]]; then
+        echo -e "${VLANTAG}${BOLD}${DGN}Vlan: ${BGN}$VLAN_VALUE${CL}"
+        VLAN=",tag=$VLAN_VALUE"
       else
-        msg_error "VLAN must be an integer, was ${VLAN}"
+        msg_error "VLAN must be an integer, was ${VLAN_VALUE}"
         exit
       fi
     fi
@@ -633,6 +650,24 @@ config_file() {
       ENABLE_FUSE="no"
     fi
     echo -e "${FUSE}${BOLD}${DGN}Enable FUSE: ${BGN}$ENABLE_FUSE${CL}"
+  fi
+
+  if [[ -n "$ENABLE_TUN" ]]; then
+    if [[ "$ENABLE_TUN" == "yes" ]]; then
+      echo -e "${FUSE}${BOLD}${DGN}Enable TUN: ${BGN}Yes${CL}"
+    elif [[ "$ENABLE_TUN" == "no" ]]; then
+      echo -e "${FUSE}${BOLD}${DGN}Enable TUN: ${BGN}No${CL}"
+    else
+      msg_error "Enable TUN needs to be 'yes' or 'no', was ${ENABLE_TUN}"
+      exit
+    fi
+  else
+    if (whiptail --backtitle "Proxmox VE Helper Scripts" --defaultno --title "TUN" --yesno "Enable TUN?" 10 58); then
+      ENABLE_TUN="yes"
+    else
+      ENABLE_TUN="no"
+    fi
+    echo -e "${FUSE}${BOLD}${DGN}Enable TUN: ${BGN}$ENABLE_TUN${CL}"
   fi
 
   if [[ -n "${VERBOSE-}" ]]; then

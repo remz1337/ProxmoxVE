@@ -39,8 +39,7 @@ msg_ok "Installed Docker"
 
 echo "${TAB3}Choose the database for Komodo installation:"
 echo "${TAB3}1) MongoDB (recommended)"
-echo "${TAB3}2) SQLite"
-echo "${TAB3}3) PostgreSQL"
+echo "${TAB3}2) FerretDB"
 read -rp "${TAB3}Enter your choice (default: 1): " DB_CHOICE
 DB_CHOICE=${DB_CHOICE:-1}
 
@@ -49,10 +48,7 @@ case $DB_CHOICE in
   DB_COMPOSE_FILE="mongo.compose.yaml"
   ;;
 2)
-  DB_COMPOSE_FILE="sqlite.compose.yaml"
-  ;;
-3)
-  DB_COMPOSE_FILE="postgres.compose.yaml"
+  DB_COMPOSE_FILE="ferretdb.compose.yaml"
   ;;
 *)
   echo "Invalid choice. Defaulting to MongoDB."
@@ -66,15 +62,23 @@ curl -fsSL "https://raw.githubusercontent.com/moghtech/komodo/main/compose/$DB_C
 msg_info "Setup Komodo Environment"
 curl -fsSL "https://raw.githubusercontent.com/moghtech/komodo/main/compose/compose.env" -o "/opt/komodo/compose.env"
 DB_PASSWORD=$(openssl rand -base64 16 | tr -d '/+=')
+ADMIN_PASSWORD=$(openssl rand -base64 8 | tr -d '/+=')
 PASSKEY=$(openssl rand -base64 24 | tr -d '/+=')
 WEBHOOK_SECRET=$(openssl rand -base64 24 | tr -d '/+=')
 JWT_SECRET=$(openssl rand -base64 24 | tr -d '/+=')
 
 sed -i "s/^KOMODO_DB_USERNAME=.*/KOMODO_DB_USERNAME=komodo_admin/" /opt/komodo/compose.env
 sed -i "s/^KOMODO_DB_PASSWORD=.*/KOMODO_DB_PASSWORD=${DB_PASSWORD}/" /opt/komodo/compose.env
+sed -i "s/^KOMODO_INIT_ADMIN_PASSWORD=changeme/KOMODO_INIT_ADMIN_PASSWORD=${ADMIN_PASSWORD}/" /opt/komodo/compose.env
 sed -i "s/^KOMODO_PASSKEY=.*/KOMODO_PASSKEY=${PASSKEY}/" /opt/komodo/compose.env
 sed -i "s/^KOMODO_WEBHOOK_SECRET=.*/KOMODO_WEBHOOK_SECRET=${WEBHOOK_SECRET}/" /opt/komodo/compose.env
 sed -i "s/^KOMODO_JWT_SECRET=.*/KOMODO_JWT_SECRET=${JWT_SECRET}/" /opt/komodo/compose.env
+{
+  echo "Komodo Credentials"
+  echo ""
+  echo "Admin User    : admin"
+  echo "Admin Password: $ADMIN_PASSWORD"
+} >>~/komodo.creds
 msg_ok "Setup Komodo Environment"
 
 msg_info "Initialize Komodo"

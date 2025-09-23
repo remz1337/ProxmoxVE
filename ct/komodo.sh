@@ -36,6 +36,15 @@ function update_script() {
     exit 1
   fi
   COMPOSE_BASENAME=$(basename "$COMPOSE_FILE")
+
+  if [[ "$COMPOSE_BASENAME" == "sqlite.compose.yaml" || "$COMPOSE_BASENAME" == "postgres.compose.yaml" ]]; then
+    msg_error "❌ Detected outdated Komodo setup using SQLite or PostgreSQL (FerretDB v1)."
+    echo -e "${YW}This configuration is no longer supported since Komodo v1.18.0.${CL}"
+    echo -e "${YW}Please follow the migration guide:${CL}"
+    echo -e "${BGN}https://github.com/community-scripts/ProxmoxVE/discussions/5689${CL}\n"
+    exit 1
+  fi
+
   BACKUP_FILE="/opt/komodo/${COMPOSE_BASENAME}.bak_$(date +%Y%m%d_%H%M%S)"
   cp "$COMPOSE_FILE" "$BACKUP_FILE" || {
     msg_error "Failed to create backup of ${COMPOSE_BASENAME}!"
@@ -47,6 +56,10 @@ function update_script() {
     mv "$BACKUP_FILE" "$COMPOSE_FILE"
     exit 1
   fi
+  if ! grep -qxF 'COMPOSE_KOMODO_BACKUPS_PATH=/etc/komodo/backups' /opt/komodo/compose.env; then
+    sed -i '/^COMPOSE_KOMODO_IMAGE_TAG=latest$/a COMPOSE_KOMODO_BACKUPS_PATH=/etc/komodo/backups' /opt/komodo/compose.env
+  fi
+  $STD docker compose -p komodo -f "$COMPOSE_FILE" --env-file /opt/komodo/compose.env pull
   $STD docker compose -p komodo -f "$COMPOSE_FILE" --env-file /opt/komodo/compose.env up -d
   msg_ok "Updated ${APP}"
   exit

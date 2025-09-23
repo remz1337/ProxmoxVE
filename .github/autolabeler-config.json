@@ -4,6 +4,7 @@
       "fileStatus": "added",
       "includeGlobs": [
         "ct/**",
+        "tools/**",
         "install/**",
         "misc/**",
         "turnkey/**",
@@ -17,16 +18,13 @@
       "fileStatus": "modified",
       "includeGlobs": [
         "ct/**",
+        "tools/**",
         "install/**",
         "misc/**",
         "turnkey/**",
         "vm/**"
       ],
-      "excludeGlobs": [
-        "misc/build.func",
-        "misc/install.func",
-        "misc/api.func"
-      ]
+      "excludeGlobs": []
     }
   ],
   "delete script": [
@@ -34,6 +32,7 @@
       "fileStatus": "removed",
       "includeGlobs": [
         "ct/**",
+        "tools/**",
         "install/**",
         "misc/**",
         "turnkey/**",
@@ -46,11 +45,7 @@
     {
       "fileStatus": null,
       "includeGlobs": [
-        "*.md",
-        ".github/**",
-        "misc/*.func",
-        "misc/create_lxc.sh",
-        "api/**"
+        "*.md"
       ],
       "excludeGlobs": []
     }
@@ -62,7 +57,9 @@
         "misc/*.func",
         "misc/create_lxc.sh"
       ],
-      "excludeGlobs": []
+      "excludeGlobs": [
+        "misc/api.func"
+      ]
     }
   ],
   "website": [
@@ -71,7 +68,9 @@
       "includeGlobs": [
         "frontend/**"
       ],
-      "excludeGlobs": []
+      "excludeGlobs": [
+        "frontend/public/json/**"
+      ]
     }
   ],
   "api": [
@@ -102,22 +101,29 @@
       "excludeGlobs": []
     }
   ],
-  "high risk": [
+  "addon": [
     {
       "fileStatus": null,
       "includeGlobs": [
-        "misc/build.func",
-        "misc/install.func",
-        "misc/create_lxc.sh"
+        "tools/addon/**"
       ],
       "excludeGlobs": []
     }
   ],
-  "documentation": [
+  "pve-tool": [
     {
       "fileStatus": null,
       "includeGlobs": [
-        "*.md"
+        "tools/pve/**"
+      ],
+      "excludeGlobs": []
+    }
+  ],
+  "vm": [
+    {
+      "fileStatus": null,
+      "includeGlobs": [
+        "vm/**"
       ],
       "excludeGlobs": []
     }

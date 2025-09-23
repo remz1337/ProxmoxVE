@@ -31,34 +31,7 @@ else
 fi
 msg_ok "Set Up Hardware Acceleration"
 
-msg_info "Setting up environment"
-cd ~ && echo "export PATH=$PATH:/usr/local/bin" >> .bashrc
-source .bashrc
-export TARGETARCH="amd64"
-export CCACHE_DIR=/root/.ccache
-export CCACHE_MAXSIZE=2G
-# http://stackoverflow.com/questions/48162574/ddg#49462622
-export APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=DontWarn
-# https://askubuntu.com/questions/972516/debian-frontend-environment-variable
-export DEBIAN_FRONTEND=noninteractive
-# Globally set pip break-system-packages option to avoid having to specify it every time
-export PIP_BREAK_SYSTEM_PACKAGES=1
-# https://github.com/NVIDIA/nvidia-docker/wiki/Installation-(Native-GPU-Support)
-export NVIDIA_VISIBLE_DEVICES=all
-export NVIDIA_DRIVER_CAPABILITIES="compute,video,utility"
-# Disable tokenizer parallelism warning
-# https://stackoverflow.com/questions/62691279/how-to-disable-tokenizers-parallelism-true-false-warning/72926996#729>
-export TOKENIZERS_PARALLELISM=true
-# https://github.com/huggingface/transformers/issues/27214
-export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
-# Set OpenCV ffmpeg loglevel to fatal: https://ffmpeg.org/doxygen/trunk/log_8h.html
-export OPENCV_FFMPEG_LOGLEVEL=8
-# Set HailoRT to disable logging
-export HAILORT_LOGGER_PATH=NONE
-msg_ok "Setup environment"
-
-msg_info "Downloading Frigate source"
-#fetch_and_deploy_gh_release "frigate" "blakeblackshear/frigate" "tarball" "latest" "/opt/frigate"
+msg_info "Installing Frigate v0.14.1 (Perseverance)"
 cd ~
 RELEASE=$(curl -s https://api.github.com/repos/blakeblackshear/frigate/releases/latest | jq -r '.tag_name')
 mkdir -p /opt/frigate/models

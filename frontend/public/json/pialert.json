@@ -6,10 +6,10 @@
   ],
   "date_created": "2024-05-02",
   "type": "ct",
-  "updateable": false,
+  "updateable": true,
   "privileged": false,
   "interface_port": null,
-  "documentation": null,
+  "documentation": "https://github.com/leiweibau/Pi.Alert/blob/main/README.md",
   "website": "https://github.com/leiweibau/Pi.Alert/",
   "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons/webp/pi-alert.webp",
   "config_path": "/opt/pialert/config/pialert.conf",
@@ -31,10 +31,5 @@
     "username": null,
     "password": null
   },
-  "notes": [
-    {
-      "text": "WARNING: Installation sources scripts outside of Community Scripts repo. Please check the source before installing.",
-      "type": "warning"
-    }
-  ]
+  "notes": []
 }

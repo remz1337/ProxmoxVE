@@ -20,18 +20,26 @@ color
 catch_errors
 
 function update_script() {
-    header_info
-    check_container_storage
-    check_container_resources
-    if [[ ! -d /opt/owncast ]]; then
-        msg_error "No ${APP} Installation Found!"
-        exit
-    fi
-    msg_info "Updating $APP LXC"
-    $STD apt-get update
-    $STD apt-get -y upgrade
-    msg_ok "Updated $APP LXC"
+  header_info
+  check_container_storage
+  check_container_resources
+  if [[ ! -d /opt/owncast ]]; then
+    msg_error "No ${APP} Installation Found!"
     exit
+  fi
+  if check_for_gh_release "owncast" "owncast/owncast"; then
+    msg_info "Stopping Service"
+    systemctl stop owncast
+    msg_ok "Stopped Service"
+
+    fetch_and_deploy_gh_release "owncast" "owncast/owncast" "prebuild" "latest" "/opt/owncast" "owncast*linux-64bit.zip"
+
+    msg_info "Starting Service"
+    systemctl start owncast
+    msg_ok "Started Service"
+    msg_ok "Updated Successfully"
+  fi
+  exit
 }
 
 start

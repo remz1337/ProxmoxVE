@@ -8,7 +8,7 @@ on:
 jobs:
   update-changelog-pull-request:
     if: github.repository == 'community-scripts/ProxmoxVE'
-    runs-on: runner-cluster-htl-set
+    runs-on: ubuntu-latest
     env:
       CONFIG_PATH: .github/changelog-pr-config.json
       BRANCH_NAME: github-action-update-changelog
@@ -80,7 +80,7 @@ jobs:
                     { title: "💥 Breaking Changes", labels: ["breaking change"], notes: [] },
                     { title: "📡 API", labels: ["api"], notes: [] },
                     { title: "Github", labels: ["github"], notes: [] },
-                    { title: "📝 Documentation", labels: ["documentation"], notes: [] },
+                    { title: "📝 Documentation", labels: ["maintenance"], notes: [] },
                     { title: "🔧 Refactor", labels: ["refactor"], notes: [] }
                   ] :
                   obj.labels.includes("website") ? [
