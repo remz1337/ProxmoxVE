@@ -17,7 +17,6 @@ var_unprivileged="1"
 
 # App Output & Base Settings
 header_info "$APP"
-base_settings
 
 # Core
 variables

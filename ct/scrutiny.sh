@@ -18,7 +18,6 @@ var_postfix_sat="yes"
 
 # App Output & Base Settings
 header_info "$APP"
-base_settings
 
 # Core
 variables
