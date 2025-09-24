@@ -318,14 +318,12 @@ if [ $nvidia_installed == 1 ]; then
   echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}" >> ~/.bashrc
   source ~/.bashrc
   ldconfig
-  $STD pip3 uninstall -y onnxruntime onnxruntime-openvino
-  $STD pip3 install onnxruntime-gpu
+  $STD pip3 uninstall -y onnxruntime onnxruntime-openvino tensorflow-cpu
+  $STD pip3 install onnxruntime-gpu onnx
   msg_ok "Installed Nvidia Dependencies"
 
   msg_info "Installing TensorRT Object Detection Model (Patience)"
-  $STD pip3 uninstall -y onnxruntime-openvino tensorflow-cpu
-  $STD pip3 install tensorrt
-  $STD pip3 install cuda-core[cu${NVD_MAJOR_CUDA}]
+  $STD pip3 install tensorrt cuda-core[cu${NVD_MAJOR_CUDA}]
   TRT_VER=$(pip freeze | grep -e "^tensorrt==" | sed "s|tensorrt==||g")
   TRT_VER=$(cut -d. -f1-3 <<<${TRT_VER})
   TRT_MAJOR=${TRT_VER%%.*}
