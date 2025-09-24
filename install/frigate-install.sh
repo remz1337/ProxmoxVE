@@ -33,7 +33,7 @@ msg_ok "Set Up Hardware Acceleration"
 
 msg_info "Setting up environment"
 #cd ~ && echo "export PATH=$PATH:/usr/local/bin" >> .bashrc
-source .bashrc
+#source .bashrc
 export TARGETARCH="amd64"
 export CCACHE_DIR=/root/.ccache
 export CCACHE_MAXSIZE=2G
