@@ -14,7 +14,7 @@ network_check
 update_os
 
 msg_info "Installing Dependencies (Patience)"
-#$STD apt-get install -y XX
+$STD apt-get install -y git build-essential python3-dev
 msg_ok "Installed Dependencies"
 
 msg_info "Setting Up Hardware Acceleration"
@@ -35,7 +35,18 @@ $STD python3 get-pip.py "pip"
 msg_ok "Installed Pip"
 
 msg_info "Installing vLLM"
-$STD pip3 install vllm
+$STD pip3 install flashinfer-python uv
+#$STD pip3 install vllm
+uv venv --python 3.12 --seed
+source .venv/bin/activate
+uv pip3 install vllm --torch-backend=auto
+
+#https://huggingface.co/docs/hub/security-tokens
+#HF_TOKEN=abc123
+#git config --global credential.helper store
+#hf auth login --add-to-git-credential --token $HF_TOKEN
+
+#vllm serve "Qwen/Qwen3-0.6B" --max_model_len 4096 --max_num_seqs 64
 msg_ok "Installed vLLM"
 
 motd_ssh
