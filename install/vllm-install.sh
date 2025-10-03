@@ -37,9 +37,9 @@ msg_ok "Installed Pip"
 msg_info "Installing vLLM"
 $STD pip3 install flashinfer-python uv
 #$STD pip3 install vllm
-uv venv --python 3.12 --seed
-source .venv/bin/activate
-uv pip3 install vllm --torch-backend=auto
+$STD uv venv --python 3.12 --seed
+$STD source .venv/bin/activate
+$STD uv pip install vllm --torch-backend=auto
 
 #https://huggingface.co/docs/hub/security-tokens
 #HF_TOKEN=abc123
