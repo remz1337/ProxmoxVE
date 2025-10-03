@@ -96,19 +96,6 @@ select_nvidia_gpu() {
 
   done <<< $(ls -al /proc/driver/nvidia/gpus | grep "0000:")
 
-#       while IFS= read -r line; do
-#         ID=$(echo ${line} | cut -d ' ' -f 1 | cut -d '.' -f 1)
-#         NAME=${line%%]*}
-#         NAME=${NAME#*[}
-#         OFFSET=2
-#
-#         if [[ $((${#NAME} + $OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
-#               MSG_MAX_LENGTH=$((${#NAME} + $OFFSET))
-#         fi
-#         MENU+=("$ID" "$NAME" "OFF")
-#
-#       done <<< $(lspci -v | grep "VGA controller")
-
   if [ ${#MENU[@]} -eq 0 ]; then
     echo "No Nvidia GPU found."
     exit-script
@@ -120,12 +107,18 @@ select_nvidia_gpu() {
   else
     GPU=""
     while [ -z "${GPU:+x}" ]; do
-      GPU=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Graphics Cards" --radiolist \
-      "Which GPU would you like to use?\nTo make a selection, use the Spacebar.\n" \
+      GPU=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Graphics Cards" --checklist \
+      "Which GPU(s) would you like to use?\nTo make a selection, use the Spacebar.\n" \
       16 $(($MSG_MAX_LENGTH + 23)) 6 \
       "${MENU[@]}" 3>&1 1>&2 2>&3) || exit "Menu aborted."
     done
-    printf "$GPU"
+    #printf "$GPU"
+
+    if [ ! -z "$GPU" ]; then
+      for selected_gpu in $GPU; do
+		gpu_lxc_passthrough $selected_gpu
+      done
+    fi
   fi
 }
 
