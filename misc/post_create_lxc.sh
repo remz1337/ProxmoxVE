@@ -42,6 +42,12 @@ sleep 2
 reboot_lxc
 default_setup
 
+#Adding /usr/local/bin to PATH on Debian 12
+if [ "$PCT_OSTYPE" == "debian" ] && [ "$PCT_OSVERSION" == "12" ]; then
+  pct exec $CTID -- /bin/bash -c 'cd ~ && echo "export PATH=$PATH:/usr/local/bin" >> ~/.bashrc'
+  pct exec $CTID -- /bin/bash -c 'source ~/.bashrc'
+fi
+
 #Install APT proxy client
 msg_info "Installing APT proxy client"
 if [ "$PCT_OSTYPE" == "debian" ] && [ "$PCT_OSVERSION" == "12" ]; then
