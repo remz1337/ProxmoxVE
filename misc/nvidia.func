@@ -113,10 +113,11 @@ select_nvidia_gpu() {
       "${MENU[@]}" 3>&1 1>&2 2>&3) || exit "Menu aborted."
     done
     #printf "$GPU"
+    GPU=$(echo "$GPU" | tr -d '"')
 
     if [ ! -z "$GPU" ]; then
       for selected_gpu in $GPU; do
-		gpu_lxc_passthrough $selected_gpu
+        gpu_lxc_passthrough $selected_gpu
       done
     fi
   fi
