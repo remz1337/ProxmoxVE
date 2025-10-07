@@ -35,6 +35,8 @@ $STD python3 get-pip.py "pip"
 msg_ok "Installed Pip"
 
 msg_info "Installing vLLM"
+echo "export CUDA_DEVICE_ORDER=PCI_BUS_ID" >> ~/.bashrc
+source ~/.bashrc
 $STD pip3 install flashinfer-python uv
 #$STD pip3 install vllm
 $STD uv venv --python 3.12 --seed
