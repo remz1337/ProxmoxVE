@@ -13,9 +13,10 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing uv"
+msg_info "Installing dependencies"
+$STD apt install -y git
 PYTHON_VERSION="3.13" setup_uv
-msg_ok "Installed uv"
+msg_ok "Installed dependencies"
 
 msg_info "Installing Arxiv-MCP"
 cd /opt
