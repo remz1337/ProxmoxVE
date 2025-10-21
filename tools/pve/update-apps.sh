@@ -64,7 +64,7 @@ END {
 }
 
 header_info
-whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Container Update" --yesno "This will update LXC containers. Proceed?" 10 58 || exit
+whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Service Update" --yesno "This will update LXC services. Proceed?" 10 58 || exit
 
 msg_info "Loading all possible LXC containers from Proxmox VE. This may take a few seconds..."
 NODE=$(hostname)
@@ -72,7 +72,7 @@ containers=$(pct list | tail -n +2 | awk '{print $0 " " $4}')
 
 if [ -z "$containers" ]; then
   msg_ok "No LXC containers available."
-  whiptail --title "LXC Container Update" --msgbox "No LXC containers available!" 10 60
+  whiptail --title "LXC Service Update" --msgbox "No LXC containers available!" 10 60
   exit 1
 fi
 
@@ -91,24 +91,24 @@ while read -r container; do
 done <<<"$containers"
 msg_ok "Loaded ${#menu_items[@]} containers"
 
-CHOICE=$(whiptail --title "LXC Container Update" \
-  --checklist "Select LXC containers to update:" 25 60 13 \
+CHOICE=$(whiptail --title "LXC Service Update" \
+  --checklist "Select LXC services to update:" 25 60 13 \
   "${menu_items[@]}" 3>&2 2>&1 1>&3 | tr -d '"')
 
 if [ -z "$CHOICE" ]; then
-  whiptail --title "LXC Container Update" \
+  whiptail --title "LXC Service Update" \
     --msgbox "No containers selected!" 10 60
   exit 1
 fi
 
 header_info
 BACKUP_CHOICE="no"
-if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Container Update" --yesno "Do you want to backup your containers before update?" 10 58); then
+if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Service Update" --yesno "Do you want to backup your containers before update?" 10 58); then
   BACKUP_CHOICE="yes"
 fi
 
 UNATTENDED_UPDATE="no"
-if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Container Update" --yesno "Run updates unattended?" 10 58); then
+if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Service Update" --yesno "Run updates unattended?" 10 58); then
   UNATTENDED_UPDATE="yes"
 fi
 
@@ -243,7 +243,7 @@ for container in $CHOICE; do
   fi
 
   if [ $exit_code -eq 0 ]; then
-    msg_ok "Updated container $container"
+    msg_ok "Updated service in container $container"
   elif [ "$BACKUP_CHOICE" == "yes" ]; then
     msg_info "Restoring LXC from backup"
     pct stop $container
