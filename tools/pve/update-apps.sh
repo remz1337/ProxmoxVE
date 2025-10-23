@@ -214,6 +214,7 @@ for container in $CHOICE; do
   #3) if build resources are different than run resources, then:
   if [ "$UPDATE_BUILD_RESOURCES" -eq "1" ]; then
     pct set "$container" --cores "$build_cpu" --memory "$build_ram"
+    sleep 3
   fi
 
   #4) Update service, using the update command
@@ -234,6 +235,7 @@ for container in $CHOICE; do
   #5) if build resources are different than run resources, then:
   if [ "$UPDATE_BUILD_RESOURCES" -eq "1" ]; then
     pct set "$container" --cores "$run_cpu" --memory "$run_ram"
+    sleep 3
   fi
 
   if pct exec "$container" -- [ -e "/var/run/reboot-required" ]; then
