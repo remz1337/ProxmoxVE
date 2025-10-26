@@ -103,7 +103,7 @@ fi
 
 header_info
 BACKUP_CHOICE="no"
-if (whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC Service Update" --yesno "Do you want to backup your containers before update?" 10 58); then
+if (whiptail --backtitle "Proxmox VE Helper Scripts" --defaultno --title "LXC Service Update" --yesno "Do you want to backup your containers before update?" 10 58); then
   BACKUP_CHOICE="yes"
 fi
 
