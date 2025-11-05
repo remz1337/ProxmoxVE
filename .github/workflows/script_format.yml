@@ -55,15 +55,15 @@ jobs:
                 FIRST_LINE=$(sed -n '1p' "$FILE")
                 [[ "$FIRST_LINE" != "#!/usr/bin/env bash" ]] && echo "Line 1 was $FIRST_LINE | Should be: #!/usr/bin/env bash" >> "$LOG_FILE"
                 SECOND_LINE=$(sed -n '2p' "$FILE")
-                [[ "$SECOND_LINE" != "source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)" ]] && 
-                echo "Line 2 was $SECOND_LINE | Should be: source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)" >> "$LOG_FILE"
+                [[ "$SECOND_LINE" != "source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)" ]] && 
+                echo "Line 2 was $SECOND_LINE | Should be: source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)" >> "$LOG_FILE"
                 THIRD_LINE=$(sed -n '3p' "$FILE")
                  if ! [[ "$THIRD_LINE" =~ ^#\ Copyright\ \(c\)\ [0-9]{4}-[0-9]{4}\ community-scripts\ ORG$ || "$THIRD_LINE" =~ ^Copyright\ \(c\)\ [0-9]{4}-[0-9]{4}\ tteck$ ]]; then
                      echo "Line 3 was $THIRD_LINE | Should be: # Copyright (c) 2021-2025 community-scripts ORG" >> "$LOG_FILE"
                  fi
 
               EXPECTED_AUTHOR="# Author:"
-              EXPECTED_LICENSE="# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE"
+              EXPECTED_LICENSE="# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE"
               EXPECTED_SOURCE="# Source:"
               EXPECTED_EMPTY=""
 
@@ -161,7 +161,7 @@ jobs:
               fi
 
               EXPECTED_AUTHOR="# Author:"
-              EXPECTED_LICENSE="# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE"
+              EXPECTED_LICENSE="# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE"
               EXPECTED_SOURCE="# Source:"
               EXPECTED_EMPTY=""
 
