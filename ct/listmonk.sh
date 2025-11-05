@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-512}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -28,9 +28,9 @@ function update_script() {
     exit
   fi
   if check_for_gh_release "listmonk" "knadh/listmonk"; then
-    msg_info "Stopping ${APP}"
+    msg_info "Stopping Service"
     systemctl stop listmonk
-    msg_ok "Stopped ${APP}"
+    msg_ok "Stopped Service"
 
     msg_info "Backing up data"
     mv /opt/listmonk/ /opt/listmonk-backup
@@ -44,14 +44,14 @@ function update_script() {
     $STD /opt/listmonk/listmonk --upgrade --yes --config /opt/listmonk/config.toml
     msg_ok "Configured listmonk"
 
-    msg_info "Starting ${APP}"
+    msg_info "Starting Service"
     systemctl start listmonk
-    msg_ok "Started ${APP}"
+    msg_ok "Started Service"
 
     msg_info "Cleaning up"
     rm -rf /opt/listmonk-backup/
     msg_ok "Cleaned"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

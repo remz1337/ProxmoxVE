@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -66,6 +66,8 @@ function update_script() {
     $STD unzip "$brwsr_tmp"
     mv browserless-"$TAG"/ /opt/browserless
     cd /opt/browserless
+    $STD npm install typescript
+    $STD npm install esbuild
     $STD npm install
     rm -rf src/routes/{chrome,edge,firefox,webkit}
     $STD node_modules/playwright-core/cli.js install --with-deps chromium
@@ -83,7 +85,7 @@ function update_script() {
     rm -f /tmp/minio.deb
     rm -f "$brwsr_tmp"
     msg_ok "Cleanup Completed"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -29,9 +29,9 @@ function update_script() {
   fi
 
   if check_for_gh_release "revealjs" "hakimel/reveal.js"; then
-    msg_info "Stopping $APP"
+    msg_info "Stopping Service"
     systemctl stop revealjs
-    msg_ok "Stopped $APP"
+    msg_info "Stopped Service"
 
     cp /opt/revealjs/index.html /opt
     fetch_and_deploy_gh_release "revealjs" "hakimel/reveal.js" "tarball"
@@ -43,14 +43,14 @@ function update_script() {
     sed -i '25s/localhost/0.0.0.0/g' /opt/revealjs/gulpfile.js
     msg_ok "Updated $APP"
 
-    msg_info "Starting $APP"
+    msg_info "Starting Service"
     systemctl start revealjs
-    msg_ok "Started $APP"
+    msg_ok "Started Service"
 
     msg_info "Cleaning Up"
     rm -f /opt/index.html
     msg_ok "Cleanup Completed"
-    msg_ok "Update Successful"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

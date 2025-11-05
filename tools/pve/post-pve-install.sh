@@ -189,7 +189,7 @@ start_routines_9() {
   # check if deb822 Sources (*.sources) exist
   if find /etc/apt/sources.list.d/ -maxdepth 1 -name '*.sources' | grep -q .; then
     whiptail --backtitle "Proxmox VE Helper Scripts" --title "Deb822 sources detected" \
-      --msgbox "Modern deb822 sources (*.sources) already exist.\n\nNo changes to sources format required.\n\nYou may still have legacy sources.list or .list files, which you can disable in the next step." 12 65
+      --msgbox "Modern deb822 sources (*.sources) already exist.\n\nNo changes to sources format required.\n\nYou may still have legacy sources.list or .list files, which you can disable in the next step." 12 65 || true
   else
     check_and_disable_legacy_sources() {
       local LEGACY_COUNT=0
@@ -197,7 +197,7 @@ start_routines_9() {
 
       # Check sources.list
       if [[ -f "$listfile" ]] && grep -qE '^\s*deb ' "$listfile"; then
-        ((LEGACY_COUNT++))
+        ((++LEGACY_COUNT))
       fi
 
       # Check .list files
@@ -289,11 +289,15 @@ EOF
       msg_ok "Kept 'pve-enterprise' repository"
       ;;
     disable)
-      msg_info "Disabling (commenting) 'pve-enterprise' repository"
-      # Comment out every non-comment line in the file that has 'pve-enterprise' in Components
+      msg_info "Disabling 'pve-enterprise' repository"
+      # Use Enabled: false instead of commenting to avoid malformed entry
       for file in /etc/apt/sources.list.d/*.sources; do
         if grep -q "Components:.*pve-enterprise" "$file"; then
-          sed -i '/^\s*Types:/,/^$/s/^\([^#].*\)$/# \1/' "$file"
+          if grep -q "^Enabled:" "$file"; then
+            sed -i 's/^Enabled:.*/Enabled: false/' "$file"
+          else
+            echo "Enabled: false" >>"$file"
+          fi
         fi
       done
       msg_ok "Disabled 'pve-enterprise' repository"
@@ -346,10 +350,15 @@ EOF
       msg_ok "Kept 'ceph enterprise' repository"
       ;;
     disable)
-      msg_info "Disabling (commenting) 'ceph enterprise' repository"
+      msg_info "Disabling 'ceph enterprise' repository"
+      # Use Enabled: false instead of commenting to avoid malformed entry
       for file in /etc/apt/sources.list.d/*.sources; do
         if grep -q "enterprise.proxmox.com.*ceph" "$file"; then
-          sed -i '/^\s*Types:/,/^$/s/^\([^#].*\)$/# \1/' "$file"
+          if grep -q "^Enabled:" "$file"; then
+            sed -i 's/^Enabled:.*/Enabled: false/' "$file"
+          else
+            echo "Enabled: false" >>"$file"
+          fi
         fi
       done
       msg_ok "Disabled 'ceph enterprise' repository"
@@ -472,7 +481,17 @@ EOF
       ;;
     no)
       msg_error "Selected no to Adding 'ceph package repositories'"
-      find /etc/apt/sources.list.d/ -type f \( -name "*.sources" -o -name "*.list" \) \
+      # Use Enabled: false for .sources files, comment for .list files
+      for file in /etc/apt/sources.list.d/*.sources; do
+        if grep -q "enterprise.proxmox.com.*ceph" "$file" 2>/dev/null; then
+          if grep -q "^Enabled:" "$file"; then
+            sed -i 's/^Enabled:.*/Enabled: false/' "$file"
+          else
+            echo "Enabled: false" >>"$file"
+          fi
+        fi
+      done
+      find /etc/apt/sources.list.d/ -type f -name "*.list" \
         -exec sed -i '/enterprise.proxmox.com.*ceph/s/^/# /' {} \;
       msg_ok "Disabled all Ceph Enterprise repositories"
       ;;
@@ -491,11 +510,12 @@ EOF
     yes)
       msg_info "Adding 'pve-test' repository (deb822, disabled)"
       cat >/etc/apt/sources.list.d/pve-test.sources <<EOF
-# Types: deb
-# URIs: http://download.proxmox.com/debian/pve
-# Suites: trixie
-# Components: pve-test
-# Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+Types: deb
+URIs: http://download.proxmox.com/debian/pve
+Suites: trixie
+Components: pve-test
+Signed-By: /usr/share/keyrings/proxmox-archive-keyring.gpg
+Enabled: false
 EOF
       msg_ok "Added 'pve-test' repository"
       ;;
@@ -532,20 +552,28 @@ if [ -f "$MOBILE_TPL" ] && ! grep -q "$MARKER" "$MOBILE_TPL"; then
       "$MARKER" \
       "<script>" \
       "  function removeSubscriptionElements() {" \
+      "    // --- Remove subscription dialogs ---" \
       "    const dialogs = document.querySelectorAll('dialog.pwt-outer-dialog');" \
       "    dialogs.forEach(dialog => {" \
-      "      const closeButton = dialog.querySelector('.fa-close');" \
-      "      const exclamationIcon = dialog.querySelector('.fa-exclamation-triangle');" \
-      "      const continueButton = dialog.querySelector('button');" \
-      "      if (closeButton && exclamationIcon && continueButton) { dialog.remove(); console.log('Removed subscription dialog'); }" \
+      "      const text = (dialog.textContent || '').toLowerCase();" \
+      "      if (text.includes('subscription')) {" \
+      "        dialog.remove();" \
+      "        console.log('Removed subscription dialog');" \
+      "      }" \
       "    });" \
+      "" \
+      "    // --- Remove subscription cards, but keep Reboot/Shutdown/Console ---" \
       "    const cards = document.querySelectorAll('.pwt-card.pwt-p-2.pwt-d-flex.pwt-interactive.pwt-justify-content-center');" \
       "    cards.forEach(card => {" \
-      "      const hasInteractiveElements = card.querySelector('button, input, a');" \
-      "      const hasComplexStructure = card.querySelector('.pwt-grid, .pwt-flex, .pwt-button');" \
-      "      if (!hasInteractiveElements && !hasComplexStructure) { card.remove(); console.log('Removed subscription card'); }" \
+      "      const text = (card.textContent || '').toLowerCase();" \
+      "      const hasButton = card.querySelector('button');" \
+      "      if (!hasButton && text.includes('subscription')) {" \
+      "        card.remove();" \
+      "        console.log('Removed subscription card');" \
+      "      }" \
       "    });" \
       "  }" \
+      "" \
       "  const observer = new MutationObserver(removeSubscriptionElements);" \
       "  observer.observe(document.body, { childList: true, subtree: true });" \
       "  removeSubscriptionElements();" \
@@ -555,9 +583,8 @@ if [ -f "$MOBILE_TPL" ] && ! grep -q "$MARKER" "$MOBILE_TPL"; then
       "" >> "$MOBILE_TPL"
 fi
 EOF
-
     chmod 755 /usr/local/bin/pve-remove-nag.sh
-    
+
     cat >/etc/apt/apt.conf.d/no-nag-script <<'EOF'
 DPkg::Post-Invoke { "/usr/local/bin/pve-remove-nag.sh"; };
 EOF

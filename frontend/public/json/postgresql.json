@@ -23,7 +23,7 @@
         "ram": 1024,
         "hdd": 4,
         "os": "debian",
-        "version": "12"
+        "version": "13"
       }
     },
     {
@@ -45,6 +45,10 @@
   "notes": [
     {
       "text": "Set a password after installation for postgres user by running `echo \"ALTER USER postgres with encrypted password 'your_password';\" | sudo -u postgres psql`",
+      "type": "info"
+    },
+    {
+      "text": "Debian script offers versions `15, 16, 17, 18`, while Alpine script offers versions `15, 16, 17`.",
       "type": "info"
     }
   ]

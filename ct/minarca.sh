@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-10}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 var_fuse="${var_fuse:-yes}"
 
@@ -29,18 +29,19 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  msg_info "Stopping ${APP}"
+  msg_info "Stopping Service"
   systemctl stop minarca-server
-  msg_ok "${APP} Stopped"
+  msg_ok "Stopped Service"
 
   msg_info "Updating ${APP} LXC"
-  $STD apt-get update
-  $STD apt-get upgrade -y
+  $STD apt update
+  $STD apt upgrade -y
   msg_ok "Updated ${APP} LXC"
 
-  msg_info "Starting ${APP}"
+  msg_info "Starting Service"
   systemctl start minarca-server
-  msg_ok "Restarted ${APP}"
+  msg_ok "Started Service"
+  msg_ok "Updated successfully!"
   exit
 }
 

@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -31,28 +31,28 @@ function update_script() {
     rm -f /etc/apt/sources.list.d/rabbitmq.list
     cat <<EOF >/etc/apt/sources.list.d/rabbitmq.list
 ## Modern Erlang/OTP releases
-deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb1.rabbitmq.com/rabbitmq-erlang/debian/bookworm bookworm main
-deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb2.rabbitmq.com/rabbitmq-erlang/debian/bookworm bookworm main
+deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb1.rabbitmq.com/rabbitmq-erlang/debian/trixie trixie main
+deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb2.rabbitmq.com/rabbitmq-erlang/debian/trixie trixie main
 
 ## Provides modern RabbitMQ releases
-deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb1.rabbitmq.com/rabbitmq-server/debian/bookworm bookworm main
-deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb2.rabbitmq.com/rabbitmq-server/debian/bookworm bookworm main
+deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb1.rabbitmq.com/rabbitmq-server/debian/trixie trixie main
+deb [arch=amd64 signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] https://deb2.rabbitmq.com/rabbitmq-server/debian/trixie trixie main
 EOF
-    $STD apt-get update
+    $STD apt update
   fi
 
-  msg_info "Stopping ${APP} Service"
+  msg_info "Stopping Service"
   systemctl stop rabbitmq-server
-  msg_ok "Stopped ${APP} Service"
+  msg_ok "Stopped Service"
 
   msg_info "Updating..."
   $STD apt install --only-upgrade rabbitmq-server
-  msg_ok "Update Successfully"
+  msg_ok "Updated successfully!"
 
-  msg_info "Starting ${APP}"
+  msg_info "Starting Service"
   systemctl start rabbitmq-server
-  msg_ok "Started ${APP}"
-  msg_ok "Updated Successfully"
+  msg_ok "Started Service"
+  msg_ok "Updated successfully!"
   exit
 }
 

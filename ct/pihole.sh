@@ -27,12 +27,13 @@ function update_script() {
         msg_error "No ${APP} Installation Found!"
         exit
     fi
-    msg_info "Updating ${APP}"
+    msg_info "Updating PiHole"
     set +e
-    $STD apt-get update
-    $STD apt-get upgrade -y
+    $STD apt update
+    $STD apt upgrade -y
     /usr/local/bin/pihole -up
-    msg_ok "Updated ${APP}"
+    msg_ok "Updated PiHole"
+    msg_ok "Updated successfully!"
     exit
 }
 

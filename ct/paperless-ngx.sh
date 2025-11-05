@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-12}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -63,7 +63,7 @@ function update_script() {
       read -rp "Have you created a snapshot? [y/N]: " confirm
       if [[ ! "$confirm" =~ ^([yY]|[yY][eE][sS])$ ]]; then
         msg_error "Migration aborted. Please create a snapshot first."
-        exit 1
+        exit
       fi
       msg_info "Migrating old Paperless-ngx installation to uv"
       rm -rf /opt/paperless/venv
@@ -120,7 +120,7 @@ function update_script() {
     systemctl start paperless-consumer paperless-webserver paperless-scheduler paperless-task-queue
     sleep 1
     msg_ok "Started all Paperless-ngx Services"
-    msg_ok "Updated Successfully!\n"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

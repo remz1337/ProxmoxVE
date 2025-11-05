@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-2}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 var_fuse="${var_fuse:-1}"
 
@@ -30,16 +30,16 @@ function update_script() {
     exit
   fi
   if check_for_gh_release "stylus" "mmastrac/stylus"; then
-    msg_info "Stopping $APP"
+    msg_info "Stopping Service"
     systemctl stop stylus
-    msg_ok "Stopped $APP"
+    msg_info "Stopped Service"
 
     fetch_and_deploy_gh_release "stylus" "mmastrac/stylus" "singlefile" "latest" "/usr/bin/" "*_linux_amd64"
 
-    msg_info "Starting $APP"
+    msg_info "Starting Service"
     systemctl start stylus
-    msg_ok "Started $APP"
-    msg_ok "Update Successful"
+    msg_ok "Started Service"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

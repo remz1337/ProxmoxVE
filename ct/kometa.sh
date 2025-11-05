@@ -6,7 +6,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 # Source: https://github.com/Kometa-Team/Kometa
 
 APP="Kometa"
-TAGS="media;streaming"
+var_tags="${var_tags:-media;streaming}"
 var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-8}"
@@ -49,7 +49,7 @@ function update_script() {
     msg_info "Starting Service"
     systemctl start kometa
     msg_ok "Started Service"
-    msg_ok "Update Successful"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

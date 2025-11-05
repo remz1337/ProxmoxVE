@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -40,7 +40,10 @@ function update_script() {
 
     fetch_and_deploy_gh_release "pulse" "rcourtman/Pulse" "prebuild" "latest" "/opt/pulse" "*-linux-amd64.tar.gz"
     ln -sf /opt/pulse/bin/pulse /usr/local/bin/pulse
-    chown -R pulse:pulse /etc/pulse /opt/pulse
+    mkdir -p /etc/pulse
+    chown pulse:pulse /etc/pulse
+    chown -R pulse:pulse /opt/pulse
+    chmod 700 /etc/pulse
     if [[ -f "$SERVICE_PATH"/pulse-backend.service ]]; then
       mv "$SERVICE_PATH"/pulse-backend.service "$SERVICE_PATH"/pulse.service
     fi
@@ -54,7 +57,7 @@ function update_script() {
     msg_info "Starting Services"
     systemctl start pulse
     msg_ok "Started Services"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

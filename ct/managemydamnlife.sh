@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-6}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -35,12 +35,15 @@ function update_script() {
 
     msg_info "Creating Backup"
     cp /opt/mmdl/.env /opt/mmdl.env
+    rm -rf /opt/mmdl
     msg_ok "Backup Created"
 
     fetch_and_deploy_gh_release "mmdl" "intri-in/manage-my-damn-life-nextjs" "tarball"
+    NODE_VERSION="22" setup_nodejs
 
     msg_info "Configuring ${APP}"
     cd /opt/mmdl
+    export NEXT_TELEMETRY_DISABLED=1
     $STD npm install
     $STD npm run migrate
     $STD npm run build
@@ -49,7 +52,7 @@ function update_script() {
     msg_info "Starting service"
     systemctl start mmdl
     msg_ok "Started service"
-    msg_ok "Update Successful"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

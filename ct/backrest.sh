@@ -29,9 +29,9 @@ function update_script() {
   fi
   RELEASE=$(curl -fsSL https://api.github.com/repos/garethgeorge/backrest/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
   if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
-    msg_info "Stopping ${APP}"
+    msg_info "Stopping Service"
     systemctl stop backrest
-    msg_ok "Stopped ${APP}"
+    msg_ok "Stopped Service"
 
     msg_info "Updating ${APP} to ${RELEASE}"
     temp_file=$(mktemp)
@@ -42,14 +42,14 @@ function update_script() {
     echo "${RELEASE}" >/opt/${APP}_version.txt
     msg_ok "Updated ${APP} to ${RELEASE}"
 
-    msg_info "Starting ${APP}"
+    msg_info "Starting Service"
     systemctl start backrest
-    msg_ok "Started ${APP}"
+    msg_ok "Started Service"
 
     msg_info "Cleaning up"
     rm -f "$temp_file"
     msg_ok "Cleaned up"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   else
     msg_ok "No update required. ${APP} is already at ${RELEASE}"
   fi

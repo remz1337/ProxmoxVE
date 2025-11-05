@@ -29,16 +29,16 @@ function update_script() {
   fi
 
   if check_for_gh_release "autobrr" "autobrr/autobrr"; then
-    msg_info "Stopping ${APP} LXC"
+    msg_info "Stopping Service"
     systemctl stop autobrr
-    msg_ok "Stopped ${APP} LXC"
+    msg_ok "Stopped Service"
 
     fetch_and_deploy_gh_release "autobrr" "autobrr/autobrr" "prebuild" "latest" "/usr/local/bin" "autobrr_*_linux_x86_64.tar.gz"
 
-    msg_info "Starting ${APP} LXC"
+    msg_info "Starting Service"
     systemctl start autobrr
-    msg_ok "Started ${APP} LXC"
-    msg_ok "Updated Successfully"
+    msg_ok "Started Service"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

@@ -33,14 +33,16 @@ function update_script() {
     3>&1 1>&2 2>&3)
   if [ "$UPD" == "1" ]; then
     msg_info "Updating ${APP} LXC"
-    $STD apt-get update
-    $STD apt-get -y upgrade
+    $STD apt update
+    $STD apt -y upgrade
     msg_ok "Updated ${APP} LXC"
+    msg_ok "Updated successfully!"
     exit
   fi
   if [ "$UPD" == "2" ]; then
     set +e
     bash -c "$(curl -fsSL https://raw.githubusercontent.com/mrworf/plexupdate/master/extras/installer.sh)"
+    msg_ok "Updated successfully!"
     exit
   fi
 }

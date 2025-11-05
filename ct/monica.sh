@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -27,6 +27,9 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
+
+  NODE_VERSION="22" NODE_MODULE="yarn@latest" setup_nodejs
+
   if check_for_gh_release "monica" "monicahq/monica"; then
     msg_info "Stopping Service"
     systemctl stop apache2
@@ -43,6 +46,7 @@ function update_script() {
     cp -r /opt/monica-backup/.env /opt/monica
     cp -r /opt/monica-backup/storage/* /opt/monica/storage/
     $STD composer install --no-interaction --no-dev
+    $STD yarn config set ignore-engines true
     $STD yarn install
     $STD yarn run production
     $STD php artisan monica:update --force
@@ -57,7 +61,7 @@ function update_script() {
     msg_info "Cleaning up"
     rm -r /opt/monica-backup
     msg_ok "Cleaned"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

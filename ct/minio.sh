@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-5}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -47,9 +47,9 @@ function update_script() {
   fi
 
   if [[ "${CURRENT_VERSION}" != "${RELEASE}" ]]; then
-    msg_info "Stopping ${APP}"
+    msg_info "Stopping Service"
     systemctl stop minio
-    msg_ok "${APP} Stopped"
+    msg_ok "Stopped Service"
 
     msg_info "Updating ${APP} to ${RELEASE}"
     mv /usr/local/bin/minio /usr/local/bin/minio_bak
@@ -58,15 +58,15 @@ function update_script() {
     echo "${RELEASE}" >/opt/${APP}_version.txt
     msg_ok "Updated ${APP}"
 
-    msg_info "Starting ${APP}"
+    msg_info "Starting Service"
     systemctl start minio
-    msg_ok "Started ${APP}"
+    msg_ok "Started Service"
 
     msg_info "Cleaning up"
     rm -f /usr/local/bin/minio_bak
     msg_ok "Cleaned"
 
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   else
     msg_ok "No update required. ${APP} is already at ${RELEASE}"
   fi

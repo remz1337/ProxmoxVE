@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-512}"
 var_disk="${var_disk:-2}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -25,12 +25,12 @@ function update_script() {
   check_container_resources
   if [[ ! -f /etc/systemd/system/prometheus-pve-exporter.service ]]; then
     msg_error "No ${APP} Installation Found!"
-    exit 1
+    exit
   fi
 
-  msg_info "Stopping ${APP}"
+  msg_info "Stopping Service"
   systemctl stop prometheus-pve-exporter
-  msg_ok "Stopped ${APP}"
+  msg_ok "Stopped Service"
 
   export PVE_VENV_PATH="/opt/prometheus-pve-exporter/.venv"
   export PVE_EXPORTER_BIN="${PVE_VENV_PATH}/bin/pve_exporter"
@@ -77,11 +77,11 @@ EOF
     msg_ok "Updated systemd service"
   fi
 
-  msg_info "Starting ${APP}"
+  msg_info "Starting Service"
   systemctl start prometheus-pve-exporter
-  msg_ok "Started ${APP}"
+  msg_ok "Started Service"
 
-  msg_ok "Updated Successfully"
+  msg_ok "Updated successfully!"
   exit 0
 }
 

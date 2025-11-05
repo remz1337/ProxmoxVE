@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-5}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-0}"
 
 header_info "$APP"
@@ -30,7 +30,6 @@ function update_script() {
 
   if check_for_gh_release "Zigbee2MQTT" "Koenkk/zigbee2mqtt"; then
     NODE_VERSION=24 NODE_MODULE="pnpm@$(curl -fsSL https://raw.githubusercontent.com/Koenkk/zigbee2mqtt/master/package.json | jq -r '.packageManager | split("@")[1]')" setup_nodejs
-
     msg_info "Stopping Service"
     systemctl stop zigbee2mqtt
     msg_ok "Stopped Service"
@@ -48,6 +47,7 @@ function update_script() {
     rm -rf /opt/zigbee2mqtt/data
     mv /opt/z2m_backup/data /opt/zigbee2mqtt
     cd /opt/zigbee2mqtt
+    grep -q "^packageImportMethod" ./pnpm-workspace.yaml || echo "packageImportMethod: hardlink" >> ./pnpm-workspace.yaml
     $STD pnpm install --frozen-lockfile
     $STD pnpm build
     msg_ok "Updated Zigbee2MQTT"
@@ -59,7 +59,7 @@ function update_script() {
     msg_info "Cleaning up"
     rm -rf /opt/z2m_backup
     msg_ok "Cleaned up"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

@@ -28,16 +28,16 @@ function update_script() {
     exit
   fi
   if check_for_gh_release "cleanuparr" "Cleanuparr/Cleanuparr"; then
-    msg_info "Stopping ${APP}"
+    msg_info "Stopping Service"
     systemctl stop cleanuparr
-    msg_ok "Stopped ${APP}"
+    msg_ok "Stopped Service"
 
     fetch_and_deploy_gh_release "Cleanuparr" "Cleanuparr/Cleanuparr" "prebuild" "latest" "/opt/cleanuparr" "*linux-amd64.zip"
 
-    msg_info "Starting ${APP}"
+    msg_info "Starting Service"
     systemctl start cleanuparr
-    msg_ok "Started ${APP}"
-    msg_ok "Updated Successfully"
+    msg_ok "Started Service"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

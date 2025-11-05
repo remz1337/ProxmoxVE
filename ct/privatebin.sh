@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -42,7 +42,7 @@ function update_script() {
     chmod -R 0755 /opt/privatebin/data}
     systemctl reload nginx php8.2-fpm
     msg_ok "Configured ${APP}"
-    msg_ok "Successfully updated"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

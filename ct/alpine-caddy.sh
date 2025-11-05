@@ -21,8 +21,6 @@ catch_errors
 
 function update_script() {
   header_info
-  check_container_storage
-  check_container_resources
   if [[ ! -d /etc/caddy ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
@@ -34,7 +32,8 @@ function update_script() {
   msg_info "Restarting Caddy"
   rc-service caddy restart
   msg_ok "Restarted Caddy"
-  exit
+  msg_ok "Updated successfully!"
+  exit 0
 }
 
 start

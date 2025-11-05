@@ -6,7 +6,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 # Source: https://github.com/excalidraw/excalidraw
 
 APP="Excalidraw"
-TAGS="diagrams"
+var_tags="${var_tags:-diagrams}"
 var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-3072}"
 var_disk="${var_disk:-10}"
@@ -29,9 +29,9 @@ function update_script() {
     exit
   fi
   if check_for_gh_release "excalidraw" "excalidraw/excalidraw"; then
-    msg_info "Stopping $APP"
+    msg_info "Stopping Service"
     systemctl stop excalidraw
-    msg_ok "Stopped $APP"
+    msg_info "Stopped Service"
 
     rm -rf /opt/excalidraw
     fetch_and_deploy_gh_release "excalidraw" "excalidraw/excalidraw"
@@ -41,10 +41,10 @@ function update_script() {
     $STD yarn
     msg_ok "Updated $APP"
 
-    msg_info "Starting $APP"
+    msg_info "Starting Service"
     systemctl start excalidraw
-    msg_ok "Started $APP"
-    msg_ok "Updated Successfully"
+    msg_ok "Started Service"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

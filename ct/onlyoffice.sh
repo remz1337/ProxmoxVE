@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-10}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -26,12 +26,12 @@ function update_script() {
 
   if [[ ! -d /var/www/onlyoffice ]]; then
     msg_error "No valid ${APP} installation found!"
-    exit 1
+    exit
   fi
 
   msg_info "Updating $APP"
-  $STD apt-get update
-  $STD apt-get -y --only-upgrade install onlyoffice-documentserver
+  $STD apt update
+  $STD apt -y --only-upgrade install onlyoffice-documentserver
   msg_ok "Updated $APP"
 
   if systemctl is-enabled --quiet onlyoffice-documentserver; then
@@ -39,6 +39,7 @@ function update_script() {
     $STD systemctl restart onlyoffice-documentserver
     msg_ok "$APP restarted"
   fi
+  msg_ok "Updated successfully!"
   exit
 }
 

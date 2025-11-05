@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -28,23 +28,23 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  NODE_VERSION="22"
-  setup_nodejs
+  NODE_VERSION="22" setup_nodejs
   RELEASE=$(curl -fsSL https://api.github.com/repos/actualbudget/actual/releases/latest | grep "tag_name" | awk '{print substr($2, 3, length($2)-4) }')
   if [[ -f /opt/actualbudget-data/config.json ]]; then
     if [[ ! -f /opt/actualbudget_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/actualbudget_version.txt)" ]]; then
-      msg_info "Stopping ${APP}"
+      msg_info "Stopping Service"
       systemctl stop actualbudget
-      msg_ok "${APP} Stopped"
+      msg_ok "Stopped Service"
 
       msg_info "Updating ${APP} to ${RELEASE}"
       $STD npm update -g @actual-app/sync-server
       echo "${RELEASE}" >/opt/actualbudget_version.txt
       msg_ok "Updated ${APP} to ${RELEASE}"
 
-      msg_info "Starting ${APP}"
+      msg_info "Starting Service"
       systemctl start actualbudget
-      msg_ok "Restarted ${APP}"
+      msg_ok "Started Service"
+      msg_ok "Updated successfully!"
     else
       msg_info "${APP} is already up to date"
     fi
@@ -52,7 +52,7 @@ function update_script() {
     msg_info "Old Installation Found, you need to migrate your data and recreate to a new container"
     msg_info "Please follow the instructions on the ${APP} website to migrate your data"
     msg_info "https://actualbudget.org/docs/backup-restore/backup"
-    exit 1
+    exit
   fi
   exit
 }

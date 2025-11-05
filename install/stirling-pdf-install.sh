@@ -14,7 +14,7 @@ network_check
 update_os
 
 msg_info "Installing Dependencies (Patience)"
-$STD apt-get install -y \
+$STD apt install -y \
   automake \
   autoconf \
   libtool \
@@ -26,13 +26,14 @@ $STD apt-get install -y \
   unpaper \
   fonts-urw-base35 \
   qpdf \
-  poppler-utils
+  poppler-utils \
+  jbig2
 msg_ok "Installed Dependencies"
 
 PYTHON_VERSION="3.12" setup_uv
 JAVA_VERSION="21" setup_java
 
-read -r -p "${TAB3}Do you want to Stirling-PDF with Login? (no/n = without Login) [Y/n] " response
+read -r -p "${TAB3}Do you want to use Stirling-PDF with Login? (no/n = without Login) [Y/n] " response
 response=${response,,} # Convert to lowercase
 login_mode="false"
 if [[ "$response" == "y" || "$response" == "yes" || -z "$response" ]]; then
@@ -45,7 +46,7 @@ else
 fi
 
 msg_info "Installing LibreOffice Components"
-$STD apt-get install -y \
+$STD apt install -y \
   libreoffice-writer \
   libreoffice-calc \
   libreoffice-impress \
@@ -54,7 +55,6 @@ $STD apt-get install -y \
   libreoffice-base-core \
   libreoffice-script-provider-python \
   libreoffice-java-common \
-  unoconv \
   pngquant \
   weasyprint
 msg_ok "Installed LibreOffice Components"
@@ -70,26 +70,14 @@ $STD uv pip install \
   ocrmypdf \
   pillow \
   pdf2image
-
-$STD apt-get install -y python3-uno python3-pip
-$STD pip3 install --break-system-packages unoserver
+$STD apt install -y python3-uno python3-pip
+$STD pip3 install --break-system-packages --timeout=120 unoserver
 ln -sf /opt/.venv/bin/python3 /usr/local/bin/python3
 ln -sf /opt/.venv/bin/pip /usr/local/bin/pip
 msg_ok "Installed Python Dependencies"
 
-msg_info "Installing JBIG2"
-$STD curl -fsSL -o /tmp/jbig2enc.tar.gz https://github.com/agl/jbig2enc/archive/refs/tags/0.30.tar.gz
-mkdir -p /opt/jbig2enc
-tar -xzf /tmp/jbig2enc.tar.gz -C /opt/jbig2enc --strip-components=1
-cd /opt/jbig2enc
-$STD bash ./autogen.sh
-$STD bash ./configure
-$STD make
-$STD make install
-msg_ok "Installed JBIG2"
-
 msg_info "Installing Language Packs (Patience)"
-$STD apt-get install -y 'tesseract-ocr-*'
+$STD apt install -y 'tesseract-ocr-*'
 msg_ok "Installed Language Packs"
 
 msg_info "Creating Environment Variables"
@@ -196,6 +184,7 @@ customize
 
 msg_info "Cleaning up"
 rm -f /tmp/jbig2enc.tar.gz
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
+$STD apt -y autoremove
+$STD apt -y autoclean
+$STD apt -y clean
 msg_ok "Cleaned"

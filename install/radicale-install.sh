@@ -14,10 +14,10 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y \
+$STD apt install -y \
   apache2-utils \
   python3-pip \
-  python3.11-venv
+  python3-venv
 msg_ok "Installed Dependencies"
 
 msg_info "Setting up Radicale"
@@ -65,6 +65,7 @@ motd_ssh
 customize
 
 msg_info "Cleaning up"
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
+$STD apt -y autoremove
+$STD apt -y autoclean
+$STD apt -y clean
 msg_ok "Cleaned"

@@ -20,10 +20,10 @@
       "script": "ct/overseerr.sh",
       "resources": {
         "cpu": 2,
-        "ram": 2048,
+        "ram": 4096,
         "hdd": 8,
         "os": "debian",
-        "version": "12"
+        "version": "13"
       }
     }
   ],

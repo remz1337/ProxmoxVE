@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -30,9 +30,9 @@ function update_script() {
   RELEASE=$(curl -fsSL https://github.com/Donkie/Spoolman/releases/latest | grep "title>Release" | cut -d " " -f 4)
   if [[ ! -f /opt/${APP}_version.txt ]] || [[ "${RELEASE}" != "$(cat /opt/${APP}_version.txt)" ]]; then
 
-    msg_info "Stopping ${APP} Service"
+    msg_info "Stopping Service"
     systemctl stop spoolman
-    msg_ok "Stopped ${APP} Service"
+    msg_ok "Stopped Service"
 
     msg_info "Updating ${APP} to ${RELEASE}"
     cd /opt
@@ -46,15 +46,15 @@ function update_script() {
     echo "${RELEASE}" >/opt/${APP}_version.txt
     msg_ok "Updated ${APP} to ${RELEASE}"
 
-    msg_info "Starting ${APP} Service"
+    msg_info "Starting Service"
     systemctl start spoolman
-    msg_ok "Started ${APP} Service"
+    msg_ok "Started Service"
 
     msg_info "Cleaning up"
     rm -rf /opt/spoolman.zip
     msg_ok "Cleaned"
 
-    msg_ok "Updated Successfully!\n"
+    msg_ok "Updated successfully!"
   else
     msg_ok "No update required. ${APP} is already at ${RELEASE}"
   fi

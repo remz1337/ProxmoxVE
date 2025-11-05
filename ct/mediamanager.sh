@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-3072}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -42,25 +42,23 @@ function update_script() {
     export FRONTEND_FILES_DIR="${MM_DIR}/web/build"
     export BASE_PATH=""
     export PUBLIC_VERSION=""
-    export PUBLIC_API_URL="${BASE_PATH}/api/v1"
-    export BASE_PATH="${BASE_PATH}/web"
+    export PUBLIC_API_URL=""
     cd /opt/mediamanager/web
     $STD npm ci
     $STD npm run build
     rm -rf "$FRONTEND_FILES_DIR"/build
     cp -r build "$FRONTEND_FILES_DIR"
-    export BASE_PATH=""
     export VIRTUAL_ENV="/opt/${MM_DIR}/venv"
     cd /opt/mediamanager
     rm -rf "$MM_DIR"/{media_manager,alembic*}
     cp -r {media_manager,alembic*} "$MM_DIR"
-    $STD /usr/local/bin/uv sync --locked --active
+    $STD /usr/local/bin/uv sync --locked --active -n -p cpython3.13 --managed-python
     msg_ok "Updated $APP"
 
     msg_info "Starting Service"
     systemctl start mediamanager
     msg_ok "Started Service"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

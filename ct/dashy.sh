@@ -28,9 +28,9 @@ function update_script() {
     exit
   fi
   if check_for_gh_release "dashy" "Lissy93/dashy"; then
-    msg_info "Stopping ${APP}"
+    msg_info "Stopping Service"
     systemctl stop dashy
-    msg_ok "Stopped ${APP}"
+    msg_ok "Stopped Service"
 
     msg_info "Backing up conf.yml"
     cd ~
@@ -62,7 +62,7 @@ function update_script() {
     msg_info "Starting Dashy"
     systemctl start dashy
     msg_ok "Started Dashy"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

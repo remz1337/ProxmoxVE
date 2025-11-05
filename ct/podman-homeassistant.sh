@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-16}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -36,9 +36,9 @@ function update_script() {
 
   if [ "$UPD" == "1" ]; then
     msg_info "Updating ${APP} LXC"
-    $STD apt-get update
-    $STD apt-get -y upgrade
-    msg_ok "Updated Successfully"
+    $STD apt update
+    $STD apt -y upgrade
+    msg_ok "Updated successfully!"
 
     msg_info "Updating All Containers\n"
     CONTAINER_LIST="${1:-$(podman ps -q)}"

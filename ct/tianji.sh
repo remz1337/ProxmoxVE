@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-4}"
 var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-12}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -61,9 +61,9 @@ function update_script() {
     $STD uv pip install apprise cryptography --system
     msg_ok "Updated AppRise"
 
-    msg_info "Starting ${APP}"
+    msg_info "Starting Service"
     systemctl start tianji
-    msg_ok "Started ${APP}"
+    msg_ok "Started Service"
 
     msg_info "Cleaning up"
     rm -rf /opt/tianji_bak
@@ -71,7 +71,7 @@ function update_script() {
     rm -rf /opt/tianji/website
     rm -rf /opt/tianji/reporter
     msg_ok "Cleaned"
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

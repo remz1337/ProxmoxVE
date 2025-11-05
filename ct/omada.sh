@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-3072}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -29,24 +29,18 @@ function update_script() {
   fi
 
   msg_info "Updating MongoDB"
-  MONGODB_VERSION="7.0"
-  if ! lscpu | grep -q 'avx'; then
-    MONGODB_VERSION="4.4"
-    msg_error "No AVX detected: TP-Link Canceled Support for Old MongoDB for Debian 12\n https://www.tp-link.com/baltic/support/faq/4160/"
-    exit 1
+  if lscpu | grep -q 'avx'; then
+    MONGO_VERSION="8.0" setup_mongodb
+  else
+    msg_warn "No AVX detected: Using older MongoDB 4.4"
+    MONGO_VERSION="4.4" setup_mongodb
   fi
-
-  curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGODB_VERSION}.asc" | gpg --dearmor >/usr/share/keyrings/mongodb-server-${MONGODB_VERSION}.gpg
-  echo "deb [signed-by=/usr/share/keyrings/mongodb-server-${MONGODB_VERSION}.gpg] http://repo.mongodb.org/apt/debian $(grep '^VERSION_CODENAME=' /etc/os-release | cut -d'=' -f2)/mongodb-org/${MONGODB_VERSION} main" >/etc/apt/sources.list.d/mongodb-org-${MONGODB_VERSION}.list
-  $STD apt-get update
-  $STD apt-get install -y --only-upgrade mongodb-org
-  msg_ok "Updated MongoDB to $MONGODB_VERSION"
 
   msg_info "Checking if right Azul Zulu Java is installed"
   java_version=$(java -version 2>&1 | awk -F[\"_] '/version/ {print $2}')
   if [[ "$java_version" =~ ^1\.8\.* ]]; then
-    $STD apt-get remove --purge -y zulu8-jdk
-    $STD apt-get -y install zulu21-jre-headless
+    $STD apt remove --purge -y zulu8-jdk
+    $STD apt -y install zulu21-jre-headless
     msg_ok "Updated Azul Zulu Java to 21"
   else
     msg_ok "Azul Zulu Java 21 already installed"
@@ -59,14 +53,14 @@ function update_script() {
   OMADA_PKG=$(basename "$OMADA_URL")
   if [ -z "$OMADA_PKG" ]; then
     msg_error "Could not retrieve Omada package – server may be down."
-    exit 1
+    exit
   fi
   curl -fsSL "$OMADA_URL" -o "$OMADA_PKG"
   export DEBIAN_FRONTEND=noninteractive
   $STD dpkg -i "$OMADA_PKG"
   rm -f "$OMADA_PKG"
-  msg_ok "Updated Omada Controller"
-  exit 0
+  msg_ok "Updated successfully!"
+  exit
 }
 
 start

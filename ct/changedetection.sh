@@ -36,6 +36,8 @@ function update_script() {
     msg_ok "Updated Dependencies"
   fi
 
+  NODE_VERSION="24" setup_nodejs
+
   msg_info "Updating ${APP}"
   $STD pip3 install changedetection.io --upgrade
   msg_ok "Updated ${APP}"
@@ -49,11 +51,13 @@ function update_script() {
     $STD git -C /opt/browserless/ fetch --all
     $STD git -C /opt/browserless/ reset --hard origin/main
     $STD npm update --prefix /opt/browserless
+    $STD npm ci --include=optional --include=dev --prefix /opt/browserless
     $STD /opt/browserless/node_modules/playwright-core/cli.js install --with-deps
     # Update Chrome separately, as it has to be done with the force option. Otherwise the installation of other browsers will not be done if Chrome is already installed.
     $STD /opt/browserless/node_modules/playwright-core/cli.js install --force chrome
     $STD /opt/browserless/node_modules/playwright-core/cli.js install --force msedge
     $STD /opt/browserless/node_modules/playwright-core/cli.js install chromium firefox webkit
+    $STD npm install --prefix /opt/browserless esbuild typescript ts-node @types/node --save-dev
     $STD npm run build --prefix /opt/browserless
     $STD npm run build:function --prefix /opt/browserless
     $STD npm prune production --prefix /opt/browserless
@@ -64,7 +68,7 @@ function update_script() {
   fi
 
   systemctl restart changedetection
-  msg_ok "Updated Successfully"
+  msg_ok "Updated successfully!"
   exit
 }
 

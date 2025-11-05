@@ -28,7 +28,7 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  if check_for_gh_release "keycloak" "keycloak/keycloak"; then
+  if check_for_gh_release "keycloak_app" "keycloak/keycloak"; then
     msg_info "Stopping Keycloak"
     systemctl stop keycloak
     msg_ok "Stopped Keycloak"
@@ -59,7 +59,7 @@ function update_script() {
     msg_info "Cleaning up"
     rm -rf keycloak.old
     msg_ok "Cleanup complete"
-    msg_ok "Update Successful"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

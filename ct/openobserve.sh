@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-512}"
 var_disk="${var_disk:-3}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -20,20 +20,21 @@ color
 catch_errors
 
 function update_script() {
-    header_info
-    check_container_storage
-    check_container_resources
-    if [[ ! -d /opt/openobserve/ ]]; then
-        msg_error "No ${APP} Installation Found!"
-        exit
-    fi
-    msg_info "Updating $APP"
-    systemctl stop openobserve
-    LATEST=$(curl -fsSL https://api.github.com/repos/openobserve/openobserve/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
-    $STD tar zxvf <(curl -fsSL https://downloads.openobserve.ai/releases/openobserve/$LATEST/openobserve-$LATEST-linux-amd64.tar.gz) -C /opt/openobserve
-    systemctl start openobserve
-    msg_ok "Updated $APP"
+  header_info
+  check_container_storage
+  check_container_resources
+  if [[ ! -d /opt/openobserve/ ]]; then
+    msg_error "No ${APP} Installation Found!"
     exit
+  fi
+  msg_info "Updating $APP"
+  systemctl stop openobserve
+  LATEST=$(curl -fsSL https://api.github.com/repos/openobserve/openobserve/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+  $STD tar zxvf <(curl -fsSL https://downloads.openobserve.ai/releases/openobserve/$LATEST/openobserve-$LATEST-linux-amd64.tar.gz) -C /opt/openobserve
+  systemctl start openobserve
+  msg_ok "Updated $APP"
+  msg_ok "Updated successfully!"
+  exit
 }
 
 start

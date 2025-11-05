@@ -37,10 +37,28 @@ function update_script() {
 
   setup_uv
   PNPM_VERSION="$(curl -fsSL "https://raw.githubusercontent.com/immich-app/immich/refs/heads/main/package.json" | jq -r '.packageManager | split("@")[1]')"
-  NODE_VERSION="22" NODE_MODULE="pnpm@${PNPM_VERSION}" setup_nodejs
+  NODE_VERSION="24" NODE_MODULE="pnpm@${PNPM_VERSION}" setup_nodejs
 
-  if dpkg -l | grep -q "libmimalloc2.0"; then
-    $STD apt-get update && $STD apt-get install -y libmimalloc3
+  if [[ ! -f /etc/apt/preferences.d/preferences ]]; then
+    msg_info "Adding Debian Testing repo"
+    sed -i 's/ trixie-updates/ trixie-updates testing/g' /etc/apt/sources.list.d/debian.sources
+    cat <<EOF >/etc/apt/preferences.d/preferences
+Package: *
+Pin: release a=unstable
+Pin-Priority: 450
+
+Package: *
+Pin:release a=testing
+Pin-Priority: 450
+EOF
+    if [[ -f /etc/apt/preferences.d/immich ]]; then
+      rm /etc/apt/preferences.d/immich
+    fi
+    $STD apt-get update
+    msg_ok "Added Debian Testing repo"
+    msg_info "Installing libmimalloc3"
+    $STD apt-get install -t testing --no-install-recommends libmimalloc3
+    msg_ok "Installed libmimalloc3"
   fi
 
   STAGING_DIR=/opt/staging
@@ -74,31 +92,37 @@ function update_script() {
     done
     msg_ok "Image-processing libraries up to date"
   fi
-  RELEASE="1.142.1"
+
+  RELEASE="2.2.2"
   if check_for_gh_release "immich" "immich-app/immich" "${RELEASE}"; then
     msg_info "Stopping Services"
     systemctl stop immich-web
     systemctl stop immich-ml
-    msg_ok "Stopped ${APP}"
+    msg_ok "Stopped Services"
+    VCHORD_RELEASE="0.5.3"
+    if [[ ! -f ~/.vchord_version ]] || [[ "$VCHORD_RELEASE" != "$(cat ~/.vchord_version)" ]]; then
+      msg_info "Upgrading VectorChord"
+      curl -fsSL "https://github.com/tensorchord/vectorchord/releases/download/${VCHORD_RELEASE}/postgresql-16-vchord_${VCHORD_RELEASE}-1_amd64.deb" -o vchord.deb
+      $STD apt install -y ./vchord.deb
+      systemctl restart postgresql
+      $STD sudo -u postgres psql -d immich -c "ALTER EXTENSION vector UPDATE;"
+      $STD sudo -u postgres psql -d immich -c "ALTER EXTENSION vchord UPDATE;"
+      $STD sudo -u postgres psql -d immich -c "REINDEX INDEX face_index;"
+      $STD sudo -u postgres psql -d immich -c "REINDEX INDEX clip_index;"
+      echo "$VCHORD_RELEASE" >~/.vchord_version
+      rm ./vchord.deb
+      msg_ok "Upgraded VectorChord to v${VCHORD_RELEASE}"
+    fi
+    if ! dpkg -l | grep -q ccache; then
+      $STD apt-get install -yqq ccache
+    fi
+
     INSTALL_DIR="/opt/${APP}"
     UPLOAD_DIR="$(sed -n '/^IMMICH_MEDIA_LOCATION/s/[^=]*=//p' /opt/immich/.env)"
     SRC_DIR="${INSTALL_DIR}/source"
     APP_DIR="${INSTALL_DIR}/app"
     ML_DIR="${APP_DIR}/machine-learning"
     GEO_DIR="${INSTALL_DIR}/geodata"
-    VCHORD_RELEASE="0.4.3"
-    # VCHORD_RELEASE="$(curl -fsSL https://api.github.com/repos/tensorchord/vectorchord/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')"
-
-    if [[ ! -f ~/.vchord_version ]] || [[ "$VCHORD_RELEASE" != "$(cat ~/.vchord_version)" ]]; then
-      msg_info "Updating VectorChord"
-      curl -fsSL "https://github.com/tensorchord/vectorchord/releases/download/${VCHORD_RELEASE}/postgresql-16-vchord_${VCHORD_RELEASE}-1_amd64.deb" -o vchord.deb
-      $STD apt install -y ./vchord.deb
-      $STD sudo -u postgres psql -d immich -c "ALTER EXTENSION vchord UPDATE;"
-      systemctl restart postgresql
-      echo "$VCHORD_RELEASE" >~/.vchord_version
-      rm ./vchord.deb
-      msg_ok "Updated VectorChord to v${VCHORD_RELEASE}"
-    fi
 
     cp "$ML_DIR"/ml_start.sh "$INSTALL_DIR"
     if grep -qs "set -a" "$APP_DIR"/bin/start.sh; then
@@ -144,6 +168,8 @@ EOF
     cd "$SRC_DIR"
     echo "packageImportMethod: hardlink" >>./pnpm-workspace.yaml
     $STD pnpm --filter @immich/sdk --filter immich-web --frozen-lockfile --force install
+    unset SHARP_FORCE_GLOBAL_LIBVIPS
+    export SHARP_IGNORE_GLOBAL_LIBVIPS=true
     $STD pnpm --filter @immich/sdk --filter immich-web build
     cp -a web/build "$APP_DIR"/www
     cp LICENSE "$APP_DIR"
@@ -158,6 +184,7 @@ EOF
 
     cd "$SRC_DIR"/machine-learning
     mkdir -p "$ML_DIR" && chown -R immich:immich "$ML_DIR"
+    chown immich:immich ./uv.lock
     export VIRTUAL_ENV="${ML_DIR}"/ml-venv
     if [[ -f ~/.openvino ]]; then
       msg_info "Updating HW-accelerated machine-learning"
@@ -190,6 +217,7 @@ EOF
     msg_info "Cleaning up"
     $STD apt-get -y autoremove
     $STD apt-get -y autoclean
+    $STD apt clean -y
     msg_ok "Cleaned"
     systemctl restart immich-ml immich-web
   fi

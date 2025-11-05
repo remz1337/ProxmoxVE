@@ -47,19 +47,17 @@ export CONFIG_DIR="${MM_DIR}/config"
 export FRONTEND_FILES_DIR="${MM_DIR}/web/build"
 export BASE_PATH=""
 export PUBLIC_VERSION=""
-export PUBLIC_API_URL="${BASE_PATH}/api/v1"
-export BASE_PATH="${BASE_PATH}/web"
+export PUBLIC_API_URL=""
+export BASE_PATH=""
 cd /opt/mediamanager/web
 $STD npm ci
 $STD npm run build
 mkdir -p {"$MM_DIR"/web,"$MEDIA_DIR","$CONFIG_DIR"}
 cp -r build "$FRONTEND_FILES_DIR"
-export BASE_PATH=""
 export VIRTUAL_ENV="${MM_DIR}/venv"
 cd /opt/mediamanager
 cp -r {media_manager,alembic*} "$MM_DIR"
-$STD /usr/local/bin/uv venv "$VIRTUAL_ENV"
-$STD /usr/local/bin/uv sync --locked --active
+$STD /usr/local/bin/uv sync --locked --active -n -p cpython3.13 --managed-python
 msg_ok "Configured MediaManager"
 
 msg_info "Creating config and start script"
@@ -113,6 +111,7 @@ motd_ssh
 customize
 
 msg_info "Cleaning up"
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
+$STD apt -y autoremove
+$STD apt -y autoclean
+$STD apt -y clean
 msg_ok "Cleaned"

@@ -30,19 +30,19 @@ function update_script() {
   fi
 
   if check_for_gh_release "grist" "gristlabs/grist-core"; then
-    msg_info "Stopping ${APP} Service"
+    msg_info "Stopping Service"
     systemctl stop grist
-    msg_ok "Stopped ${APP} Service"
+    msg_ok "Stopped Service"
 
     msg_info "Creating backup"
     rm -rf /opt/grist_bak
-    mv grist grist_bak
+    mv /opt/grist /opt/grist_bak
     msg_ok "Backup created"
 
     fetch_and_deploy_gh_release "grist" "gristlabs/grist-core" "tarball"
 
     msg_info "Updating ${APP}"
-    mkdir -p grist/docs
+    mkdir -p /opt/grist/docs
     cp -n /opt/grist_bak/.env /opt/grist/.env
     cp -r /opt/grist_bak/docs/* /opt/grist/docs/
     cp /opt/grist_bak/grist-sessions.db /opt/grist/grist-sessions.db
@@ -52,11 +52,11 @@ function update_script() {
     $STD yarn run install:python
     msg_ok "Updated ${APP}"
 
-    msg_info "Starting ${APP} Service"
+    msg_info "Starting Service"
     systemctl start grist
-    msg_ok "Started ${APP} Service"
+    msg_ok "Started Service"
 
-    msg_ok "Updated Successfully"
+    msg_ok "Updated successfully!"
   fi
   exit
 }

@@ -18,7 +18,7 @@ $STD apt-get install -y nginx
 msg_ok "Installed Dependencies"
 
 fetch_and_deploy_gh_release "booklore" "booklore-app/BookLore"
-JAVA_VERSION="21" setup_java
+JAVA_VERSION="25" setup_java
 NODE_VERSION="22" setup_nodejs
 setup_mariadb
 setup_yq
@@ -77,7 +77,8 @@ msg_info "Configure Nginx"
 rm -rf /usr/share/nginx/html
 ln -s /opt/booklore/booklore-ui/dist/booklore/browser /usr/share/nginx/html
 cp /opt/booklore/nginx.conf /etc/nginx/nginx.conf
-sed -i "s/listen \${BOOKLORE_PORT};/listen 6060;/" /etc/nginx/nginx.conf
+sed -i 's/listen \${BOOKLORE_PORT};/listen 6060;/' /etc/nginx/nginx.conf
+sed -i 's/listen \[::\]:${BOOKLORE_PORT};/listen [::]:6060;/' /etc/nginx/nginx.conf
 systemctl restart nginx
 msg_ok "Configured Nginx"
 
