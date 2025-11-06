@@ -42,15 +42,15 @@ sleep 2
 reboot_lxc
 default_setup
 
-#Adding /usr/local/bin to PATH on Debian 12
-if [ "$PCT_OSTYPE" == "debian" ] && [ "$PCT_OSVERSION" == "12" ]; then
+#Adding /usr/local/bin to PATH on Debian >=12
+if [ "$PCT_OSTYPE" == "debian" ] && [ "$PCT_OSVERSION" -ge "12" ]; then
   pct exec $CTID -- /bin/bash -c 'cd ~ && echo "export PATH=$PATH:/usr/local/bin" >> ~/.bashrc'
   pct exec $CTID -- /bin/bash -c 'source ~/.bashrc'
 fi
 
 #Install APT proxy client
 msg_info "Installing APT proxy client"
-if [ "$PCT_OSTYPE" == "debian" ] && [ "$PCT_OSVERSION" == "12" ]; then
+if [ "$PCT_OSTYPE" == "debian" ] && [ "$PCT_OSVERSION" -ge "12" ]; then
   #Squid-deb-proxy-client is not available on Deb12, not sure if it's an issue with using PVE7
   #auto-apt-proxy needs a DNS record "apt-proxy" pointing to AptCacherNg machine IP (I did it using PiHole)
   pct exec $CTID -- /bin/bash -c "apt install -qqy auto-apt-proxy &>/dev/null"
