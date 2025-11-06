@@ -5,20 +5,16 @@ source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://github.com/CollaboraOnline/online
 
-# App Default Values
 APP="Collabora"
-var_tags=""
-var_cpu="2"
-var_ram="2048"
-var_disk="16"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
+var_tags="${var_tags:-}"
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"
+var_disk="${var_disk:-16}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
 
-# App Output & Base Settings
 header_info "$APP"
-
-# Core
 variables
 color
 catch_errors

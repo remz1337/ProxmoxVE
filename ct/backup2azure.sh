@@ -5,24 +5,21 @@ source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://github.com/remz1337/Backup2Azure
 
-# App Default Values
 APP="Backup2Azure"
-var_tags=""
-var_cpu="1"
-var_ram="512"
-var_disk="4"
-var_os="debian"
-var_version="12"
-var_unprivileged="1"
-var_postfix_sat="yes"
+var_tags="${var_tags:-backup}"
+var_cpu="${var_cpu:-1}"
+var_ram="${var_ram:-512}"
+var_disk="${var_disk:-4}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-1}"
+var_postfix_sat="${var_postfix_sat:-yes}"
 
-# App Output & Base Settings
 header_info "$APP"
-
-# Core
 variables
 color
 catch_errors
+
 
 function update_script() {
   header_info
