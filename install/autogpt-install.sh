@@ -47,15 +47,24 @@ poetry install --no-ansi --no-root
 # Generate Prisma client
 #COPY autogpt_platform/backend/schema.prisma ./
 #COPY autogpt_platform/backend/backend/data/partial_types.py ./backend/data/partial_types.py
-cd /opt/autogpt/autogpt_platform/backend/schema.prisma
+#cd /opt/autogpt/autogpt_platform/backend/schema.prisma
 poetry run prisma generate
 
 #ENV PATH="/app/autogpt_platform/backend/.venv/bin:$PATH"
 
 #RUN mkdir -p /app/autogpt_platform/autogpt_libs
 #RUN mkdir -p /app/autogpt_platform/backend
-mkdir -p /opt/autogpt/autogpt_platform/autogpt_libs
-mkdir -p /opt/autogpt/autogpt_platform/backend
+#mkdir -p /opt/autogpt/autogpt_platform/autogpt_libs
+#mkdir -p /opt/autogpt/autogpt_platform/backend
+
+#Copy env file
+cd /opt/autogpt/autogpt_platform
+cp .env.default .env
+
+#cd /opt/autogpt/autogpt_platform/backend
+#poetry run rest
+make run-backend
+
 msg_ok "Installed AutoGPT Backend"
 
 motd_ssh
