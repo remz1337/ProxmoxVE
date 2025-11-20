@@ -30,9 +30,9 @@ export POETRY_VIRTUALENVS_IN_PROJECT=true
 export PATH=/opt/poetry/bin:$PATH
 msg_ok "Setup environment"
 
-msg_info "Downloading Frigate source"
+msg_info "Downloading AutoGPT source"
 fetch_and_deploy_gh_release "autogpt" "Significant-Gravitas/AutoGPT" "tarball" "latest" "/opt/autogpt"
-msg_ok "Downloaded Frigate source"
+msg_ok "Downloaded AutoGPT source"
 
 msg_info "Installing AutoGPT Backend"
 pip3 install poetry --break-system-packages
