@@ -13,6 +13,8 @@ var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-12}"
 var_unprivileged="${var_unprivileged:-1}"
+var_shared_mount="${var_shared_mount:-yes}"
+var_postfix_sat="${var_postfix_sat:-yes}"
 
 header_info "$APP"
 variables
