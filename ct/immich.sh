@@ -54,11 +54,20 @@ EOF
     if [[ -f /etc/apt/preferences.d/immich ]]; then
       rm /etc/apt/preferences.d/immich
     fi
-    $STD apt-get update
+    $STD apt update
     msg_ok "Added Debian Testing repo"
     msg_info "Installing libmimalloc3"
-    $STD apt-get install -t testing --no-install-recommends libmimalloc3
+    $STD apt install -t testing --no-install-recommends libmimalloc3
     msg_ok "Installed libmimalloc3"
+  fi
+
+  if [[ ! -f /etc/apt/sources.list.d/mise.list ]]; then
+    msg_info "Installing Mise"
+    curl -fSs https://mise.jdx.dev/gpg-key.pub | tee /etc/apt/keyrings/mise-archive-keyring.pub 1>/dev/null
+    echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.pub arch=amd64] https://mise.jdx.dev/deb stable main" | tee /etc/apt/sources.list.d/mise.list
+    $STD apt update
+    $STD apt install -y mise
+    msg_ok "Installed Mise"
   fi
 
   STAGING_DIR=/opt/staging
@@ -93,7 +102,7 @@ EOF
     msg_ok "Image-processing libraries up to date"
   fi
 
-  RELEASE="2.2.2"
+  RELEASE="2.3.1"
   if check_for_gh_release "immich" "immich-app/immich" "${RELEASE}"; then
     msg_info "Stopping Services"
     systemctl stop immich-web
@@ -114,13 +123,14 @@ EOF
       msg_ok "Upgraded VectorChord to v${VCHORD_RELEASE}"
     fi
     if ! dpkg -l | grep -q ccache; then
-      $STD apt-get install -yqq ccache
+      $STD apt install -yqq ccache
     fi
 
     INSTALL_DIR="/opt/${APP}"
     UPLOAD_DIR="$(sed -n '/^IMMICH_MEDIA_LOCATION/s/[^=]*=//p' /opt/immich/.env)"
     SRC_DIR="${INSTALL_DIR}/source"
     APP_DIR="${INSTALL_DIR}/app"
+    PLUGIN_DIR="${APP_DIR}/corePlugin"
     ML_DIR="${APP_DIR}/machine-learning"
     GEO_DIR="${INSTALL_DIR}/geodata"
 
@@ -145,9 +155,7 @@ EOF
       rm -rf "${APP_DIR:?}"/*
     )
 
-    rm -rf "$SRC_DIR"
-
-    fetch_and_deploy_gh_release "immich" "immich-app/immich" "tarball" "v${RELEASE}" "$SRC_DIR"
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "immich" "immich-app/immich" "tarball" "v${RELEASE}" "$SRC_DIR"
 
     msg_info "Updating ${APP} web and microservices"
     cd "$SRC_DIR"/server
@@ -180,7 +188,18 @@ EOF
     $STD pnpm --filter @immich/cli --prod --no-optional deploy "$APP_DIR"/cli
     cd "$APP_DIR"
     mv "$INSTALL_DIR"/start.sh "$APP_DIR"/bin
-    msg_ok "Updated ${APP} web and microservices"
+
+    # plugins
+    cd "$SRC_DIR"
+    $STD mise trust --ignore ./mise.toml
+    $STD mise trust ./plugins/mise.toml
+    cd plugins
+    $STD mise install
+    $STD mise run build
+    mkdir -p "$PLUGIN_DIR"
+    cp -r ./dist "$PLUGIN_DIR"/dist
+    cp ./manifest.json "$PLUGIN_DIR"
+    msg_ok "Updated ${APP} server, web, cli and plugins"
 
     cd "$SRC_DIR"/machine-learning
     mkdir -p "$ML_DIR" && chown -R immich:immich "$ML_DIR"
@@ -213,12 +232,6 @@ EOF
 
     chown -R immich:immich "$INSTALL_DIR"
     msg_ok "Updated ${APP} to v${RELEASE}"
-
-    msg_info "Cleaning up"
-    $STD apt-get -y autoremove
-    $STD apt-get -y autoclean
-    $STD apt clean -y
-    msg_ok "Cleaned"
     systemctl restart immich-ml immich-web
   fi
   exit
@@ -272,7 +285,7 @@ function compile_libjxl() {
 function compile_libheif() {
   SOURCE=${SOURCE_DIR}/libheif
   if ! dpkg -l | grep -q libaom; then
-    $STD apt-get install -y libaom-dev
+    $STD apt install -y libaom-dev
     local update="required"
   fi
   : "${LIBHEIF_REVISION:=$(jq -cr '.revision' "$BASE_DIR"/server/sources/libheif.json)}"

@@ -54,11 +54,12 @@ msg_ok "Installed Openresty"
 
 NODE_VERSION="22" NODE_MODULE="yarn" setup_nodejs
 
-RELEASE=$(curl -fsSL https://api.github.com/repos/NginxProxyManager/nginx-proxy-manager/releases/latest |
-  grep "tag_name" |
-  awk '{print substr($2, 3, length($2)-4) }')
+# RELEASE=$(curl -fsSL https://api.github.com/repos/NginxProxyManager/nginx-proxy-manager/releases/latest |
+#  grep "tag_name" |
+#  awk '{print substr($2, 3, length($2)-4) }')
+RELEASE="2.13.4"
 
-fetch_and_deploy_gh_release "nginxproxymanager" "NginxProxyManager/nginx-proxy-manager"
+fetch_and_deploy_gh_release "nginxproxymanager" "NginxProxyManager/nginx-proxy-manager" "tarball" "v2.13.4"
 
 msg_info "Setting up Environment"
 ln -sf /usr/bin/python3 /usr/bin/python
@@ -167,14 +168,9 @@ sed -i 's/user npm/user root/g; s/^pid/#pid/g' /usr/local/openresty/nginx/conf/n
 sed -r -i 's/^([[:space:]]*)su npm npm/\1#su npm npm/g;' /etc/logrotate.d/nginx-proxy-manager
 systemctl enable -q --now openresty
 systemctl enable -q --now npm
+systemctl restart openresty
 msg_ok "Started Services"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-systemctl restart openresty
-$STD apt -y autoremove
-$STD apt -y autoclean
-$STD apt -y clean
-msg_ok "Cleaned"
+cleanup_lxc

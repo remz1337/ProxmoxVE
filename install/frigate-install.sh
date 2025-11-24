@@ -487,10 +487,4 @@ msg_ok "Created Services"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-apt-get -y autoremove
-apt-get -y autoclean
-msg_ok "Cleaned"
-
-echo -e "Don't forget to edit the Frigate config file (${GN}/config/config.yml${CL}) and reboot. Example configuration at https://docs.frigate.video/configuration/"
+cleanup_lxc

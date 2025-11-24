@@ -16,8 +16,7 @@ update_os
 setup_uv
 
 msg_info "Installing dependencies"
-$STD apt-get update
-$STD apt-get install --no-install-recommends -y \
+$STD apt install --no-install-recommends -y \
   git \
   redis \
   autoconf \
@@ -66,21 +65,16 @@ $STD apt-get install --no-install-recommends -y \
   libwebp-dev \
   libaom-dev \
   ccache
-curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg
-DPKG_ARCHITECTURE="$(dpkg --print-architecture)"
-export DPKG_ARCHITECTURE
-cat <<EOF >/etc/apt/sources.list.d/jellyfin.sources
-Types: deb
-URIs: https://repo.jellyfin.org/debian
-Suites: trixie
-Components: main
-Architectures: ${DPKG_ARCHITECTURE}
-Signed-By: /etc/apt/keyrings/jellyfin.gpg
-EOF
-$STD apt-get update
-$STD apt-get install -y jellyfin-ffmpeg7
-ln -s /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/bin/ffmpeg
-ln -s /usr/lib/jellyfin-ffmpeg/ffprobe /usr/bin/ffprobe
+
+setup_deb822_repo \
+  "jellyfin" \
+  "https://repo.jellyfin.org/jellyfin_team.gpg.key" \
+  "https://repo.jellyfin.org/debian" \
+  "$(get_os_info codename)"
+$STD apt install -y jellyfin-ffmpeg7
+ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/bin/ffmpeg
+ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/bin/ffprobe
+
 if [[ "$CTTYPE" == "0" && -d /dev/dri ]]; then
   chgrp video /dev/dri
   chmod 755 /dev/dri
@@ -90,11 +84,18 @@ if [[ "$CTTYPE" == "0" && -d /dev/dri ]]; then
 fi
 msg_ok "Dependencies Installed"
 
+msg_info "Installing Mise"
+curl -fSs https://mise.jdx.dev/gpg-key.pub | tee /etc/apt/keyrings/mise-archive-keyring.pub 1>/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.pub arch=amd64] https://mise.jdx.dev/deb stable main" | tee /etc/apt/sources.list.d/mise.list
+$STD apt update
+$STD apt install -y mise
+msg_ok "Installed Mise"
+
 read -r -p "${TAB3}Install OpenVINO dependencies for Intel HW-accelerated machine-learning? y/N " prompt
 if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   msg_info "Installing OpenVINO dependencies"
   touch ~/.openvino
-  $STD apt-get install -y --no-install-recommends patchelf
+  $STD apt install -y --no-install-recommends patchelf
   tmp_dir=$(mktemp -d)
   $STD pushd "$tmp_dir"
   curl -fsSLO https://github.com/intel/intel-graphics-compiler/releases/download/igc-1.0.17384.11/intel-igc-core_1.0.17384.11_amd64.deb
@@ -120,10 +121,10 @@ Package: *
 Pin:release a=testing
 Pin-Priority: 450
 EOF
-$STD apt-get update
+$STD apt update
 msg_ok "Configured Debian Testing repo"
 msg_info "Installing libmimalloc3"
-$STD apt-get install -t testing --no-install-recommends -yqq libmimalloc3
+$STD apt install -t testing --no-install-recommends -yqq libmimalloc3
 msg_ok "Installed libmimalloc3"
 
 PNPM_VERSION="$(curl -fsSL "https://raw.githubusercontent.com/immich-app/immich/refs/heads/main/package.json" | jq -r '.packageManager | split("@")[1]')"
@@ -283,12 +284,13 @@ INSTALL_DIR="/opt/${APPLICATION}"
 UPLOAD_DIR="${INSTALL_DIR}/upload"
 SRC_DIR="${INSTALL_DIR}/source"
 APP_DIR="${INSTALL_DIR}/app"
+PLUGIN_DIR="${APP_DIR}/corePlugin"
 ML_DIR="${APP_DIR}/machine-learning"
 GEO_DIR="${INSTALL_DIR}/geodata"
 mkdir -p "$INSTALL_DIR"
 mkdir -p {"${APP_DIR}","${UPLOAD_DIR}","${GEO_DIR}","${INSTALL_DIR}"/cache}
 
-fetch_and_deploy_gh_release "immich" "immich-app/immich" "tarball" "v2.2.2" "$SRC_DIR"
+fetch_and_deploy_gh_release "immich" "immich-app/immich" "tarball" "v2.3.1" "$SRC_DIR"
 
 msg_info "Installing ${APPLICATION} (patience)"
 
@@ -320,7 +322,18 @@ cp LICENSE "$APP_DIR"
 $STD pnpm --filter @immich/sdk --filter @immich/cli --frozen-lockfile install
 $STD pnpm --filter @immich/sdk --filter @immich/cli build
 $STD pnpm --filter @immich/cli --prod --no-optional deploy "$APP_DIR"/cli
-msg_ok "Installed Immich Server and Web Components"
+
+# plugins
+cd "$SRC_DIR"
+$STD mise trust --ignore ./mise.toml
+$STD mise trust ./plugins/mise.toml
+cd plugins
+$STD mise install
+$STD mise run build
+mkdir -p "$PLUGIN_DIR"
+cp -r ./dist "$PLUGIN_DIR"/dist
+cp ./manifest.json "$PLUGIN_DIR"
+msg_ok "Installed Immich Server, Web and Plugin Components"
 
 cd "$SRC_DIR"/machine-learning
 $STD useradd -U -s /usr/sbin/nologin -r -M -d "$INSTALL_DIR" immich
@@ -384,6 +397,10 @@ DB_VECTOR_EXTENSION=vectorchord
 REDIS_HOSTNAME=127.0.0.1
 IMMICH_MACHINE_LEARNING_URL=http://127.0.0.1:3003
 MACHINE_LEARNING_CACHE_FOLDER=${INSTALL_DIR}/cache
+## - For OpenVINO only - uncomment below to increase
+## - inference speed while reducing accuracy
+## - Default is FP32
+# MACHINE_LEARNING_OPENVINO_PRECISION=FP16
 
 IMMICH_MEDIA_LOCATION=${UPLOAD_DIR}
 EOF
@@ -460,9 +477,4 @@ msg_ok "Modified user, created env file, scripts and services"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
-$STD apt clean -y
-msg_ok "Cleaned"
+cleanup_lxc

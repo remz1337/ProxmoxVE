@@ -27,6 +27,27 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
+
+  # Check for old data structure and prompt migration
+  if [[ -f /opt/paperless/paperless.conf ]]; then
+    local OLD_DIRS=()
+    [[ -d /opt/paperless/consume ]] && OLD_DIRS+=("consume")
+    [[ -d /opt/paperless/data ]] && OLD_DIRS+=("data")
+    [[ -d /opt/paperless/media ]] && OLD_DIRS+=("media")
+
+    if [[ ${#OLD_DIRS[@]} -gt 0 ]]; then
+      msg_error "Old data structure detected in /opt/paperless/"
+      msg_custom "📂" "Found directories: ${OLD_DIRS[*]}"
+      echo -e ""
+      msg_custom "🔄" "Migration required to new data structure (/opt/paperless_data/)"
+      msg_custom "📖" "Please follow the migration guide:"
+      echo -e "${TAB}${GATEWAY}${BGN}https://github.com/community-scripts/ProxmoxVE/discussions/9223${CL}"
+      echo -e ""
+      msg_custom "⚠️" "Update aborted. Please migrate your data first."
+      exit 1
+    fi
+  fi
+
   if check_for_gh_release "paperless" "paperless-ngx/paperless-ngx"; then
     msg_info "Stopping all Paperless-ngx Services"
     systemctl stop paperless-consumer paperless-webserver paperless-scheduler paperless-task-queue
@@ -34,25 +55,33 @@ function update_script() {
 
     if grep -q "uv run" /etc/systemd/system/paperless-webserver.service; then
 
-      msg_info "Backing up data"
-      mkdir -p /opt/paperless/backup
-      cp -r /opt/paperless/data /opt/paperless/backup/
-      cp -r /opt/paperless/media /opt/paperless/backup/
-      cp -r /opt/paperless/paperless.conf /opt/paperless/backup/
-      msg_ok "Backup completed"
+      msg_info "Backing up configuration"
+      local BACKUP_DIR="/opt/paperless_backup_$$"
+      mkdir -p "$BACKUP_DIR"
+      [[ -f /opt/paperless/paperless.conf ]] && cp /opt/paperless/paperless.conf "$BACKUP_DIR/"
+      msg_ok "Backup completed to $BACKUP_DIR"
 
       PYTHON_VERSION="3.13" setup_uv
-      fetch_and_deploy_gh_release "paperless" "paperless-ngx/paperless-ngx" "prebuild" "latest" "/opt/paperless" "paperless*tar.xz"
-      fetch_and_deploy_gh_release "jbig2enc" "ie13/jbig2enc" "tarball" "latest" "/opt/jbig2enc"
-      setup_gs
+      CLEAN_INSTALL=1 fetch_and_deploy_gh_release "paperless" "paperless-ngx/paperless-ngx" "prebuild" "latest" "/opt/paperless" "paperless*tar.xz"
+      CLEAN_INSTALL=1 fetch_and_deploy_gh_release "jbig2enc" "ie13/jbig2enc" "tarball" "latest" "/opt/jbig2enc"
+
+      . /etc/os-release
+      if [ "$VERSION_CODENAME" = "bookworm" ]; then
+        setup_gs
+      else
+        $STD apt install -y ghostscript
+      fi
 
       msg_info "Updating Paperless-ngx"
-      cp -r /opt/paperless/backup/* /opt/paperless/
+      cp -r "$BACKUP_DIR"/* /opt/paperless/
       cd /opt/paperless
       $STD uv sync --all-extras
       cd /opt/paperless/src
       $STD uv run -- python manage.py migrate
       msg_ok "Updated Paperless-ngx"
+
+      rm -rf "$BACKUP_DIR"
+
     else
       msg_warn "You are about to migrate your Paperless-ngx installation to uv!"
       msg_custom "🔒" "It is strongly recommended to take a Proxmox snapshot first:"
@@ -69,8 +98,13 @@ function update_script() {
       rm -rf /opt/paperless/venv
       find /opt/paperless -name "__pycache__" -type d -exec rm -rf {} +
 
+      msg_info "Backing up configuration"
+      local BACKUP_DIR="/opt/paperless_backup_$$"
+      mkdir -p "$BACKUP_DIR"
+      [[ -f /opt/paperless/paperless.conf ]] && cp /opt/paperless/paperless.conf "$BACKUP_DIR/"
+      msg_ok "Backup completed to $BACKUP_DIR"
+
       declare -A PATCHES=(
-        ["paperless-consumer.service"]="ExecStart=uv run -- python manage.py document_consumer"
         ["paperless-scheduler.service"]="ExecStart=uv run -- celery --app paperless beat --loglevel INFO"
         ["paperless-task-queue.service"]="ExecStart=uv run -- celery --app paperless worker --loglevel INFO"
         ["paperless-webserver.service"]="ExecStart=uv run -- granian --interface asgi --ws \"paperless.asgi:application\""
@@ -95,25 +129,38 @@ function update_script() {
       done
 
       $STD systemctl daemon-reload
-      msg_info "Backing up data"
-      mkdir -p /opt/paperless/backup
-      cp -r /opt/paperless/data /opt/paperless/backup/
-      cp -r /opt/paperless/media /opt/paperless/backup/
-      cp -r /opt/paperless/paperless.conf /opt/paperless/backup/
-      msg_ok "Backup completed"
+      msg_info "Backing up configuration"
+      BACKUP_DIR="/opt/paperless_backup_$$"
+      mkdir -p "$BACKUP_DIR"
+      [[ -f /opt/paperless/paperless.conf ]] && cp /opt/paperless/paperless.conf "$BACKUP_DIR/"
+      msg_ok "Backup completed to $BACKUP_DIR"
 
       PYTHON_VERSION="3.13" setup_uv
-      fetch_and_deploy_gh_release "paperless" "paperless-ngx/paperless-ngx" "prebuild" "latest" "/opt/paperless" "paperless*tar.xz"
-      fetch_and_deploy_gh_release "jbig2enc" "ie13/jbig2enc" "tarball" "latest" "/opt/jbig2enc"
-      setup_gs
+      CLEAN_INSTALL=1 fetch_and_deploy_gh_release "paperless" "paperless-ngx/paperless-ngx" "prebuild" "latest" "/opt/paperless" "paperless*tar.xz"
+      CLEAN_INSTALL=1 fetch_and_deploy_gh_release "jbig2enc" "ie13/jbig2enc" "tarball" "latest" "/opt/jbig2enc"
+
+      . /etc/os-release
+      if [ "$VERSION_CODENAME" = "bookworm" ]; then
+        setup_gs
+      else
+        msg_info "Installing Ghostscript"
+        $STD apt install -y ghostscript
+        msg_ok "Installed Ghostscript"
+      fi
 
       msg_info "Updating Paperless-ngx"
-      cp -r /opt/paperless/backup/* /opt/paperless/
+      cp -r "$BACKUP_DIR"/* /opt/paperless/
       cd /opt/paperless
       $STD uv sync --all-extras
       cd /opt/paperless/src
       $STD uv run -- python manage.py migrate
       msg_ok "Paperless-ngx migration and update completed"
+
+      rm -rf "$BACKUP_DIR"
+      if [[ -d /opt/paperless/backup ]]; then
+        rm -rf /opt/paperless/backup
+        msg_ok "Removed old backup directory"
+      fi
     fi
 
     msg_info "Starting all Paperless-ngx Services"

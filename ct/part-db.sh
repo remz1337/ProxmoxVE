@@ -8,7 +8,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 APP="Part-DB"
 var_tags="${var_tags:-inventory;parts}"
 var_cpu="${var_cpu:-2}"
-var_ram="${var_ram:-1024}"
+var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
@@ -52,17 +52,14 @@ function update_script() {
     $STD php bin/console cache:clear
     $STD php bin/console doctrine:migrations:migrate -n
     chown -R www-data:www-data /opt/partdb
+    rm -r "/opt/v${RELEASE}.zip"
+    rm -r /opt/partdb-backup
     echo "${RELEASE}" >/opt/${APP}_version.txt
     msg_ok "Updated $APP to v${RELEASE}"
 
     msg_info "Starting Service"
     systemctl start apache2
     msg_ok "Started Service"
-
-    msg_info "Cleaning up"
-    rm -r "/opt/v${RELEASE}.zip"
-    rm -r /opt/partdb-backup
-    msg_ok "Cleaned"
     msg_ok "Updated successfully!"
   else
     msg_ok "No update required. ${APP} is already at v${RELEASE}"

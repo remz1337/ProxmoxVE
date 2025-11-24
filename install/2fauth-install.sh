@@ -53,7 +53,7 @@ sed -i -e "s|^APP_URL=.*|APP_URL=http://$IPADDRESS|" \
         -e "s|^DB_PASSWORD=$|DB_PASSWORD=$DB_PASS|" .env
 export COMPOSER_ALLOW_SUPERUSER=1
 $STD composer update --no-plugins --no-scripts
-$STD composer install --no-dev --prefer-source --no-plugins --no-scripts
+$STD composer install --no-dev --prefer-dist --no-plugins --no-scripts
 $STD php artisan key:generate --force
 $STD php artisan migrate:refresh
 $STD php artisan passport:install -q -n
@@ -97,9 +97,4 @@ msg_ok "Configured Service"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-$STD apt -y autoremove
-$STD apt -y autoclean
-$STD apt -y clean
-msg_ok "Cleaned"
+cleanup_lxc

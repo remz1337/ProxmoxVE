@@ -71,7 +71,11 @@ export TURBO_CACHE=1
 export NEXT_TELEMETRY_DISABLED=1
 export CYPRESS_INSTALL_BINARY=0
 export NODE_OPTIONS="--max-old-space-size=4096"
+$STD turbo prune --scope=@documenso/remix --docker
+cd out
+cp -r json/* .
 $STD npm ci
+cp -r full/* .
 $STD turbo run build --filter=@documenso/remix
 $STD npm run prisma:migrate-deploy
 echo "${RELEASE}" >"/opt/${APPLICATION}_version.txt"
@@ -99,13 +103,9 @@ EnvironmentFile=/opt/documenso/.env
 WantedBy=multi-user.target
 EOF
 systemctl enable -q --now documenso
+$STD turbo daemon stop
 msg_ok "Created Service"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-$STD turbo daemon stop
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
-msg_ok "Cleaned"
+cleanup_lxc

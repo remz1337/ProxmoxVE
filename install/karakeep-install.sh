@@ -14,7 +14,7 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y \
+$STD apt install -y \
   build-essential \
   ca-certificates \
   chromium \
@@ -64,7 +64,7 @@ export DATA_DIR=/opt/karakeep_data
 karakeep_SECRET=$(openssl rand -base64 36 | cut -c1-24)
 mkdir -p /etc/karakeep
 cat <<EOF >/etc/karakeep/karakeep.env
-SERVER_VERSION="$(cat ~/.karakeep)"
+SERVER_VERSION="$(sed 's/^v//' ~/.karakeep)"
 NEXTAUTH_SECRET="$karakeep_SECRET"
 NEXTAUTH_URL="http://localhost:3000"
 DATA_DIR=${DATA_DIR}
@@ -173,8 +173,4 @@ msg_ok "Created Services"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-$STD apt-get autoremove -y
-$STD apt-get autoclean -y
-msg_ok "Cleaned"
+cleanup_lxc

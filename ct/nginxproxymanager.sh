@@ -28,6 +28,12 @@ function update_script() {
     exit
   fi
 
+  if [[ $(grep -E '^VERSION_ID=' /etc/os-release) == *"12"* ]]; then
+    msg_error "Wrong Debian version detected!"
+    msg_error "Please create a snapshot first. You must upgrade your LXC to Debian Trixie before updating. Visit: https://github.com/community-scripts/ProxmoxVE/discussions/7489"
+    exit
+  fi
+
   if command -v node &>/dev/null; then
     CURRENT_NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
     if [[ "$CURRENT_NODE_VERSION" != "22" ]]; then
@@ -43,12 +49,13 @@ function update_script() {
 
   NODE_VERSION="22" NODE_MODULE="yarn" setup_nodejs
 
-  RELEASE=$(curl -fsSL https://api.github.com/repos/NginxProxyManager/nginx-proxy-manager/releases/latest |
-    grep "tag_name" |
-    awk '{print substr($2, 3, length($2)-4) }')
+  #RELEASE=$(curl -fsSL https://api.github.com/repos/NginxProxyManager/nginx-proxy-manager/releases/latest |
+    #grep "tag_name" |
+    #awk '{print substr($2, 3, length($2)-4) }')
 
-  fetch_and_deploy_gh_release "nginxproxymanager" "NginxProxyManager/nginx-proxy-manager"
-
+  RELEASE="2.13.4"
+  CLEAN_INSTALL=1 fetch_and_deploy_gh_release "nginxproxymanager" "NginxProxyManager/nginx-proxy-manager" "tarball" "v${RELEASE}" "/opt/nginxproxymanager"
+  
   msg_info "Stopping Services"
   systemctl stop openresty
   systemctl stop npm
@@ -144,7 +151,7 @@ EOF
   cd /app
   $STD yarn install --network-timeout 600000
   msg_ok "Initialized Backend"
-  
+
   msg_info "Updating Certbot"
   [ -f /etc/apt/trusted.gpg.d/openresty-archive-keyring.gpg ] && rm -f /etc/apt/trusted.gpg.d/openresty-archive-keyring.gpg
   [ -f /etc/apt/sources.list.d/openresty.list ] && rm -f /etc/apt/sources.list.d/openresty.list

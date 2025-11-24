@@ -15,10 +15,10 @@ update_os
 
 msg_info "Installing Dependencies"
 $STD apt install -y \
-    build-essential \
-    openssl \
-    ca-certificates \
-    redis-server
+  build-essential \
+  openssl \
+  ca-certificates \
+  redis-server
 msg_ok "Installed Dependencies"
 
 PG_VERSION="17" setup_postgresql
@@ -40,13 +40,13 @@ $STD sudo -u postgres psql -d $DB_NAME -c "GRANT CREATE ON SCHEMA public TO $DB_
 $STD sudo -u postgres psql -d $DB_NAME -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;"
 $STD sudo -u postgres psql -d $DB_NAME -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;"
 {
-    echo "Ghostfolio Credentials"
-    echo "Database User: $DB_USER"
-    echo "Database Password: $DB_PASS"
-    echo "Database Name: $DB_NAME"
-    echo "Redis Password: $REDIS_PASS"
-    echo "Access Token Salt: $ACCESS_TOKEN_SALT"
-    echo "JWT Secret Key: $JWT_SECRET_KEY"
+  echo "Ghostfolio Credentials"
+  echo "Database User: $DB_USER"
+  echo "Database Password: $DB_PASS"
+  echo "Database Name: $DB_NAME"
+  echo "Redis Password: $REDIS_PASS"
+  echo "Access Token Salt: $ACCESS_TOKEN_SALT"
+  echo "JWT Secret Key: $JWT_SECRET_KEY"
 } >>~/ghostfolio.creds
 msg_ok "Set up Database"
 
@@ -60,11 +60,10 @@ $STD npm ci
 $STD npm run build:production
 msg_ok "Built Ghostfolio"
 
-msg_ok "Optional CoinGecko API Configuration"
-echo
-echo -e "${YW}CoinGecko API keys are optional but provide better cryptocurrency data.${CL}"
-echo -e "${YW}You can skip this and add them later by editing /opt/ghostfolio/.env${CL}"
-echo
+echo -e ""
+msg_custom "🪙" "$YW" "CoinGecko API keys are optional but provide better cryptocurrency data."
+msg_custom "🪙" "$YW" "You can skip this and add them later by editing /opt/ghostfolio/.env"
+echo -e ""
 read -rp "${TAB3}CoinGecko Demo API key (press Enter to skip): " COINGECKO_DEMO_KEY
 read -rp "${TAB3}CoinGecko Pro API key (press Enter to skip): " COINGECKO_PRO_KEY
 
@@ -79,14 +78,15 @@ JWT_SECRET_KEY=$JWT_SECRET_KEY
 NODE_ENV=production
 PORT=3333
 HOST=0.0.0.0
+TZ=Etc/UTC
 EOF
 
 if [[ -n "${COINGECKO_DEMO_KEY:-}" ]]; then
-    echo "API_KEY_COINGECKO_DEMO=$COINGECKO_DEMO_KEY" >>/opt/ghostfolio/.env
+  echo "API_KEY_COINGECKO_DEMO=$COINGECKO_DEMO_KEY" >>/opt/ghostfolio/.env
 fi
 
 if [[ -n "${COINGECKO_PRO_KEY:-}" ]]; then
-    echo "API_KEY_COINGECKO_PRO=$COINGECKO_PRO_KEY" >>/opt/ghostfolio/.env
+  echo "API_KEY_COINGECKO_PRO=$COINGECKO_PRO_KEY" >>/opt/ghostfolio/.env
 fi
 msg_ok "Set up Environment"
 
@@ -122,10 +122,4 @@ msg_ok "Created Service"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-$STD npm cache clean --force
-$STD apt -y autoremove
-$STD apt -y autoclean
-$STD apt -y clean
-msg_ok "Cleaned"
+cleanup_lxc

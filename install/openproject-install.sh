@@ -66,7 +66,6 @@ server/hostname ${IP_ADDR}
 server/server_path_prefix /openproject
 server/ssl no
 server/variant apache2
-server/server_path_prefix
 repositories/api-key ${API_KEY}
 repositories/svn-install skip
 repositories/git-install install
@@ -82,9 +81,4 @@ msg_ok "Configured OpenProject"
 
 motd_ssh
 customize
-
-msg_info "Cleaning up"
-$STD apt -y autoremove
-$STD apt -y autoclean
-$STD apt -y clean
-msg_ok "Cleaned"
+cleanup_lxc
