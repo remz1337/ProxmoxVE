@@ -15,15 +15,31 @@ update_os
 
 msg_info "Installing Dependencies (Patience)"
 #$STD apt-get install -y {git,python3.13,python3.13-dev,python3.13-venv,python3-pip,build-essential,libpq5,libz-dev,libssl-dev,postgresql-client}
+$STD apt install -y python3-pip
 msg_ok "Installed Dependencies"
 
+# pip install uv
+# uv venv --python 3.12
+PYTHON_VERSION="3.12" setup_uv
 
-msg_info "Downloading browser-use source"
-fetch_and_deploy_gh_release "browser-use" "browser-use/browser-use" "tarball" "latest" "/opt/browser-use"
-msg_ok "Downloaded browser-use source"
+# msg_info "Downloading browser-use source"
+# fetch_and_deploy_gh_release "browser-use" "browser-use/browser-use" "tarball" "latest" "/opt/browser-use"
+# msg_ok "Downloaded browser-use source"
+
+mkdir -p /etc/browser-use
+cd /etc/browser-use
+wget -qO .env https://raw.githubusercontent.com/browser-use/browser-use/refs/heads/main/.env.example
+
 
 msg_info "Installing browser-use"
-###
+cd /opt/browser-use
+$STD uv venv .venv
+#uv venv --python 3.12
+$STD source .venv/bin/activate
+$STD uv pip install --upgrade pip
+$STD uv pip install --no-cache-dir -r requirements.txt
+uv pip install browser-use
+uvx browser-use install
 msg_ok "Installed browser-use"
 
 motd_ssh

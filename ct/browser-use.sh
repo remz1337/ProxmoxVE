@@ -24,7 +24,7 @@ function update_script() {
     header_info
     check_container_storage
     check_container_resources
-    if [[ ! -f /etc/systemd/system/autogpt.service ]]; then
+    if [[ ! -f /etc/systemd/system/browser-use.service ]]; then
         msg_error "No ${APP} Installation Found!"
         exit
     fi
