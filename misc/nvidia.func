@@ -35,7 +35,7 @@ check_nvidia_drivers_version() {
     exit_script
   fi
 
-  local NVD_VER NVD_MAJOR
+  #local NVD_VER NVD_MAJOR
   NVD_VER=$(nvidia-smi | sed -n 's/.*Driver Version: \([0-9.]*\).*/\1/p')
   NVD_MAJOR=${NVD_VER%%.*}
 
