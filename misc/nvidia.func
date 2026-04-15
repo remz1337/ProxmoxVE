@@ -58,9 +58,9 @@ check_cuda_version() {
     exit_script
   fi
 
-  local NVD_VER_CUDA NVD_MAJOR_CUDA
+  #local NVD_VER_CUDA NVD_MAJOR_CUDA
   #NVD_VER_CUDA=$(nvidia-smi --query-gpu=driver_version,compute_cap --format=csv,noheader | head -n1)
-  NVD_VER=$(nvidia-smi | sed -n 's/.*CUDA Version: \([0-9.]*\).*/\1/p')
+  NVD_VER_CUDA=$(nvidia-smi | sed -n 's/.*CUDA Version: \([0-9.]*\).*/\1/p')
   NVD_MAJOR_CUDA=${NVD_VER_CUDA%%.*}
 
   if [ "${NVD_MAJOR_CUDA:-0}" -lt 11 ]; then
