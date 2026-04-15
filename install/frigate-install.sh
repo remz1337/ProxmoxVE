@@ -402,7 +402,6 @@ model:
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 EOF
 else
-  msg_info "Configuring CPU Object Detection Model"
   cat <<EOF >>/config/config.yml
 ffmpeg:
   hwaccel_args: auto

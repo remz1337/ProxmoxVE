@@ -4928,6 +4928,9 @@ _setup_nvidia_gpu() {
 
   msg_info "Host NVIDIA driver version: ${nvidia_host_version}"
 
+  # Install Vulkan
+  $STD apt-get -y install libglvnd-dev libvulkan1 pkg-config 2>/dev/null || true
+
   if [[ "$os_id" == "debian" ]]; then
     # Enable non-free components
     if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then
