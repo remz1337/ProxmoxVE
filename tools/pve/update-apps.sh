@@ -4,7 +4,7 @@
 # Author: BvdBerg01 | Co-Author: remz1337
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/refs/heads/remz/misc/core.func)
+source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
 source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "update-apps" "pve"
 
@@ -44,7 +44,7 @@ var_auto_reboot="${var_auto_reboot:-}"
 
 # var_tags: Optionally override the tags used for auto-detection
 #   Options: "community-script|proxmox-helper-scripts" (default)
-var_tags="${var_tags:-community-script|proxmox-helper-scripts}"
+var_tags="${var_tags:-community-script|proxmox-helper-scripts|remz1337}"
 # =============================================================================
 # JSON CONFIG EXPORT
 # Run with --export-config to output current configuration as JSON
@@ -188,7 +188,7 @@ fi
 
 menu_items=()
 FORMAT="%-10s %-15s %-10s"
-TAGS="${var_tags:-community-script|proxmox-helper-scripts}"
+TAGS="${var_tags:-community-script|proxmox-helper-scripts|remz1337}"
 
 while read -r container; do
   container_id=$(echo $container | awk '{print $1}')
@@ -241,7 +241,7 @@ if [[ -n "$var_container" ]]; then
   esac
 
   if [[ -z "$CHOICE" ]]; then
-    msg_error "No containers matched the selection criteria: $var_container ${var_tags:-community-script|proxmox-helper-scripts}"
+    msg_error "No containers matched the selection criteria: $var_container ${var_tags:-community-script|proxmox-helper-scripts|remz1337}"
     exit 234
   fi
   msg_ok "Selected containers: $CHOICE"
