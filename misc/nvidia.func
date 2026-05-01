@@ -19,11 +19,19 @@ exit_script() {
 # NVIDIA checks
 ############################################
 check_nvidia_drivers_installed() {
-  if ! command -v nvidia-smi &> /dev/null; then
-    echo 0
-  else
+  # DKMS or kernel module exists
+  if dkms status 2>/dev/null | grep -q nvidia; then
     echo 1
+    return
   fi
+
+  # kernel module exists on disk
+  if modinfo nvidia &>/dev/null; then
+    echo 1
+    return
+  fi
+
+  echo 0
 }
 
 check_nvidia_drivers_version() {
