@@ -42,6 +42,11 @@ function install_nvidia_drivers_lxc() {
   pct exec "$container" -- bash -c "rm /tmp/$EXE_FILE"
 }
 
+function delete_driver_file() {
+  if ls NVIDIA-Linux-x86_64-*.run 1> /dev/null 2>&1; then
+    rm -f NVIDIA-Linux-x86_64-*.run
+  fi
+}
 
 header_info
 echo "Loading..."
@@ -62,7 +67,8 @@ fi
 apt install -y dkms pve-headers wget
 
 #Clean up old files
-rm NVIDIA-Linux-x86_64-*.run
+#rm NVIDIA-Linux-x86_64-*.run
+delete_driver_file
 
 #DRIVER_VERSION="550.67"
 #LATEST_VERSION=$(curl -s https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt)
@@ -174,7 +180,8 @@ done
 wait
 
 #Clean up install file to avoid backing it up
-rm NVIDIA-Linux-x86_64-*.run
+#rm NVIDIA-Linux-x86_64-*.run
+delete_driver_file
 
 header_info
 echo -e "${GN} Finished, Nvidia drivers installed.${CL}\n"
