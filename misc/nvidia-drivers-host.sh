@@ -21,6 +21,7 @@ BL=$(echo "\033[36m")
 RD=$(echo "\033[01;31m")
 CM='\xE2\x9C\x94\033'
 GN=$(echo "\033[1;92m")
+YW=$(echo "\033[33m")
 CL=$(echo "\033[m")
 
 function install_nvidia_drivers_lxc() {
@@ -35,7 +36,7 @@ function install_nvidia_drivers_lxc() {
   else
     echo -e "${BL}[Info]${GN} Installing Nvidia to ${BL}$container${CL} : ${GN}$name${CL} - ${YW}[No disk info for ${os}]${CL}\n"
   fi
-  
+
   pct exec "$container" -- bash -c "apt install -yq libglvnd-dev libvulkan1 pkg-config"
   pct push "$container" $EXE_FILE /tmp/$EXE_FILE
   pct exec "$container" -- bash -c "bash /tmp/$EXE_FILE -q -a -n -s --no-kernel-module"
@@ -61,6 +62,11 @@ nvidia_installed=$(check_nvidia_drivers_installed)
 if [ $nvidia_installed == 1 ]; then
   check_nvidia_drivers_version
   echo -e "Nvidia drivers detected. Version ${NVD_VER}"
+  NVD_MAJOR=${NVD_VER%%.*}
+  NVD_MINOR=$(echo ${NVD_VER} | cut -d'.' -f2)
+else
+  NVD_MAJOR=0
+  NVD_MINOR=0
 fi
 
 #Make sure host as appropriate dependencies
@@ -73,7 +79,7 @@ delete_driver_file
 #DRIVER_VERSION="550.67"
 #LATEST_VERSION=$(curl -s https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt)
 #LATEST_VERSION=$(curl -s "https://www.nvidia.com/en-us/drivers/unix/" | grep -oP -m1 "Linux x86_64.*Latest Production Branch Version:.*?\/a>" | sed 's|.*">||g' | sed 's|<.*||g')
-LATEST_VERSION=$(curl -fsSL https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt | awk '{print $1}')
+INSTALL_VERSION=$(curl -fsSL https://download.nvidia.com/XFree86/Linux-x86_64/latest.txt | awk '{print $1}')
 #INSTALL_VERSION=${LATEST_VERSION% *}
 #INSTALL_VERSION="${LATEST_VERSION#"${LATEST_VERSION%%[![:space:]]*}"}"
 #INSTALL_VERSION="${INSTALL_VERSION%"${INSTALL_VERSION##*[![:space:]]}"}"
@@ -81,8 +87,7 @@ LATEST_VERSION=$(curl -fsSL https://download.nvidia.com/XFree86/Linux-x86_64/lat
 
 echo -e "Nvidia latest drivers version: ${INSTALL_VERSION}"
 
-#NVD_MAJOR=${NVD_VER%%.*}
-NVD_MINOR=$(echo ${NVD_VER} | cut -d'.' -f2)
+
 INSTALL_MAJOR=${INSTALL_VERSION%%.*}
 INSTALL_MINOR=$(echo ${INSTALL_VERSION} | cut -d'.' -f2)
 
@@ -104,7 +109,7 @@ if INPUT=$(whiptail --backtitle "Proxmox VE Helper Scripts" --inputbox "Enter Nv
   if [ ! -z "$INPUT" ]; then
     INSTALL_VERSION=$(echo ${INPUT,,} | tr -d ' ')
   fi
-  echo -e "${DGN}Installing Driver Version: ${BGN}$INSTALL_VERSION${CL}"
+  echo -e "Installing Driver Version: ${BL}$INSTALL_VERSION${CL}"
 else
   exit
 fi
