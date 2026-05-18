@@ -305,6 +305,7 @@ Here's a shortlist of scripts/apps that did not get merged upstream (tteck) for 
 - <a href="https://github.com/remz1337/SAQLottery">SAQLottery</a>
 - <a href="https://gitea.com/gitea/act">Gitea Act Runner (CI/CD)</a>
 - <a href="https://github.com/stalwartlabs/stalwart">Stalwart</a>
+- <a href="https://github.com/getnora-io/nora">Nora</a>
 - Nvidia drivers support (detection/installation)
 - Windows 11 Gaming VM
 
