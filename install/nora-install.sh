@@ -53,15 +53,15 @@ Environment=NORA_STORAGE_PATH=/var/lib/nora
 #EnvironmentFile=-/etc/nora/nora.env
 
 # Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/nora
-PrivateTmp=true
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
+# NoNewPrivileges=true
+# ProtectSystem=strict
+# ProtectHome=true
+# ReadWritePaths=/var/lib/nora
+# PrivateTmp=true
+# PrivateDevices=true
+# ProtectKernelTunables=true
+# ProtectKernelModules=true
+# ProtectControlGroups=true
 
 # Resource limits
 #LimitNOFILE=65535
