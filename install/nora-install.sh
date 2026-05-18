@@ -14,7 +14,7 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Nora ${RELEASE}"
+msg_info "Installing Nora"
 # RELEASE=$(curl -s https://api.github.com/repos/getnora-io/nora/releases/latest |
   # grep "tag_name" |
   # awk '{print substr($2, 2, length($2)-3) }')
@@ -25,7 +25,7 @@ msg_info "Installing Nora ${RELEASE}"
 # chmod +x nora-linux-amd64
 # mv nora-linux-amd64 /usr/local/bin/nora
 fetch_and_deploy_gh_release "nora" "getnora-io/nora" "singlefile" "latest" "/usr/local/bin/nora" "nora-linux-amd64"
-msg_ok "Installed Nora ${RELEASE}"
+msg_ok "Installed Nora"
 
 msg_info "Creating Services"
 cat <<EOF >/etc/systemd/system/nora.service
