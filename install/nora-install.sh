@@ -40,7 +40,7 @@ Type=simple
 #User=nora
 #Group=nora
 ExecStart=/usr/local/bin/nora serve
-ExecReload=/bin/kill -HUP $MAINPID
+#ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
 
@@ -65,8 +65,8 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 
 # Resource limits
-LimitNOFILE=65535
-LimitNPROC=4096
+#LimitNOFILE=65535
+#LimitNPROC=4096
 
 [Install]
 WantedBy=multi-user.target
