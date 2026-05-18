@@ -24,7 +24,7 @@ msg_info "Installing Nora"
 # curl -LO https://github.com/getnora-io/nora/releases/download/${RELEASE}/nora-linux-amd64
 # chmod +x nora-linux-amd64
 # mv nora-linux-amd64 /usr/local/bin/nora
-fetch_and_deploy_gh_release "nora" "getnora-io/nora" "singlefile" "latest" "/usr/local/bin/nora" "nora-linux-amd64"
+fetch_and_deploy_gh_release "nora" "getnora-io/nora" "singlefile" "latest" "/usr/local/bin" "nora-linux-amd64"
 msg_ok "Installed Nora"
 
 msg_info "Creating Services"
