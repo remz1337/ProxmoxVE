@@ -40,7 +40,6 @@ Type=simple
 #User=nora
 #Group=nora
 ExecStart=/usr/local/bin/nora serve
-#ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
 
