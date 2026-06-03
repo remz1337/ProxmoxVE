@@ -85,6 +85,7 @@ function update_script() {
 
     msg_ok "Updated successfully!"
   fi
+}
 
 start
 build_container
