@@ -3,7 +3,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 # Copyright (c) 2021-2026 remz1337
 # Author: remz1337
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
-# Source: https://gitea.com/gitea/act_runner/
+# Source: https://gitea.com/gitea/runner/
 
 APP="Gitea-Runner"
 var_tags="${var_tags:-git}"
@@ -73,18 +73,19 @@ function update_script() {
 
   if check_for_gitea_release; then
     msg_info "Stopping service"
-    systemctl stop act_runner
+    systemctl stop gitea-runner
     msg_ok "Service stopped"
 
     rm -rf /usr/local/bin/gitea-runner
     fetch_and_deploy_gitea_runner
 
     msg_info "Starting service"
-    systemctl start act_runner
+    systemctl start gitea-runner
     msg_ok "Service started"
 
     msg_ok "Updated successfully!"
   fi
+  exit
 }
 
 start
