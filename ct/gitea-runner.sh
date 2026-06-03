@@ -19,31 +19,72 @@ variables
 color
 catch_errors
 
+check_for_gitea_release() {
+  local current_version latest_version
+
+  current_version=$(
+    /usr/local/bin/gitea-runner --version 2>/dev/null \
+      | grep -oP 'v?\d+\.\d+\.\d+' \
+      | head -1 \
+      | sed 's/^v//'
+  )
+
+  latest_version=$(
+    curl -fsSL "https://gitea.com/api/v1/repos/gitea/runner/releases/latest" \
+      | jq -r '.tag_name' \
+      | sed 's/^v//'
+  )
+
+  if [[ "$current_version" == "$latest_version" ]]; then
+    msg_ok "Already running latest version (${latest_version})"
+    return 1
+  fi
+
+  msg_info "Current version: ${current_version:-unknown}"
+  msg_info "Latest version: ${latest_version}"
+  return 0
+}
+
+fetch_and_deploy_gitea_runner() {
+  local asset_url
+
+  asset_url=$(
+    curl -fsSL "https://gitea.com/api/v1/repos/gitea/runner/releases/latest" |
+    jq -r '
+      .assets[]
+      | select(.name | test("^gitea-runner-.*-linux-amd64$"))
+      | .browser_download_url
+    '
+  )
+
+  curl -fsSL "$asset_url" -o /usr/local/bin/gitea-runner
+  chmod +x /usr/local/bin/gitea-runner
+}
+
 function update_script() {
   header_info
   check_container_storage
   check_container_resources
 
-  if [[ ! -f /usr/local/bin/gitea ]]; then
+  if [[ ! -f /usr/local/bin/gitea-runner ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  if check_for_gh_release "gitea" "go-gitea/gitea"; then
+
+  if check_for_gitea_release; then
     msg_info "Stopping service"
-    systemctl stop gitea
+    systemctl stop act_runner
     msg_ok "Service stopped"
 
-    rm -rf /usr/local/bin/gitea
-    fetch_and_deploy_gh_release "gitea" "go-gitea/gitea" "singlefile" "latest" "/usr/local/bin" "gitea-*-linux-amd64"
-    chmod +x /usr/local/bin/gitea
+    rm -rf /usr/local/bin/gitea-runner
+    fetch_and_deploy_gitea_runner
 
     msg_info "Starting service"
-    systemctl start gitea
-    msg_ok "Started service"
+    systemctl start act_runner
+    msg_ok "Service started"
+
     msg_ok "Updated successfully!"
   fi
-  exit
-}
 
 start
 build_container
