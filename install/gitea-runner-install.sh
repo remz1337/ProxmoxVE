@@ -22,6 +22,8 @@ $STD apt install -y \
     sudo
 msg_ok "Installed Dependencies"
 
+NODE_VERSION="24" setup_nodejs
+
 # --- Fetch Latest Binary ---
 msg_info "Fetching gitea-runner Binary"
 API_URL="https://gitea.com/api/v1/repos/gitea/runner/releases/latest"
@@ -58,7 +60,13 @@ cd /var/lib/gitea-runner
 sudo -u gitea gitea-runner generate-config > /var/lib/gitea-runner/config.yaml
 
 # Patch the labels into the config file since CLI labels are ignored with -c
-sed -i 's/labels: \[\]/labels: ["debian-latest:host", "debian-12:host", "linux:host"]/' /var/lib/gitea-runner/config.yaml
+#sed -i 's/labels: \[\]/labels: ["debian-latest:host", "debian-12:host", "linux:host"]/' /var/lib/gitea-runner/config.yaml
+sed -i '/^  labels:/,/^  allocate_pty:/c\
+  labels:\
+    - "debian-latest:host"\
+    - "debian-12:host"\
+    - "linux:host"\
+  allocate_pty: false' /var/lib/gitea-runner/config.yaml
 msg_ok "Configured Host Labels"
 
 # --- Register ---
