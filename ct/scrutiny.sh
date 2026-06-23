@@ -3,7 +3,7 @@ source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/
 # Copyright (c) 2021-2024 tteck
 # Author: tteck (tteckster) | Co-Author: remz1337
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
-# Source: https://github.com/AnalogJ/scrutiny
+# Source: https://github.com/Starosdev/scrutiny
 
 APP="Scrutiny"
 var_tags="${var_tags:-}"
@@ -36,12 +36,12 @@ function update_script() {
   msg_info "Updating Scrutiny"
   cd /opt/scrutiny/bin
   rm -rf scrutiny-web-linux-amd64
-  wget "https://github.com/AnalogJ/scrutiny/releases/latest/download/scrutiny-web-linux-amd64"
+  wget "https://github.com/Starosdev/scrutiny/releases/latest/download/scrutiny-web-linux-amd64"
   chmod +x scrutiny-web-linux-amd64
 
   cd /opt/scrutiny/web
   rm -rf /opt/scrutiny/web/*
-  wget "https://github.com/AnalogJ/scrutiny/releases/latest/download/scrutiny-web-frontend.tar.gz"
+  wget "https://github.com/Starosdev/scrutiny/releases/latest/download/scrutiny-web-frontend.tar.gz"
   tar xvzf scrutiny-web-frontend.tar.gz --strip-components 1 -C .
   msg_ok "Updated Scrutiny"
 
@@ -61,7 +61,7 @@ install_collector() {
     mkdir -p /opt/scrutiny/config
   
     cd /opt/scrutiny/config
-    wget -O collector.yaml https://raw.githubusercontent.com/AnalogJ/scrutiny/master/example.collector.yaml &>/dev/null
+    wget -O collector.yaml https://raw.githubusercontent.com/Starosdev/scrutiny/master/example.collector.yaml &>/dev/null
     # #Enable API endpoint
     cat <<EOF >>/opt/scrutiny/config/collector.yaml
 api:
@@ -69,7 +69,7 @@ api:
 EOF
 
     cd /opt/scrutiny/bin
-    wget "https://github.com/AnalogJ/scrutiny/releases/latest/download/scrutiny-collector-metrics-linux-amd64" &>/dev/null
+    wget "https://github.com/Starosdev/scrutiny/releases/latest/download/scrutiny-collector-metrics-linux-amd64" &>/dev/null
     chmod +x scrutiny-collector-metrics-linux-amd64
 
     cat <<EOF >/etc/systemd/system/scrutiny.service
@@ -109,7 +109,7 @@ EOF
     msg_info "Updating Scrutiny Collector"
     cd /opt/scrutiny/bin
     rm -rf scrutiny-collector-metrics-linux-amd64 &>/dev/null
-    wget "https://github.com/AnalogJ/scrutiny/releases/latest/download/scrutiny-collector-metrics-linux-amd64" &>/dev/null
+    wget "https://github.com/Starosdev/scrutiny/releases/latest/download/scrutiny-collector-metrics-linux-amd64" &>/dev/null
     chmod +x scrutiny-collector-metrics-linux-amd64
     msg_ok "Updated Scrutiny Collector"
 

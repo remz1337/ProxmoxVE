@@ -46,14 +46,14 @@ mkdir -p /opt/scrutiny/web
 mkdir -p /opt/scrutiny/bin
 
 cd /opt/scrutiny/config
-$STD wget -O scrutiny.yaml https://raw.githubusercontent.com/AnalogJ/scrutiny/master/example.scrutiny.yaml
+$STD wget -O scrutiny.yaml https://raw.githubusercontent.com/Starosdev/scrutiny/master/example.scrutiny.yaml
 
 cd /opt/scrutiny/bin
-$STD wget "https://github.com/AnalogJ/scrutiny/releases/latest/download/scrutiny-web-linux-amd64"
+$STD wget "https://github.com/Starosdev/scrutiny/releases/latest/download/scrutiny-web-linux-amd64"
 chmod +x scrutiny-web-linux-amd64
 
 cd /opt/scrutiny/web
-$STD wget "https://github.com/AnalogJ/scrutiny/releases/latest/download/scrutiny-web-frontend.tar.gz"
+$STD wget "https://github.com/Starosdev/scrutiny/releases/latest/download/scrutiny-web-frontend.tar.gz"
 
 # Next, lets extract the frontend files.
 # NOTE: after extraction, there **should not** be a `dist` subdirectory in `/opt/scrutiny/web` directory.
