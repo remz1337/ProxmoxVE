@@ -158,7 +158,7 @@ function validate_service_script() {
   local name="$1"
   sanitize_service_name "$name" || return 1
   curl -fsSL --max-time 10 -o /dev/null \
-    "https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/${name}.sh" 2>/dev/null
+    "https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/${name}.sh" 2>/dev/null
 }
 
 function detect_service() {
