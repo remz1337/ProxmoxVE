@@ -12,6 +12,7 @@ var_ram="${var_ram:-512}"
 var_disk="${var_disk:-2}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -34,7 +35,7 @@ function update_script() {
   fi
 
   if ! grep -Fq "www-data /usr/bin/php /opt/domain-monitor/cron/check_domains.php" /etc/crontab; then
-    echo "0 0 * * * www-data /usr/bin/php /opt/domain-monitor/cron/check_domains.php" >> /etc/crontab
+    echo "0 0 * * * www-data /usr/bin/php /opt/domain-monitor/cron/check_domains.php" >>/etc/crontab
   fi
 
   if check_for_gh_release "domain-monitor" "Hosteroid/domain-monitor"; then
@@ -42,9 +43,7 @@ function update_script() {
     systemctl stop apache2
     msg_info "Service stopped"
 
-    msg_info "Creating backup"
-    mv /opt/domain-monitor/.env /opt
-    msg_ok "Created backup"
+    create_backup /opt/domain-monitor/.env
 
     setup_composer
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "domain-monitor" "Hosteroid/domain-monitor" "prebuild" "latest" "/opt/domain-monitor" "domain-monitor-v*.zip"
@@ -52,14 +51,13 @@ function update_script() {
     msg_info "Updating Domain Monitor"
     cd /opt/domain-monitor
     $STD composer install
+    chown -R www-data:www-data /opt/domain-monitor
     msg_ok "Updated Domain Monitor"
 
-    msg_info "Restoring backup"
-    mv /opt/.env /opt/domain-monitor
-    msg_ok "Restored backup"
+    restore_backup
 
     msg_info "Restarting Services"
-    systemctl reload apache2
+    systemctl start apache2
     msg_ok "Restarted Services"
     msg_ok "Updated successfully!"
   fi
@@ -72,5 +70,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}${CL}"

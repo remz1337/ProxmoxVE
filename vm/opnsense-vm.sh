@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: michelroegl-brunner
@@ -207,7 +207,7 @@ function msg_error() {
 }
 
 # This function checks the version of Proxmox Virtual Environment (PVE) and exits if the version is not supported.
-# Supported: Proxmox VE 8.0.x – 8.9.x, 9.0 and 9.1
+# Supported: Proxmox VE 8.0.x – 8.9.x, 9.0 and 9.2
 pve_check() {
   local PVE_VER
   PVE_VER="$(pveversion | awk -F'/' '{print $2}' | awk -F'-' '{print $1}')"
@@ -223,12 +223,12 @@ pve_check() {
     return 0
   fi
 
-  # Check for Proxmox VE 9.x: allow 9.0 and 9.1
+  # Check for Proxmox VE 9.x: allow 9.0 and 9.2
   if [[ "$PVE_VER" =~ ^9\.([0-9]+) ]]; then
     local MINOR="${BASH_REMATCH[1]}"
-    if ((MINOR < 0 || MINOR > 1)); then
+    if ((MINOR < 0 || MINOR > 2)); then
       msg_error "This version of Proxmox VE is not supported."
-      msg_error "Supported: Proxmox VE version 9.0 – 9.1"
+      msg_error "Supported: Proxmox VE version 9.0 – 9.2"
       exit 105
     fi
     return 0
@@ -236,7 +236,7 @@ pve_check() {
 
   # All other unsupported versions
   msg_error "This version of Proxmox VE is not supported."
-  msg_error "Supported versions: Proxmox VE 8.0 – 8.x or 9.0 – 9.1"
+  msg_error "Supported versions: Proxmox VE 8.0 – 8.x or 9.0 – 9.2"
   exit 105
 }
 
@@ -317,7 +317,7 @@ function default_settings() {
 
   # Determine available network modes based on bridge count
   local DEFAULT_WAN_BRG
-  DEFAULT_WAN_BRG=$(echo "$AVAILABLE_BRIDGES" | grep -v "^${BRG}$" | head -n1)
+  DEFAULT_WAN_BRG=$(echo "$AVAILABLE_BRIDGES" | grep -v "^${BRG}$" | head -n1 || true)
 
   if [ "$BRIDGE_COUNT" -ge 2 ]; then
     # Multiple bridges available - offer dual or single mode
@@ -509,7 +509,7 @@ function advanced_settings() {
 
   # Build WAN bridge selection from available bridges (excluding LAN bridge)
   local WAN_BRIDGES
-  WAN_BRIDGES=$(get_available_bridges | grep -v "^${BRG}$")
+  WAN_BRIDGES=$(get_available_bridges | grep -v "^${BRG}$" || true)
   if [ -z "$WAN_BRIDGES" ]; then
     msg_error "No additional bridge available for WAN. Only '${BRG}' exists."
     msg_error "Create a second bridge (e.g. vmbr1) in Proxmox network config first."
@@ -738,8 +738,25 @@ done
 msg_info "Creating a OPNsense VM"
 qm create $VMID -agent 1${MACHINE} -tablet 0 -localtime 1 -bios ovmf${CPU_TYPE} -cores $CORE_COUNT -memory $RAM_SIZE \
   -name $HN -tags community-script -net0 virtio,bridge=$BRG,macaddr=$MAC$VLAN$MTU -onboot 1 -ostype l26 -scsihw virtio-scsi-pci
-pvesm alloc $STORAGE $VMID $DISK0 4M 1>&/dev/null
-qm importdisk $VMID ${FILE} $STORAGE ${DISK_IMPORT:-} 1>&/dev/null
+
+# Retry pvesm alloc on transient zfs_request "got timeout" errors (#14127)
+alloc_attempt=1
+alloc_max=4
+alloc_delay=5
+while :; do
+  alloc_err=$(pvesm alloc $STORAGE $VMID $DISK0 4M 2>&1 >/dev/null) && break
+  if [[ "$alloc_err" == *"got timeout"* && $alloc_attempt -lt $alloc_max ]]; then
+    echo -e "${YW}[WARN]${CL} pvesm alloc hit zfs timeout (attempt $alloc_attempt/$alloc_max), retrying in ${alloc_delay}s..."
+    pvesm free "${DISK0_REF}" &>/dev/null || true
+    sleep "$alloc_delay"
+    alloc_attempt=$((alloc_attempt + 1))
+    alloc_delay=$((alloc_delay * 2))
+    continue
+  fi
+  echo -e "$alloc_err" >&2
+  exit 220
+done
+qm importdisk $VMID ${FILE} $STORAGE ${DISK_IMPORT:-} &>/dev/null
 qm set $VMID \
   -efidisk0 ${DISK0_REF}${FORMAT} \
   -scsi0 ${DISK1_REF},${DISK_CACHE}${THIN}size=2G \

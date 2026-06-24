@@ -12,6 +12,7 @@ var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 var_postfix_sat="${var_postfix_sat:-yes}"
 
@@ -67,8 +68,8 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080/admin${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8080/admin${CL}"
 echo -e "${TAB}${GN}Temporary admin user:${BL}tmpadm${CL}"
 echo -e "${TAB}${GN}Temporary admin password:${BL}admin123${CL}"
 echo -e "${INFO}${YW} If you modified configurations files in `conf/`: Re-apply your changes to those files, otherwise leave them unchanged.${CL}"

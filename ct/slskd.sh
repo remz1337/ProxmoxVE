@@ -12,6 +12,7 @@ var_ram="${var_ram:-512}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -39,10 +40,14 @@ function update_script() {
     cp /opt/slskd/config/slskd.yml /opt/slskd.yml.bak
     msg_ok "Backed up config"
 
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "Slskd" "slskd/slskd" "prebuild" "latest" "/opt/slskd" "slskd-*-linux-x64.zip"
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "Slskd" "slskd/slskd" "prebuild" "latest" "/opt/slskd" "slskd-*-linux-$(arch_resolve "x64" "arm64").zip"
 
     msg_info "Restoring config"
     mv /opt/slskd.yml.bak /opt/slskd/config/slskd.yml
+
+    # Migrate 0.25.0 breaking config key renames
+    sed -i 's/^global:/transfers:/' /opt/slskd/config/slskd.yml
+    sed -i 's/^integration:/integrations:/' /opt/slskd/config/slskd.yml
     msg_ok "Restored config"
 
     msg_info "Starting Service(s)"
@@ -92,5 +97,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:5030${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:5030${CL}"

@@ -12,6 +12,7 @@ var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-6}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 var_postfix_sat="${var_postfix_sat:-yes}"
 
@@ -33,10 +34,10 @@ function update_script() {
     msg_info "Stopping Service"
     systemctl stop zitadel-api zitadel-login
     msg_ok "Stopped Service"
-
     msg_info "Updating Zitadel"
     rm -f /opt/zitadel/*
-    fetch_and_deploy_gh_release "zitadel" "zitadel/zitadel" "prebuild" "latest" "/opt/zitadel" "zitadel-linux-amd64.tar.gz"
+    fetch_and_deploy_gh_release "zitadel" "zitadel/zitadel" "prebuild" "latest" "/opt/zitadel" "zitadel-linux-$(arch_resolve).tar.gz"
+
 
     rm -f /opt/login/*
     fetch_and_deploy_gh_release "login" "zitadel/zitadel" "prebuild" "latest" "/opt/login" "zitadel-login.tar.gz"
@@ -66,6 +67,6 @@ msg_ok "Set Container to Normal Resources"
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080/ui/console${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8080/ui/console${CL}"
 echo -e "${INFO} All credentials are saved in: /etc/zitadel/INSTALLATION_INFO.txt${CL}"

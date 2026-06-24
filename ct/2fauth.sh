@@ -12,6 +12,7 @@ var_ram="${var_ram:-512}"
 var_disk="${var_disk:-2}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -24,7 +25,7 @@ function update_script() {
   check_container_storage
   check_container_resources
 
-  if [[ ! -d "/opt/2fauth" ]]; then
+  if [[ ! -d /opt/2fauth ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
@@ -34,7 +35,10 @@ function update_script() {
     $STD apt -y upgrade
 
     msg_info "Creating Backup"
-    mv "/opt/2fauth" "/opt/2fauth-backup"
+    create_backup \
+      /opt/2fauth/.env \
+      /opt/2fauth/storage
+
     if ! dpkg -l | grep -q 'php8.4'; then
       cp /etc/nginx/conf.d/2fauth.conf /etc/nginx/conf.d/2fauth.conf.bak
     fi
@@ -44,17 +48,21 @@ function update_script() {
       PHP_VERSION="8.4" PHP_FPM="YES" setup_php
       sed -i 's/php8\.[0-9]/php8.4/g' /etc/nginx/conf.d/2fauth.conf
     fi
+
     fetch_and_deploy_gh_release "2fauth" "Bubka/2FAuth" "tarball"
     setup_composer
-    mv "/opt/2fauth-backup/.env" "/opt/2fauth/.env"
-    mv "/opt/2fauth-backup/storage" "/opt/2fauth/storage"
-    cd "/opt/2fauth" || return
-    chown -R www-data: "/opt/2fauth"
-    chmod -R 755 "/opt/2fauth"
+    restore_backup
+
+    msg_info "Configuring 2FAuth"
+    cd /opt/2fauth
     export COMPOSER_ALLOW_SUPERUSER=1
     $STD composer install --no-dev --prefer-dist
     php artisan 2fauth:install
+    chown -R www-data: /opt/2fauth
+    chmod -R 755 /opt/2fauth
+    $STD systemctl restart php8.4-fpm
     $STD systemctl restart nginx
+    msg_ok "Configured 2FAuth"
     msg_ok "Updated successfully!"
   fi
   exit
@@ -66,5 +74,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:80${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:80${CL}"

@@ -3,7 +3,7 @@
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: johanngrobe
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
-# Source: https://github.com/joaovitoriasilva/endurain
+# Source: https://codeberg.org/endurain-project/endurain
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -21,7 +21,7 @@ PYTHON_VERSION="3.13" setup_uv
 NODE_VERSION="24" setup_nodejs
 PG_VERSION="17" PG_MODULES="postgis" setup_postgresql
 PG_DB_NAME="enduraindb" PG_DB_USER="endurain" setup_postgresql_db
-fetch_and_deploy_gh_release "endurain" "endurain-project/endurain" "tarball" "latest" "/opt/endurain"
+fetch_and_deploy_codeberg_release "endurain" "endurain-project/endurain" "tarball" "latest" "/opt/endurain"
 
 msg_info "Setting up Endurain"
 cd /opt/endurain
@@ -81,6 +81,8 @@ msg_ok "Built Frontend"
 
 msg_info "Setting up Backend"
 cd /opt/endurain/backend
+UV_VERSION=$(grep -Po 'required-version\s*=\s*"\K[^"]+' pyproject.toml 2>/dev/null || echo "0.11.18")
+UV_VERSION="$UV_VERSION" setup_uv
 $STD uv tool install poetry
 $STD uv tool update-shell
 export PATH="/root/.local/bin:$PATH"
@@ -88,6 +90,7 @@ $STD poetry self add poetry-plugin-export
 $STD poetry export -f requirements.txt --output requirements.txt --without-hashes
 $STD uv venv --clear
 $STD uv pip install -r requirements.txt
+$STD uv pip install pytz
 msg_ok "Setup Backend"
 
 msg_info "Creating Service"

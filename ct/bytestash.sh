@@ -12,6 +12,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-1024}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -29,28 +30,26 @@ function update_script() {
     exit
   fi
   if check_for_gh_release "bytestash" "jordan-dalby/ByteStash"; then
-    read -rp "${TAB3}Did you make a backup via application WebUI? (y/n): " backuped
-    if [[ "$backuped" =~ ^[Yy]$ ]]; then
-      msg_info "Stopping Services"
-      systemctl stop bytestash-backend bytestash-frontend
-      msg_ok "Services Stopped"
+    msg_info "Stopping Services"
+    systemctl stop bytestash-backend bytestash-frontend
+    msg_ok "Services Stopped"
 
-      CLEAN_INSTALL=1 fetch_and_deploy_gh_release "bytestash" "jordan-dalby/ByteStash" "tarball"
+    [[ -d /opt/bytestash/data ]] && create_backup /opt/bytestash/data
+    [[ -d /opt/data ]] && create_backup /opt/data
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "bytestash" "jordan-dalby/ByteStash" "tarball"
+    restore_backup
 
-      msg_info "Configuring ByteStash"
-      cd /opt/bytestash/server
-      $STD npm install
-      cd /opt/bytestash/client
-      $STD npm install
-      msg_ok "Updated ByteStash"
+    msg_info "Configuring ByteStash"
+    cd /opt/bytestash/server
+    $STD npm install
+    cd /opt/bytestash/client
+    $STD npm install
+    msg_ok "Updated ByteStash"
 
-      msg_info "Starting Services"
-      systemctl start bytestash-backend bytestash-frontend
-      msg_ok "Started Services"
-    else
-      msg_error "PLEASE MAKE A BACKUP FIRST!"
-      exit
-    fi
+    msg_info "Starting Services"
+    systemctl start bytestash-backend bytestash-frontend
+    msg_ok "Started Services"
+
     msg_ok "Updated successfully!"
   fi
   exit
@@ -62,5 +61,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:3000${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:3000${CL}"

@@ -12,6 +12,7 @@ var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-no}"
 var_unprivileged="${var_unprivileged:-1}"
 var_gpu="${var_gpu:-yes}"
 
@@ -34,7 +35,7 @@ function update_script() {
     systemctl stop nodecast-tv
     msg_ok "Stopped Service"
 
-    fetch_and_deploy_gh_release "nodecast-tv" "technomancer702/nodecast-tv"
+    fetch_and_deploy_gh_release "nodecast-tv" "technomancer702/nodecast-tv" "tarball"
 
     msg_info "Updating Modules"
     cd /opt/nodecast-tv
@@ -55,6 +56,6 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:3000${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:3000${CL}"
 

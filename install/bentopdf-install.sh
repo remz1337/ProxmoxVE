@@ -38,9 +38,9 @@ msg_ok "Setup BentoPDF"
 msg_info "Creating Service"
 CERT_CN="$(hostname -I | awk '{print $1}')"
 $STD openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
-    -keyout /etc/ssl/private/bentopdf-selfsigned.key \
-    -out /etc/ssl/certs/bentopdf-selfsigned.crt \
-    -subj "/CN=${CERT_CN}"
+  -keyout /etc/ssl/private/bentopdf-selfsigned.key \
+  -out /etc/ssl/certs/bentopdf-selfsigned.crt \
+  -subj "/CN=${CERT_CN}"
 
 cat <<'EOF' >/etc/nginx/sites-available/bentopdf
 server {
@@ -102,6 +102,10 @@ server {
 EOF
 rm -f /etc/nginx/sites-enabled/default
 ln -sf /etc/nginx/sites-available/bentopdf /etc/nginx/sites-enabled/bentopdf
+systemctl stop nginx
+systemctl disable -q nginx
+sed -i '/application\/rss+xml/a\    application\/javascript                           mjs;' /etc/nginx/mime.types
+
 cat <<'EOF' >/etc/systemd/system/bentopdf.service
 [Unit]
 Description=BentoPDF Service
@@ -116,7 +120,6 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-
 systemctl enable -q --now bentopdf
 msg_ok "Created & started service"
 

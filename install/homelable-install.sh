@@ -33,7 +33,7 @@ msg_ok "Set up Python Backend"
 msg_info "Configuring Homelable"
 mkdir -p /opt/homelable/data
 SECRET_KEY=$(openssl rand -hex 32)
-BCRYPT_HASH=$(/opt/homelable/backend/.venv/bin/python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('admin'))")
+BCRYPT_HASH=$(/opt/homelable/backend/.venv/bin/python -c "import bcrypt; print(bcrypt.hashpw(b'admin', bcrypt.gensalt()).decode())")
 cat <<EOF >/opt/homelable/backend/.env
 SECRET_KEY=${SECRET_KEY}
 SQLITE_PATH=/opt/homelable/data/homelab.db
@@ -44,6 +44,30 @@ SCANNER_RANGES=["192.168.1.0/24"]
 STATUS_CHECKER_INTERVAL=60
 EOF
 msg_ok "Configured Homelable"
+
+msg_info "Creating Password Reset Utility"
+cat <<'EOF' >/root/change_password.sh
+#!/usr/bin/env bash
+
+NEW_PASS=""
+
+while [[ -z "$NEW_PASS" ]]; do
+    read -s -p "Enter new password: " NEW_PASS
+    echo ""
+    if [[ -z "$NEW_PASS" ]]; then
+        echo "Error: Password cannot be blank. Try again."
+    fi
+done
+
+HASH=$(/opt/homelable/backend/.venv/bin/python -c "import bcrypt; print(bcrypt.hashpw('${NEW_PASS}'.encode(), bcrypt.gensalt()).decode())")
+
+sed -i "s|^AUTH_PASSWORD_HASH=.*|AUTH_PASSWORD_HASH='${HASH}'|" /opt/homelable/backend/.env
+
+systemctl restart homelable
+echo "Password updated and service restarted successfully!"
+EOF
+chmod +x /root/change_password.sh
+msg_ok "Created Password Reset Utility"
 
 msg_info "Building Frontend"
 cd /opt/homelable/frontend

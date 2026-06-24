@@ -12,6 +12,7 @@ var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-7}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -45,6 +46,33 @@ function update_script() {
       msg_ok "Fixed entrypoint"
     fi
 
+    if [[ ! -f /etc/peanut/peanut.env ]]; then
+      msg_info "Migrating service to EnvironmentFile"
+      mkdir -p /etc/peanut
+      cat <<EOF >/etc/peanut/peanut.env
+NODE_ENV=production
+
+#WEB_HOST=0.0.0.0
+#WEB_PORT=8080
+#NUT_HOST=localhost
+#NUT_PORT=3493
+
+# Disable auth entirely:
+#AUTH_DISABLED=true
+
+# Bootstrap initial account on first start (ignored afterwards):
+#WEB_USERNAME=admin
+#WEB_PASSWORD=changeme
+EOF
+      chmod 600 /etc/peanut/peanut.env
+      sed -i '/^Environment=/d' /etc/systemd/system/peanut.service
+      if ! grep -q '^EnvironmentFile=/etc/peanut/peanut.env' /etc/systemd/system/peanut.service; then
+        sed -i '/^Type=simple/a EnvironmentFile=/etc/peanut/peanut.env' /etc/systemd/system/peanut.service
+      fi
+      systemctl daemon-reload
+      msg_ok "Migrated to /etc/peanut/peanut.env"
+    fi
+
     msg_info "Updating PeaNUT"
     cd /opt/peanut
     $STD pnpm i
@@ -69,5 +97,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8080${CL}"

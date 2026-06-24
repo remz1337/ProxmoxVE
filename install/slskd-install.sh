@@ -13,7 +13,11 @@ setting_up_container
 network_check
 update_os
 
-fetch_and_deploy_gh_release "Slskd" "slskd/slskd" "prebuild" "latest" "/opt/slskd" "slskd-*-linux-x64.zip"
+msg_info "Installing Dependencies"
+$STD apt install -y libicu-dev
+msg_ok "Installed Dependencies"
+
+fetch_and_deploy_gh_release "Slskd" "slskd/slskd" "prebuild" "latest" "/opt/slskd" "slskd-*-linux-$(arch_resolve "x64" "arm64").zip"
 
 msg_info "Configuring Slskd"
 JWT_KEY=$(openssl rand -base64 44)
@@ -48,12 +52,15 @@ if [[ ${soularr,,} =~ ^(y|yes)$ ]]; then
 #!/usr/bin/env bash
 
 if ps aux | grep "[s]oularr.py" >/dev/null; then
-  echo "Soularr is already running. Exiting..."
+  echo "Soularr is already running. Exiting..." >&2
   exit 1
-else
-  source /opt/soularr/venv/bin/activate
-  uv run python3 -u /opt/soularr/soularr.py --config-dir /opt/soularr
 fi
+
+# Remove stale lock file from previous ungraceful exit
+rm -f "/opt/soularr/.soularr.lock"
+
+source /opt/soularr/venv/bin/activate
+uv run python3 -u /opt/soularr/soularr.py --config-dir /opt/soularr 2>&1
 EOF
   chmod +x /opt/soularr/run.sh
   deactivate

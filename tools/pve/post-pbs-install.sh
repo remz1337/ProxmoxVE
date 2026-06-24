@@ -65,6 +65,14 @@ component_exists_in_sources() {
   grep -h -E "^[^#]*Components:[^#]*\b${component}\b" /etc/apt/sources.list.d/*.sources 2>/dev/null | grep -q .
 }
 
+require_whiptail() {
+  if ! command -v whiptail >/dev/null 2>&1; then
+    msg_error "Missing dependency: whiptail"
+    echo -e "Install it first (e.g. apt update && apt install -y whiptail), then re-run this script."
+    exit 127
+  fi
+}
+
 # ---- main ----
 main() {
   header_info
@@ -90,8 +98,14 @@ main() {
   CODENAME="$(get_pbs_codename)"
 
   case "$CODENAME" in
-  bookworm) start_routines_3 ;;
-  trixie) start_routines_4 ;;
+  bookworm)
+    require_whiptail
+    start_routines_3
+    ;;
+  trixie)
+    require_whiptail
+    start_routines_4
+    ;;
   *)
     msg_error "Unsupported Debian codename: $CODENAME"
     echo -e "Supported: bookworm (PBS 3.x) and trixie (PBS 4.x)"
@@ -112,14 +126,20 @@ start_routines_3() {
   yes)
     msg_info "Correcting Debian Sources"
     cat <<EOF >/etc/apt/sources.list
-deb http://deb.debian.org/debian ${VERSION} main contrib
-deb http://deb.debian.org/debian ${VERSION}-updates main contrib
-deb http://security.debian.org/debian-security ${VERSION}-security main contrib
+deb https://deb.debian.org/debian ${VERSION} main contrib
+deb https://deb.debian.org/debian ${VERSION}-updates main contrib
+deb https://security.debian.org/debian-security ${VERSION}-security main contrib
 EOF
     msg_ok "Corrected Debian Sources"
     ;;
   no) msg_error "Selected no to Correcting Debian Sources" ;;
   esac
+
+  if [[ "$(dpkg --print-architecture 2>/dev/null)" == "arm64" ]]; then
+    msg_ok "ARM64 detected - skipping Proxmox repository setup"
+    post_routines_common
+    return
+  fi
 
   # --- Enterprise repo ---
   read -r state file <<<"$(repo_state_list pbs-enterprise)"
@@ -174,7 +194,9 @@ start_routines_4() {
   yes)
     msg_info "Correcting Debian Sources (deb822)"
     rm -f /etc/apt/sources.list.d/*.list
-    sed -i '/proxmox/d;/bookworm/d' /etc/apt/sources.list || true
+    if [ -f /etc/apt/sources.list ]; then
+      sed -i '/proxmox/d;/bookworm/d' /etc/apt/sources.list
+    fi
     cat >/etc/apt/sources.list.d/debian.sources <<EOF
 Types: deb
 URIs: http://deb.debian.org/debian/
@@ -192,6 +214,12 @@ EOF
     ;;
   no) msg_error "Selected no to Correcting Debian Sources" ;;
   esac
+
+  if [[ "$(dpkg --print-architecture 2>/dev/null)" == "arm64" ]]; then
+    msg_ok "ARM64 detected - skipping Proxmox repository setup"
+    post_routines_common
+    return
+  fi
 
   # --- Enterprise repo ---
   if component_exists_in_sources "pbs-enterprise"; then

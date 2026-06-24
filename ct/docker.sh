@@ -12,6 +12,7 @@ var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -75,4 +76,4 @@ description
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} If you installed Portainer, access it at the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}https://${IP}:9443${CL}"
+echo -e "${GATEWAY}${BGN}https://${IP}:9443${CL}"

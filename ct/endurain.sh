@@ -3,7 +3,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: johanngrobe
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
-# Source: https://github.com/joaovitoriasilva/endurain
+# Source: https://codeberg.org/endurain-project/endurain
 
 APP="Endurain"
 var_tags="${var_tags:-sport;social-media}"
@@ -12,6 +12,7 @@ var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-5}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -28,7 +29,7 @@ function update_script() {
     msg_error "No ${APP} installation found!"
     exit 233
   fi
-  if check_for_gh_release "endurain" "endurain-project/endurain"; then
+  if check_for_codeberg_release "endurain" "endurain-project/endurain"; then
     msg_info "Stopping Service"
     systemctl stop endurain
     msg_ok "Stopped Service"
@@ -38,7 +39,7 @@ function update_script() {
     cp /opt/endurain/frontend/app/dist/env.js /opt/endurain.env.js
     msg_ok "Created Backup"
 
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "endurain" "endurain-project/endurain" "tarball" "latest" "/opt/endurain"
+    CLEAN_INSTALL=1 fetch_and_deploy_codeberg_release "endurain" "endurain-project/endurain" "tarball" "latest" "/opt/endurain"
 
     msg_info "Preparing Update"
     cd /opt/endurain
@@ -60,9 +61,12 @@ function update_script() {
 
     msg_info "Updating Backend"
     cd /opt/endurain/backend
+    UV_VERSION=$(grep -Po 'required-version\s*=\s*"\K[^"]+' pyproject.toml 2>/dev/null || echo "0.11.18")
+    UV_VERSION="$UV_VERSION" setup_uv
     $STD poetry export -f requirements.txt --output requirements.txt --without-hashes
     $STD uv venv --clear
     $STD uv pip install -r requirements.txt
+    $STD uv pip install pytz
     msg_ok "Backend Updated"
 
     msg_info "Starting Service"
@@ -79,5 +83,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8080${CL}"

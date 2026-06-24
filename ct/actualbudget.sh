@@ -12,6 +12,7 @@ var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -48,9 +49,9 @@ function update_script() {
       msg_ok "Updated successfully!"
     fi
   else
-    msg_info "Old Installation Found, you need to migrate your data and recreate to a new container"
-    msg_info "Please follow the instructions on the Actual Budget website to migrate your data"
-    msg_info "https://actualbudget.org/docs/backup-restore/backup"
+    msg_warn "Old Installation Found, you need to migrate your data and recreate to a new container"
+    msg_warn "Please follow the instructions on the Actual Budget website to migrate your data"
+    msg_warn "https://actualbudget.org/docs/backup-restore/backup"
     exit
   fi
   exit
@@ -62,5 +63,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}https://${IP}:5006${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}https://${IP}:5006${CL}"

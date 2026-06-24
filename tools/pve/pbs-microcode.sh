@@ -90,7 +90,7 @@ intel() {
   }
 
   msg_info "Downloading Intel processor microcode package $microcode"
-  curl -fsSL "http://ftp.debian.org/debian/pool/non-free-firmware/i/intel-microcode/$microcode" -o $(basename "http://ftp.debian.org/debian/pool/non-free-firmware/i/intel-microcode/$microcode")
+  curl -fsSL --proto '=https' "https://ftp.debian.org/debian/pool/non-free-firmware/i/intel-microcode/$microcode" -o "$microcode"
   msg_ok "Downloaded Intel processor microcode package $microcode"
 
   msg_info "Installing $microcode (this might take a while)"
@@ -155,6 +155,12 @@ if [ ! -f /etc/proxmox-backup/user.cfg ]; then
   header_info
   msg_error "Proxmox Backup Server not detected!"
   exit
+fi
+
+if [ "$(dpkg --print-architecture 2>/dev/null)" = "arm64" ]; then
+  header_info
+  msg_error "CPU microcode updates are only available for x86 (Intel/AMD) systems."
+  exit 0
 fi
 
 whiptail --backtitle "Proxmox Backup Server Helper Scripts" \

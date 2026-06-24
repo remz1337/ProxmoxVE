@@ -12,6 +12,7 @@ var_ram="${var_ram:-1024}"
 var_disk="${var_disk:-4}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 #var_gpu="${var_gpu:-yes}"
 
@@ -29,12 +30,13 @@ function update_script() {
     exit
   fi
 
-  if check_for_gh_release "threadfin" "threadfin/threadfin"; then
+  if check_for_gh_release "threadfin-app" "threadfin/threadfin"; then
     msg_info "Stopping Service"
     systemctl stop threadfin
     msg_ok "Stopped Service"
 
-    fetch_and_deploy_gh_release "threadfin" "threadfin/threadfin" "singlefile" "latest" "/opt/threadfin" "Threadfin_linux_amd64"
+    fetch_and_deploy_gh_release "threadfin-app" "threadfin/threadfin" "singlefile" "latest" "/opt/threadfin" "Threadfin_linux_$(arch_resolve)"
+    mv /opt/threadfin/threadfin-app /opt/threadfin/threadfin
 
     msg_info "Starting Service"
     systemctl start threadfin
@@ -50,5 +52,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:34400/web${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:34400/web${CL}"

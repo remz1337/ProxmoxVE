@@ -76,7 +76,7 @@ intel() {
   }
 
   msg_info "Downloading the Intel Processor Microcode Package $microcode"
-  curl -fsSL "http://ftp.debian.org/debian/pool/non-free-firmware/i/intel-microcode/$microcode" -o $(basename "http://ftp.debian.org/debian/pool/non-free-firmware/i/intel-microcode/$microcode")
+  curl -fsSL --proto '=https' "https://ftp.debian.org/debian/pool/non-free-firmware/i/intel-microcode/$microcode" -o "$microcode"
   msg_ok "Downloaded the Intel Processor Microcode Package $microcode"
 
   msg_info "Installing $microcode (Patience)"
@@ -137,6 +137,12 @@ if ! command -v pveversion >/dev/null 2>&1; then
   header_info
   msg_error "No PVE Detected!"
   exit
+fi
+
+if [ "$(dpkg --print-architecture 2>/dev/null)" = "arm64" ]; then
+  header_info
+  msg_error "CPU microcode updates are only available for x86 (Intel/AMD) systems."
+  exit 0
 fi
 
 whiptail --backtitle "Proxmox VE Helper Scripts" --title "Proxmox VE Processor Microcode" --yesno "This will check for CPU microcode packages with the option to install. Proceed?" 10 58

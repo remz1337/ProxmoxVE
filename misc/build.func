@@ -52,6 +52,11 @@ variables() {
   # as "/tmp/${NSAPP}-${CTID}-${SESSION_ID}.log" (requires CTID, not available here)
   CTTYPE="${CTTYPE:-${CT_TYPE:-1}}"
 
+  # ARM64 Template default variables
+  DEBIAN_DEFAULT_CODENAME="trixie"
+  UBUNTU_DEFAULT_CODENAME="noble"
+  ALPINE_DEFAULT_VERSION="3.23"
+
   # Parse dev_mode early
   parse_dev_mode
 
@@ -217,22 +222,16 @@ update_motd_ip() {
   # Only update if file exists and is from community-scripts
   if [ -f "$PROFILE_FILE" ] && grep -q "community-scripts" "$PROFILE_FILE" 2>/dev/null; then
     # Get current values
-    local current_os="$(grep ^NAME /etc/os-release | cut -d= -f2 | tr -d '"') - Version: $(grep ^VERSION_ID /etc/os-release | cut -d= -f2 | tr -d '"')"
     local current_hostname="$(hostname)"
     local current_ip="$(hostname -I | awk '{print $1}')"
 
     # Escape sed special chars in replacement strings (& \ |)
-    current_os="${current_os//\\/\\\\}"
-    current_os="${current_os//&/\\&}"
     current_hostname="${current_hostname//\\/\\\\}"
     current_hostname="${current_hostname//&/\\&}"
     current_ip="${current_ip//\\/\\\\}"
     current_ip="${current_ip//&/\\&}"
 
     # Update only if values actually changed
-    if ! grep -q "OS:.*$current_os" "$PROFILE_FILE" 2>/dev/null; then
-      sed -i "s|OS:.*|OS: \${GN}$current_os\${CL}\\\"|" "$PROFILE_FILE"
-    fi
     if ! grep -q "Hostname:.*$current_hostname" "$PROFILE_FILE" 2>/dev/null; then
       sed -i "s|Hostname:.*|Hostname: \${GN}$current_hostname\${CL}\\\"|" "$PROFILE_FILE"
     fi
@@ -513,7 +512,7 @@ validate_bridge() {
   [[ -z "$bridge" ]] && return 1
 
   # Check if bridge interface exists
-  if ! ip link show "$bridge" &>/dev/null; then
+  if ! ip link show dev "$bridge" &>/dev/null; then
     return 1
   fi
 
@@ -979,8 +978,21 @@ base_settings() {
   fi
 
   IPV6_METHOD=${var_ipv6_method:-"none"}
-  IPV6_STATIC=${var_ipv6_static:-""}
   GATE=${var_gateway:-""}
+
+  # Guard against invalid gateway combinations from defaults/app vars:
+  # - DHCP must not force a static gateway
+  # - Static IPv4 must use a gateway in the same subnet
+  if [[ "$NET" == "dhcp" && -n "$GATE" ]]; then
+    msg_warn "Ignoring var_gateway '$GATE' because var_net is 'dhcp'"
+    GATE=""
+  elif [[ "$NET" != "dhcp" && -n "$GATE" ]]; then
+    if ! validate_gateway_in_subnet "$NET" "$GATE"; then
+      msg_warn "Ignoring var_gateway '$GATE' because it is not in subnet of var_net '$NET'"
+      GATE=""
+    fi
+  fi
+
   APT_CACHER=${var_apt_cacher:-""}
   APT_CACHER_IP=${var_apt_cacher_ip:-""}
 
@@ -1015,8 +1027,12 @@ base_settings() {
   VLAN=${var_vlan:-""}
   SSH=${var_ssh:-"no"}
   SSH_AUTHORIZED_KEY=${var_ssh_authorized_key:-""}
-  UDHCPC_FIX=${var_udhcpc_fix:-""}
-  TAGS="community-script,${var_tags:-}"
+  # Build TAGS: ensure community-script prefix, use semicolons (pct format), no duplicates
+  if [[ "${var_tags:-}" == *community-script* ]]; then
+    TAGS="${var_tags:-community-script}"
+  else
+    TAGS="community-script${var_tags:+;${var_tags}}"
+  fi
   ENABLE_FUSE=${var_fuse:-"${1:-no}"}
   ENABLE_TUN=${var_tun:-"${1:-no}"}
 
@@ -1025,6 +1041,7 @@ base_settings() {
   ENABLE_NESTING=${var_nesting:-"1"}
   ENABLE_KEYCTL=${var_keyctl:-"0"}
   ENABLE_MKNOD=${var_mknod:-"0"}
+  ALLOW_MOUNT_FS=${var_mount_fs:-""}
   PROTECT_CT=${var_protection:-"no"}
   CT_TIMEZONE=${var_timezone:-"$timezone"}
   [[ "${CT_TIMEZONE:-}" == Etc/* ]] && CT_TIMEZONE="host" # pct doesn't accept Etc/* zones
@@ -1067,6 +1084,7 @@ load_vars_file() {
     var_gateway var_hostname var_ipv6_method var_mac var_mknod var_mount_fs var_mtu
     var_net var_nesting var_ns var_nvidia_passthrough var_postfix_sat var_postfix_sat_domain var_os var_protection var_pw var_ram var_shared_mount var_shared_mount_loc var_shared_mount_user var_tags var_timezone var_tun var_unprivileged
     var_verbose var_version var_vlan var_ssh var_ssh_authorized_key var_container_storage var_template_storage var_searchdomain
+    var_post_install
   )
 
   # Whitelist check helper
@@ -1212,6 +1230,22 @@ load_vars_file() {
             continue
           fi
           ;;
+        var_mknod)
+          if [[ "$var_val" != "0" && "$var_val" != "1" ]]; then
+            msg_warn "Invalid mknod value '$var_val' in $file (must be 0 or 1), ignoring"
+            continue
+          fi
+          ;;
+        var_mount_fs)
+          # Normalize: strip spaces, trailing commas
+          var_val="${var_val// /}"
+          var_val="${var_val%%,}"
+          var_val="${var_val##,}"
+          if [[ -n "$var_val" ]] && [[ ! "$var_val" =~ ^[a-zA-Z0-9]+(,[a-zA-Z0-9]+)*$ ]]; then
+            msg_warn "Invalid mount_fs value '$var_val' in $file (comma-separated fs names only, e.g. nfs,cifs), ignoring"
+            continue
+          fi
+          ;;
         var_ipv6_method)
           if [[ "$var_val" != "auto" && "$var_val" != "dhcp" && "$var_val" != "static" && "$var_val" != "none" ]]; then
             msg_warn "Invalid IPv6 method '$var_val' in $file (must be auto/dhcp/static/none), ignoring"
@@ -1268,6 +1302,7 @@ default_var_settings() {
     var_gateway var_hostname var_ipv6_method var_mac var_mknod var_mount_fs var_mtu
     var_net var_nesting var_ns var_nvidia_passthrough var_postfix_sat var_postfix_sat_domain var_os var_protection var_pw var_ram var_shared_mount var_shared_mount_loc var_shared_mount_user var_tags var_timezone var_tun var_unprivileged
     var_verbose var_version var_vlan var_ssh var_ssh_authorized_key var_container_storage var_template_storage
+    var_post_install
   )
 
   # Snapshot: environment variables (highest precedence)
@@ -1375,6 +1410,11 @@ var_verbose=no
 # GitHub Personal Access Token (optional – avoids API rate limits during installs)
 # Create at https://github.com/settings/tokens – read-only public access is sufficient
 # var_github_token=ghp_your_token_here
+
+# Optional post-install script (host-side path to a *.sh on the Proxmox host)
+# Runs ON THE HOST after the container is fully provisioned.
+# Available env vars: APP, NSAPP, CTID, IP, HN, STORAGE, BRG
+# var_post_install=/opt/post-install/myhook.sh
 EOF
 
     # Now choose storages (always prompt unless just one exists)
@@ -1449,10 +1489,11 @@ get_app_defaults_path() {
 if ! declare -p VAR_WHITELIST >/dev/null 2>&1; then
   # Note: Removed var_ctid (can only exist once), var_ipv6_static (static IPs are unique)
   declare -ag VAR_WHITELIST=(
-    var_apt_cacher var_apt_cacher_ip var_brg var_cpu var_disk var_fuse var_github_token var_gpu
-    var_gateway var_hostname var_ipv6_method var_mac var_mtu
-    var_net var_ns var_nvidia_passthrough var_postfix_sat var_postfix_sat_domain var_os var_pw var_ram var_shared_mount var_shared_mount_loc var_shared_mount_user var_tags var_tun var_unprivileged
-    var_verbose var_version var_vlan var_ssh var_ssh_authorized_key var_container_storage var_template_storage
+    var_apt_cacher var_apt_cacher_ip var_brg var_cpu var_disk var_fuse var_github_token var_gpu var_keyctl
+    var_gateway var_hostname var_ipv6_method var_mac var_mknod var_mount_fs var_mtu
+    var_net var_nesting var_ns var_nvidia_passthrough var_postfix_sat var_postfix_sat_domain var_os var_protection var_pw var_ram var_shared_mount var_shared_mount_loc var_shared_mount_user var_tags var_timezone var_tun var_unprivileged
+    var_verbose var_version var_vlan var_ssh var_ssh_authorized_key var_container_storage var_template_storage var_searchdomain
+    var_post_install
   )
 fi
 
@@ -1681,6 +1722,8 @@ _build_current_app_vars_tmp() {
     [ -n "$_postfix_sat" ] && echo "var_postfix_sat=$(_sanitize_value "$_postfix_sat")"
     [ -n "$_postfix_sat_domain" ] && echo "var_postfix_sat_domain=$(_sanitize_value "$_postfix_sat_domain")"
     [ -n "$_nvidia_passthrough" ] && echo "var_nvidia_passthrough=$(_sanitize_value "$_nvidia_passthrough")"
+
+    [ -n "${var_post_install:-}" ] && echo "var_post_install=$(_sanitize_value "${var_post_install}")"
   } >"$tmpf"
 
   echo "$tmpf"
@@ -1818,9 +1861,14 @@ advanced_settings() {
   trap 'tput rmcup 2>/dev/null || true' RETURN
 
   # Initialize defaults
-  TAGS="remz1337;${var_tags:-}"
+  # Build TAGS: ensure community-script prefix, use semicolons (pct format), no duplicates
+  if [[ "${var_tags:-}" == *community-script* ]]; then
+    TAGS="${var_tags:-community-script}"
+  else
+    TAGS="remz1337;${var_tags:+;${var_tags}}"
+  fi
   local STEP=1
-  local MAX_STEP=31
+  local MAX_STEP=32
 
   # Store values for back navigation - inherit from var_* app defaults
   local _ct_type="${var_unprivileged:-1}"
@@ -1862,6 +1910,8 @@ advanced_settings() {
   local _postfix_sat="${var_postfix_sat:-no}"
   local _postfix_sat_domain="${var_postfix_sat_domain:-example.com}"
   local _nvidia_passthrough="${var_nvidia_passthrough:-no}"
+
+  local _post_install="${var_post_install:-}"
 
   # Detect host timezone for default (if not set via var_timezone)
   local _host_timezone=""
@@ -1952,7 +2002,7 @@ advanced_settings() {
 
     # ═══════════════════════════════════════════════════════════════════════════
     # STEP 2: Root Password
-    # ════════════════════════════════════════���═══════════════════════════════���══
+    # ═══════════════════════════════════════════════════════════════════════════
     2)
       if PW1=$(whiptail --backtitle "Proxmox VE Helper Scripts [Step $STEP/$MAX_STEP]" \
         --title "ROOT PASSWORD" \
@@ -2563,6 +2613,13 @@ advanced_settings() {
     # STEP 22: Keyctl Support (Docker/systemd)
     # ═══════════════════════════════════════════════════════════════════════════
     22)
+      # Keyctl is always required for unprivileged containers — skip dialog
+      if [[ "$_ct_type" == "1" ]]; then
+        _enable_keyctl="1"
+        ((STEP++))
+        continue
+      fi
+
       local keyctl_default_flag="--defaultno"
       [[ "$_enable_keyctl" == "1" ]] && keyctl_default_flag=""
 
@@ -2570,7 +2627,7 @@ advanced_settings() {
         --title "KEYCTL SUPPORT" \
         --ok-button "Next" --cancel-button "Back" \
         $keyctl_default_flag \
-        --yesno "\nEnable Keyctl support?\n\nRequired for: Docker containers, systemd-networkd,\nand kernel keyring operations.\n\nNote: Automatically enabled for unprivileged containers.\n\n(App default: ${var_keyctl:-0})" 16 62; then
+        --yesno "\nEnable Keyctl support?\n\nRequired for: Docker containers, systemd-networkd,\nand kernel keyring operations.\n\n(App default: ${var_keyctl:-0})" 14 62; then
         _enable_keyctl="1"
       else
         if [ $? -eq 1 ]; then
@@ -2700,6 +2757,10 @@ advanced_settings() {
         --ok-button "Next" --cancel-button "Back" \
         --inputbox "\nAllow specific filesystem mounts.\n\nComma-separated list: nfs, cifs, fuse, ext4, etc.\nLeave empty for defaults (none).\n\nCurrent: $mount_hint" 14 62 "$_mount_fs" \
         3>&1 1>&2 2>&3); then
+        # Normalize: strip spaces and trailing/leading commas
+        result="${result// /}"
+        result="${result%%,}"
+        result="${result##,}"
         _mount_fs="$result"
         ((STEP++))
       else
@@ -2709,9 +2770,61 @@ advanced_settings() {
 
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # STEP 28: Add shared folder (mount point)
+    # STEP 28: Optional host-side post-install hook (path on the Proxmox HOST)
     # ═══════════════════════════════════════════════════════════════════════════
     28)
+      local _hook_prompt="Optional: absolute path to a *.sh file ON THE PROXMOX HOST.
+
+It runs as root on the HOST (NOT in the LXC) after the container
+is fully provisioned and started.
+
+Available env vars: APP, NSAPP, CTID, IP, HN, STORAGE, BRG.
+
+Leave empty to skip."
+      while true; do
+        if result=$(whiptail --backtitle "Proxmox VE Helper Scripts [Step $STEP/$MAX_STEP]" \
+          --title "POST-INSTALL HOOK (HOST)" \
+          --ok-button "Next" --cancel-button "Back" \
+          --inputbox "$_hook_prompt" 16 70 "${_post_install}" \
+          3>&1 1>&2 2>&3); then
+          # Normalize: strip surrounding whitespace
+          result="$(printf '%s' "$result" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          if [[ -z "$result" ]]; then
+            _post_install=""
+            ((STEP++))
+            break
+          fi
+          # Reject obvious shell-meta sneaking through
+          if [[ "$result" == *';'* || "$result" == *'$('* || "$result" == *'`'* || "$result" == *'&&'* || "$result" == *'||'* ]]; then
+            whiptail --backtitle "Proxmox VE Helper Scripts" --title "INVALID PATH" \
+              --msgbox "Path contains shell metacharacters. Please provide a plain absolute file path." 10 70
+            continue
+          fi
+          if [[ "$result" != /* ]]; then
+            whiptail --backtitle "Proxmox VE Helper Scripts" --title "INVALID PATH" \
+              --msgbox "Path must be absolute (start with /).\n\nGot: $result" 10 70
+            continue
+          fi
+          if [[ ! -f "$result" ]]; then
+            if ! whiptail --backtitle "Proxmox VE Helper Scripts" --title "FILE NOT FOUND" \
+              --yesno "File does not exist on host:\n\n$result\n\nKeep this path anyway?" 12 70; then
+              continue
+            fi
+          fi
+          _post_install="$result"
+          ((STEP++))
+          break
+        else
+          ((STEP--))
+          break
+        fi
+      done
+      ;;
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # STEP 29: Add shared folder (mount point)
+    # ═══════════════════════════════════════════════════════════════════════════
+    29)
       local shared_mount_default_flag="--defaultno"
       [[ "$_shared_mount" == "yes" ]] && shared_mount_default_flag=""
 
@@ -2752,9 +2865,9 @@ advanced_settings() {
 
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # STEP 29: Configure Postfix Satellite
+    # STEP 30: Configure Postfix Satellite
     # ═══════════════════════════════════════════════════════════════════════════
-    29)
+    30)
       local postfix_sat_default_flag="--defaultno"
       [[ "$_postfix_sat" == "yes" || "$_postfix_sat" == "1" ]] && postfix_sat_default_flag=""
 
@@ -2785,9 +2898,9 @@ advanced_settings() {
 
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # STEP 30: Configure Nvidia GPU Passthrough
+    # STEP 31: Configure Nvidia GPU Passthrough
     # ═══════════════════════════════════════════════════════════════════════════
-    30)
+    31)
       local _nvidia_passthrough_default_flag="--defaultno"
       [[ "$_nvidia_passthrough" == "yes" || "$_nvidia_passthrough" == "1" ]] && _nvidia_passthrough_default_flag=""
 
@@ -2810,9 +2923,9 @@ advanced_settings() {
 
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # STEP 31: Verbose Mode & Confirmation
+    # STEP 32: Verbose Mode & Confirmation
     # ═══════════════════════════════════════════════════════════════════════════
-    31)
+    32)
       local verbose_default_flag="--defaultno"
       [[ "$_verbose" == "yes" ]] && verbose_default_flag=""
 
@@ -2841,6 +2954,11 @@ advanced_settings() {
       local apt_display="${_apt_cacher:-no}"
       [[ "$_apt_cacher" == "yes" && -n "$_apt_cacher_ip" ]] && apt_display="$_apt_cacher_ip"
 
+      local post_install_display="${_post_install:-(none)}"
+      local post_install_warn=""
+      [[ -n "$_post_install" ]] && post_install_warn="
+  ⚠ Hook runs as root on Proxmox HOST (not in LXC)"
+
       local shared_mount_display="${_shared_mount:-no}"
       [[ "$_shared_mount" == "yes" && -n "$_shared_mount_loc" && -n "$_shared_mount_user" ]] && shared_mount_display="$_shared_mount_loc | User: $_shared_mount_user"
 
@@ -2867,6 +2985,7 @@ Network:
 Features:
   FUSE: $_enable_fuse | TUN: $_enable_tun
   Nesting: $nesting_desc | Keyctl: $keyctl_desc
+  Mknod: $([ "$_enable_mknod" == "1" ] && echo Enabled || echo Disabled) | Mount FS: ${_mount_fs:-(none)}
   GPU: $_enable_gpu | Protection: $protect_desc
 
 remz1337:
@@ -2877,7 +2996,8 @@ remz1337:
 Advanced:
   Timezone: $tz_display
   APT Cacher: $apt_display
-  Verbose: $_verbose"
+  Verbose: $_verbose
+  Post-Install Script: ${post_install_display}${post_install_warn}"
 
       if whiptail --backtitle "Proxmox VE Helper Scripts [Step $STEP/$MAX_STEP]" \
         --title "CONFIRM SETTINGS" \
@@ -2920,6 +3040,7 @@ Advanced:
   APT_CACHER="$_apt_cacher"
   APT_CACHER_IP="$_apt_cacher_ip"
   VERBOSE="$_verbose"
+  var_post_install="$_post_install"
 
   # remz1337
   SHARED_MOUNT="$_shared_mount"
@@ -2949,13 +3070,6 @@ Advanced:
   [[ -n "$_mac" ]] && MAC=",hwaddr=$_mac" || MAC=""
   [[ -n "$_vlan" ]] && VLAN=",tag=$_vlan" || VLAN=""
 
-  # Alpine UDHCPC fix
-  if [ "$var_os" == "alpine" ] && [ "$NET" == "dhcp" ] && [ -n "$_ns" ]; then
-    UDHCPC_FIX="yes"
-  else
-    UDHCPC_FIX="no"
-  fi
-  export UDHCPC_FIX
   export SSH_KEYS_FILE
 
   # Exit alternate screen buffer before showing summary (so output remains visible)
@@ -2980,6 +3094,8 @@ Advanced:
   echo -e "${CONTAINERTYPE}${BOLD}${DGN}Nesting: ${BGN}$([ "${ENABLE_NESTING:-1}" == "1" ] && echo "Enabled" || echo "Disabled")${CL}"
   [[ "${ENABLE_KEYCTL:-0}" == "1" ]] && echo -e "${CONTAINERTYPE}${BOLD}${DGN}Keyctl: ${BGN}Enabled${CL}"
   echo -e "${GPU}${BOLD}${DGN}GPU Passthrough: ${BGN}${ENABLE_GPU:-no}${CL}"
+  [[ "${ENABLE_MKNOD:-0}" == "1" ]] && echo -e "${CONTAINERTYPE}${BOLD}${DGN}Mknod: ${BGN}Enabled${CL}"
+  [[ -n "${ALLOW_MOUNT_FS:-}" ]] && echo -e "${CONTAINERTYPE}${BOLD}${DGN}Mount FS: ${BGN}${ALLOW_MOUNT_FS}${CL}"
   [[ "${PROTECT_CT:-no}" == "yes" || "${PROTECT_CT:-no}" == "1" ]] && echo -e "${CONTAINERTYPE}${BOLD}${DGN}Protection: ${BGN}Enabled${CL}"
   [[ -n "${CT_TIMEZONE:-}" ]] && echo -e "${INFO}${BOLD}${DGN}Timezone: ${BGN}$CT_TIMEZONE${CL}"
   [[ "$APT_CACHER" == "yes" ]] && echo -e "${INFO}${BOLD}${DGN}APT Cacher: ${BGN}$APT_CACHER_IP${CL}"
@@ -3006,6 +3122,8 @@ Advanced:
   log_msg "IPv6: $IPV6_METHOD"
   log_msg "FUSE Support: ${ENABLE_FUSE:-no}"
   log_msg "Nesting: $([ "${ENABLE_NESTING:-1}" == "1" ] && echo "Enabled" || echo "Disabled")"
+  log_msg "Mknod: $([ "${ENABLE_MKNOD:-0}" == "1" ] && echo "Enabled" || echo "Disabled")"
+  [[ -n "${ALLOW_MOUNT_FS:-}" ]] && log_msg "Mount FS: ${ALLOW_MOUNT_FS}"
   log_msg "GPU Passthrough: ${ENABLE_GPU:-no}"
   log_msg "Verbose Mode: $VERBOSE"
   log_msg "Session ID: ${SESSION_ID}"
@@ -3124,6 +3242,9 @@ echo_default() {
   echo -e "${DISKSIZE}${BOLD}${DGN}Disk Size: ${BGN}${DISK_SIZE} GB${CL}"
   echo -e "${CPUCORE}${BOLD}${DGN}CPU Cores: ${BGN}${CORE_COUNT}${CL}"
   echo -e "${RAMSIZE}${BOLD}${DGN}RAM Size: ${BGN}${RAM_SIZE} MiB${CL}"
+  if [[ "$(dpkg --print-architecture)" == "arm64" ]]; then
+    echo -e "${INFO}${BOLD}${DGN}Architecture: ${BGN}arm64${CL}"
+  fi
   if [[ -n "${var_gpu:-}" && "${var_gpu}" == "yes" ]]; then
     echo -e "${GPU}${BOLD}${DGN}GPU Passthrough: ${BGN}Enabled${CL}"
   fi
@@ -3160,7 +3281,9 @@ install_script() {
   pve_check
   shell_check
   root_check
+  ensure_whiptail
   arch_check
+  arm64_notice
   ssh_check
   maxkeys_check
   diagnostics_check
@@ -3374,6 +3497,10 @@ check_container_resources() {
   if [[ "$current_ram" -lt "$var_ram" ]] || [[ "$current_cpu" -lt "$var_cpu" ]]; then
     msg_warn "Under-provisioned: Required ${var_cpu} CPU/${var_ram}MB RAM, Current ${current_cpu} CPU/${current_ram}MB RAM"
     echo -e "${YWB}Please ensure that the ${APP} LXC is configured with at least ${var_cpu} vCPU and ${var_ram} MB RAM for the build process.${CL}\n"
+    if is_unattended; then
+      msg_error "Aborted: under-provisioned LXC in unattended mode (${current_cpu} CPU/${current_ram}MB RAM < ${var_cpu} CPU/${var_ram}MB RAM)"
+      exit 113
+    fi
     echo -ne "${INFO}${HOLD} May cause data loss! ${INFO} Continue update with under-provisioned LXC? <yes/No>  "
     read -r prompt </dev/tty
     if [[ ! ${prompt,,} =~ ^(yes)$ ]]; then
@@ -3397,6 +3524,10 @@ check_container_storage() {
   usage=$((100 * used_size / total_size))
   if ((usage > 80)); then
     msg_warn "Storage is dangerously low (${usage}% used on /boot)"
+    if is_unattended; then
+      msg_error "Aborted: storage too low in unattended mode (${usage}% used on /boot)"
+      exit 114
+    fi
     echo -ne "Continue anyway? <y/N>  "
     read -r prompt </dev/tty
     if [[ ! ${prompt,,} =~ ^(y|yes)$ ]]; then
@@ -3649,6 +3780,99 @@ msg_menu() {
 }
 
 # ------------------------------------------------------------------------------
+# run_addon_updates()
+#
+# - Scans /usr/local/bin/update_* for addon update scripts installed alongside
+#   the main application (e.g. by tools/addon/*.sh)
+# - For each found addon, prompts the user (60s timeout, default no) whether
+#   it should be updated as well
+# - Skipped entirely when PHS_SILENT=1 to keep unattended updates predictable
+# ------------------------------------------------------------------------------
+run_addon_updates() {
+  shopt -s nullglob
+  local addons=(/usr/local/bin/update_*)
+  shopt -u nullglob
+
+  ((${#addons[@]} == 0)) && return 0
+
+  if [[ "${PHS_SILENT:-0}" == "1" ]]; then
+    msg_info "Detected ${#addons[@]} addon update script(s) - skipping (PHS_SILENT)"
+    return 0
+  fi
+
+  echo
+  echo -e "${INFO}${YW} Detected installed addon update script(s):${CL}"
+  local a name
+  for a in "${addons[@]}"; do
+    echo -e "${TAB}- ${a##*/update_}"
+  done
+  echo
+
+  local ans
+  for a in "${addons[@]}"; do
+    name="${a##*/update_}"
+    printf 'Do you also want to update addon "%s"? (y/N) [60s]: ' "$name"
+    ans=""
+    if read -r -t 60 ans; then :; else echo; fi
+    case "${ans,,}" in
+    y | yes)
+      bash "$a" || msg_warn "Addon update for $name failed (rc=$?)"
+      ;;
+    *)
+      msg_info "Skipped addon: $name"
+      ;;
+    esac
+  done
+}
+
+
+runtime_script_status_guard() {
+  local script_slug="${SCRIPT_SLUG:-${NSAPP:-}}"
+  script_slug="$(echo "$script_slug" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+  [[ -z "$script_slug" ]] && return 0
+
+  local api_url="https://db.community-scripts.org/api/collections/script_scripts/records?filter=(slug='${script_slug}')&perPage=1&fields=slug,is_disabled,is_deleted,disable_message,deleted_message"
+  local response
+  if ! response=$(curl -fsSL --connect-timeout 2 --max-time 3 "$api_url" 2>/dev/null); then
+    msg_warn "Script status check is unavailable. Continuing without status verification."
+    return 0
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    msg_warn "Missing jq for script status check. Continuing without status verification."
+    return 0
+  fi
+
+  local has_record is_deleted is_disabled deleted_message disable_message info_url
+  has_record=$(printf '%s' "$response" | jq -r '.items | length')
+  [[ "$has_record" == "0" ]] && return 0
+
+  is_deleted=$(printf '%s' "$response" | jq -r '.items[0].is_deleted // false')
+  is_disabled=$(printf '%s' "$response" | jq -r '.items[0].is_disabled // false')
+  deleted_message=$(printf '%s' "$response" | jq -r '.items[0].deleted_message // ""')
+  disable_message=$(printf '%s' "$response" | jq -r '.items[0].disable_message // ""')
+  info_url="https://community-scripts.org/scripts/${script_slug}"
+
+  if [[ "$is_deleted" == "true" ]]; then
+    msg_error "This script is no longer available in community-scripts."
+    [[ -n "$deleted_message" ]] && msg_error "$deleted_message"
+    [[ -z "$deleted_message" ]] && msg_error "This script was removed and cannot be installed or updated."
+    msg_warn "More info: ${info_url}"
+    return 1
+  fi
+
+  if [[ "$is_disabled" == "true" ]]; then
+    msg_error "This script is currently disabled in community-scripts."
+    [[ -n "$disable_message" ]] && msg_error "$disable_message"
+    [[ -z "$disable_message" ]] && msg_error "Updates and installs are temporarily disabled for this script."
+    msg_warn "More info: ${info_url}"
+    return 1
+  fi
+
+  return 0
+}
+
+# ------------------------------------------------------------------------------
 # start()
 #
 # - Entry point of script
@@ -3656,9 +3880,11 @@ msg_menu() {
 # - In silent mode: runs update_script with automatic cleanup
 # - Otherwise: shows update/setting menu and runs update_script with cleanup
 # ------------------------------------------------------------------------------
+
 start() {
   source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
   if command -v pveversion >/dev/null 2>&1; then
+    runtime_script_status_guard || return 0
     install_script || return 0
     return 0
   elif [ ! -z ${PHS_SILENT+x} ] && [[ "${PHS_SILENT}" == "1" ]]; then
@@ -3666,7 +3892,20 @@ start() {
     set_std_mode
     ensure_profile_loaded
     get_lxc_ip
+    runtime_script_status_guard || return 0
     update_script
+    run_addon_updates
+    update_motd_ip
+    cleanup_lxc
+  elif ! command -v whiptail &>/dev/null || ! [ -t 0 ] || [[ "$TERM" == "dumb" ]]; then
+    msg_info "No interactive terminal detected – defaulting to silent update mode"
+    VERBOSE="no"
+    set_std_mode
+    ensure_profile_loaded
+    get_lxc_ip
+    runtime_script_status_guard || return 0
+    update_script
+    run_addon_updates
     update_motd_ip
     cleanup_lxc
   else
@@ -3694,7 +3933,9 @@ start() {
     esac
     ensure_profile_loaded
     get_lxc_ip
+    runtime_script_status_guard || return 0
     update_script
+    run_addon_updates
     update_motd_ip
     cleanup_lxc
   fi
@@ -3792,9 +4033,27 @@ build_container() {
     FEATURES="${FEATURES}fuse=1"
   fi
 
+  # Mknod support (user configurable via advanced settings)
+  if [ "${ENABLE_MKNOD:-0}" == "1" ]; then
+    [ -n "$FEATURES" ] && FEATURES="$FEATURES,"
+    FEATURES="${FEATURES}mknod=1"
+  fi
+
+  # Mount filesystem types (user configurable via advanced settings)
+  if [ -n "${ALLOW_MOUNT_FS:-}" ]; then
+    # Sanitize: strip spaces, trailing/leading commas, then convert commas to semicolons
+    local _mount_clean="${ALLOW_MOUNT_FS// /}"
+    _mount_clean="${_mount_clean%%,}"
+    _mount_clean="${_mount_clean##,}"
+    _mount_clean="${_mount_clean%%;}"
+    _mount_clean="${_mount_clean//,/;}"
+    if [ -n "$_mount_clean" ]; then
+      [ -n "$FEATURES" ] && FEATURES="$FEATURES,"
+      FEATURES="${FEATURES}mount=${_mount_clean}"
+    fi
+  fi
+
   # Build PCT_OPTIONS as string for export
-  TEMP_DIR=$(mktemp -d)
-  pushd "$TEMP_DIR" >/dev/null
   local _func_url
   if [ "$var_os" == "alpine" ]; then
     _func_url="https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/alpine-install.func"
@@ -3827,6 +4086,7 @@ build_container() {
   export ENABLE_TUN="$ENABLE_TUN"
   export PCT_OSTYPE="$var_os"
   export PCT_OSVERSION="$var_version"
+  export PCT_ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
   export PCT_DISK_SIZE="$DISK_SIZE"
   export IPV6_METHOD="$IPV6_METHOD"
   export ENABLE_GPU="$ENABLE_GPU"
@@ -3923,6 +4183,7 @@ $PCT_OPTIONS_STRING"
       exit 214
     fi
     msg_ok "Storage space validated"
+    check_storage_health "$CONTAINER_STORAGE" "$DISK_SIZE"
   fi
 
   create_lxc_container || exit $?
@@ -3981,7 +4242,7 @@ $PCT_OPTIONS_STRING"
       if [[ -d /dev/dri ]]; then
         # Only add if not already claimed by Intel
         if [[ ${#INTEL_DEVICES[@]} -eq 0 ]]; then
-          for d in /dev/dri/renderD* /dev/dri/card*; do
+          for d in /dev/dri/renderD* /dev/dri/card* /dev/kfd; do
             [[ -e "$d" ]] && AMD_DEVICES+=("$d")
           done
         fi
@@ -4354,20 +4615,26 @@ EOF
       msg_warn "Skipping timezone setup – zone '$tz' not found in container"
     fi
 
+    local _base_pkgs="sudo curl mc gnupg2 jq"
+    if [[ "${ARCH:-amd64}" == "arm64" ]]; then
+      _base_pkgs+=" openssh-server wget gcc"
+    fi
+
     # Detect broken DNS resolver (e.g. Tailscale MagicDNS) and inject public DNS
     if ! pct exec "$CTID" -- bash -c "getent hosts deb.debian.org >/dev/null 2>&1 && getent hosts archive.ubuntu.com >/dev/null 2>&1"; then
       msg_warn "APT repository DNS resolution failed in container, injecting public DNS servers"
       pct exec "$CTID" -- bash -c "echo -e 'nameserver 8.8.8.8\nnameserver 1.1.1.1' >/etc/resolv.conf"
     fi
 
-    pct exec "$CTID" -- bash -c "apt-get update 2>&1 && apt-get install -y sudo curl mc gnupg2 jq 2>&1" >>"$BUILD_LOG" 2>&1 || {
+    pct exec "$CTID" -- bash -c "apt-get update 2>&1 && apt-get install -y ${_base_pkgs} 2>&1" >>"$BUILD_LOG" 2>&1 || {
       local failed_mirror
       failed_mirror=$(pct exec "$CTID" -- bash -c "grep -m1 -oP '(?<=URIs: https?://)[^/]+' /etc/apt/sources.list.d/debian.sources 2>/dev/null || grep -m1 -oP '(?<=deb https?://)[^/]+' /etc/apt/sources.list 2>/dev/null" 2>/dev/null || echo "unknown")
-      msg_warn "apt-get update failed (${failed_mirror}), trying alternate mirrors..."
+      msg_warn "apt-get update failed (${failed_mirror})."
+      msg_custom "ℹ️" "${YW}" "Probing alternate mirrors (this can take 1-2 minutes on network issues)"
       local mirror_exit=0
-      pct exec "$CTID" -- bash -c '
-        APT_BASE="sudo curl mc gnupg2 jq"
+      pct exec "$CTID" -- env APT_BASE="$_base_pkgs" bash -c '
         DISTRO=$(. /etc/os-release 2>/dev/null && echo "$ID" || echo "debian")
+        echo "  Mirror fallback for distro: $DISTRO"
 
         if [ "$DISTRO" = "ubuntu" ]; then
           EU_MIRRORS="de.archive.ubuntu.com fr.archive.ubuntu.com se.archive.ubuntu.com nl.archive.ubuntu.com it.archive.ubuntu.com ch.archive.ubuntu.com mirrors.xtom.de"
@@ -4425,8 +4692,13 @@ EOF
         }
 
         # Phase 1: Scan global mirrors first (independent of local CDN issues)
+        echo "  Phase 1/3: Scanning global mirrors for reachability..."
         OTHERS_OK=$(scan_reachable "$OTHERS")
         OTHERS_PICK=$(printf "%s\n" $OTHERS_OK | shuf | head -3 | xargs)
+
+        if [ -z "$OTHERS_PICK" ]; then
+          echo "  No reachable global mirrors found"
+        fi
 
         for mirror in $OTHERS_PICK; do
           echo "  Attempting mirror: $mirror"
@@ -4434,6 +4706,7 @@ EOF
         done
 
         # Phase 2: Try primary mirror
+        echo "  Phase 2/3: Trying primary mirror..."
         if [ "$DISTRO" = "ubuntu" ]; then
           PRIMARY="archive.ubuntu.com"
         else
@@ -4445,8 +4718,13 @@ EOF
         fi
 
         # Phase 3: Fall back to regional mirrors
+        echo "  Phase 3/3: Scanning regional mirrors..."
         REGIONAL_OK=$(scan_reachable "$REGIONAL")
         REGIONAL_PICK=$(printf "%s\n" $REGIONAL_OK | shuf | head -3 | xargs)
+
+        if [ -z "$REGIONAL_PICK" ]; then
+          echo "  No reachable regional mirrors found"
+        fi
 
         for mirror in $REGIONAL_PICK; do
           echo "  Attempting mirror: $mirror"
@@ -4476,17 +4754,19 @@ EOF
               [ -f \"\$src\" ] && sed -i \"s|URIs: http[s]*://[^/]*/|URIs: http://${custom_mirror}/|g; s|deb http[s]*://[^/]*/|deb http://${custom_mirror}/|g\" \"\$src\"
             done
             rm -rf /var/lib/apt/lists/*
-            apt-get update >/dev/null 2>&1 && apt-get install -y sudo curl mc gnupg2 jq >/dev/null 2>&1
+            apt-get update >/dev/null 2>&1 && apt-get install -y ${_base_pkgs} >/dev/null 2>&1
           " && break
           msg_warn "Mirror '${custom_mirror}' also failed. Try another or type 'skip'."
         done
         if [[ "$custom_mirror" == "skip" ]]; then
-          msg_error "apt-get base packages installation failed"
-          install_exit_code=1
+          msg_warn "Mirror selection aborted by user ('skip')"
+          msg_warn "Aborting installation before base package bootstrap"
+          post_update_to_api "aborted" "130" "force"
+          install_exit_code=130
         fi
       elif [[ $mirror_exit -ne 0 ]]; then
         msg_error "apt-get base packages installation failed"
-        install_exit_code=1
+        install_exit_code=100
       fi
     }
   fi
@@ -4519,7 +4799,9 @@ EOF
     # that sends "configuring" status AFTER the host already reported "failed"
     export CONTAINER_INSTALLING=true
 
-    lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/install/${var_install}.sh)"
+    local _install_script
+    _install_script="$(curl -fsSL "https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/install/${var_install}.sh")"
+    lxc-attach -n "$CTID" -- bash -c "$_install_script"
     local lxc_exit=$?
 
     unset CONTAINER_INSTALLING
@@ -4914,7 +5196,9 @@ EOF
           # Re-run install script in existing container (don't destroy/recreate)
           set +Eeuo pipefail
           trap - ERR
-          lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/install/${var_install}.sh)"
+          local _install_script
+          _install_script="$(curl -fsSL "https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/install/${var_install}.sh")"
+          lxc-attach -n "$CTID" -- bash -c "$_install_script"
           local apt_retry_exit=$?
           set -Eeuo pipefail
           trap 'error_handler' ERR
@@ -5285,6 +5569,7 @@ select_storage() {
     # Validate storage space for container storage
     if [[ "$CLASS" == "container" && -n "${DISK_SIZE:-}" ]]; then
       validate_storage_space "$STORAGE_RESULT" "$DISK_SIZE" "yes"
+      check_storage_health "$STORAGE_RESULT" "$DISK_SIZE"
       # Continue even if validation fails - user was warned
     fi
 
@@ -5350,6 +5635,51 @@ validate_storage_space() {
   return 0
 }
 
+# ------------------------------------------------------------------------------
+# check_storage_health()
+#
+# - Warns or blocks when target storage is nearly full
+# - Complements validate_storage_space (free space vs. requested disk)
+# - Uses pvesm status usage when available
+# ------------------------------------------------------------------------------
+check_storage_health() {
+  local storage="$1"
+  local required_gb="${2:-8}"
+  [[ -z "$storage" ]] && return 0
+
+  local storage_line storage_type total_kb avail_kb used_pct free_gb_fmt
+  storage_line=$(pvesm status 2>/dev/null | awk -v s="$storage" '$1 == s {print $0}')
+  [[ -z "$storage_line" ]] && return 0
+
+  storage_type=$(awk '{print $2}' <<<"$storage_line")
+  total_kb=$(awk '{print $4}' <<<"$storage_line")
+  avail_kb=$(awk '{print $6}' <<<"$storage_line")
+
+  [[ -z "$total_kb" || "$total_kb" == "0" || -z "$avail_kb" ]] && return 0
+
+  used_pct=$(( (total_kb - avail_kb) * 100 / total_kb ))
+  free_gb_fmt=$(numfmt --to=iec --from-unit=1024 --suffix=B --format %.1f "$avail_kb" 2>/dev/null || echo "${avail_kb}KB")
+
+  if (( used_pct >= 95 )); then
+    msg_warn "Storage '${storage}' (${storage_type}) is ${used_pct}% full (${free_gb_fmt} free)"
+    if ! is_unattended && command -v whiptail >/dev/null 2>&1 && [[ -t 0 ]]; then
+      if ! whiptail --backtitle "Proxmox VE Helper Scripts" \
+        --title "STORAGE ALMOST FULL" \
+        --yesno "Storage '${storage}' is ${used_pct}% full.\n\nType: ${storage_type}\nAvailable: ${free_gb_fmt}\nRequired for CT: ${required_gb} GB\n\nContinue anyway?" 14 70; then
+        msg_error "Installation cancelled – storage nearly full"
+        exit 214
+      fi
+    elif (( used_pct >= 98 )); then
+      msg_error "Storage '${storage}' is ${used_pct}% full – refusing install in unattended mode"
+      exit 214
+    fi
+  elif (( used_pct >= 85 )); then
+    msg_warn "Storage '${storage}' (${storage_type}) is ${used_pct}% full (${free_gb_fmt} free)"
+  fi
+
+  return 0
+}
+
 # ==============================================================================
 # SECTION 8: CONTAINER CREATION
 # ==============================================================================
@@ -5381,15 +5711,185 @@ create_lxc_container() {
   # Extract Debian OS minor from template name: debian-13-standard_13.1-1_amd64.tar.zst => "13.1"
   parse_template_osver() { sed -n 's/.*_\([0-9][0-9]*\(\.[0-9]\+\)\?\)-.*/\1/p' <<<"$1"; }
 
+  # Switch to the previous OS major version template and retry pct create
+  # Determines the fallback version automatically based on available templates.
+  # Returns: 0 = success, 1 = failed
+  fallback_to_previous_os_version() {
+    local old_template="$TEMPLATE"
+    local os_type="${PCT_OSTYPE:-}"
+    local current_ver="${PCT_OSVERSION:-}"
+
+    # Determine template search pattern based on OS type
+    local tpl_pattern=""
+    case "$os_type" in
+    debian | ubuntu) tpl_pattern="-standard_" ;;
+    alpine | fedora | rocky | centos) tpl_pattern="-default_" ;;
+    *) tpl_pattern="" ;;
+    esac
+
+    msg_info "Searching for an older $os_type template (current: $os_type $current_ver)"
+
+    # Collect all available versions for this OS type (local + online)
+    local -a all_versions=()
+
+    # Local templates
+    mapfile -t _local_vers < <(
+      pveam list "$TEMPLATE_STORAGE" 2>/dev/null |
+        awk -v os="$os_type" -v pat="$tpl_pattern" '$1 ~ ("^"os"|/"os) && $1 ~ pat {print $1}' |
+        sed 's|.*/||' |
+        sed -E "s/^${os_type}-([0-9]+(\.[0-9]+)?).*/\1/" |
+        sort -u -V
+    )
+    all_versions+=("${_local_vers[@]}")
+
+    # Online templates (only if needed)
+    if command -v timeout &>/dev/null; then
+      timeout 30 pveam update >/dev/null 2>&1 || true
+    else
+      pveam update >/dev/null 2>&1 || true
+    fi
+    mapfile -t _online_vers < <(
+      pveam available -section system 2>/dev/null |
+        awk '{print $2}' |
+        grep -E "^${os_type}-[0-9]" |
+        { [[ -n "$tpl_pattern" ]] && grep "$tpl_pattern" || cat; } |
+        sed -E "s/^${os_type}-([0-9]+(\.[0-9]+)?).*/\1/" |
+        sort -u -V 2>/dev/null || true
+    )
+    all_versions+=("${_online_vers[@]}")
+
+    # Deduplicate and sort, find the highest version below current
+    local fallback_ver=""
+    fallback_ver=$(printf '%s\n' "${all_versions[@]}" | sort -u -V | awk -v cur="$current_ver" '{
+      # Compare major versions: extract major part
+      split($0, a, ".")
+      split(cur, b, ".")
+      if (a[1]+0 < b[1]+0) ver=$0
+    } END { if (ver) print ver }')
+
+    if [[ -z "$fallback_ver" ]]; then
+      msg_error "No older $os_type template version found."
+      return 1
+    fi
+
+    msg_ok "Fallback version: $os_type $fallback_ver"
+
+    # Find the actual template file for this version
+    local fallback_search="${os_type}-${fallback_ver}"
+    local fallback_template=""
+
+    # Check local first
+    mapfile -t _fb_local < <(
+      pveam list "$TEMPLATE_STORAGE" 2>/dev/null |
+        awk -v search="$fallback_search" -v pat="$tpl_pattern" '$1 ~ search && $1 ~ pat {print $1}' |
+        sed 's|.*/||' | sort -t - -k 2 -V
+    )
+    if [[ ${#_fb_local[@]} -gt 0 ]]; then
+      fallback_template="${_fb_local[-1]}"
+    else
+      # Check online
+      mapfile -t _fb_online < <(
+        pveam available -section system 2>/dev/null |
+          awk '{print $2}' |
+          grep -E "^${fallback_search}.*${tpl_pattern}" |
+          sort -t - -k 2 -V 2>/dev/null || true
+      )
+      [[ ${#_fb_online[@]} -gt 0 ]] && fallback_template="${_fb_online[-1]}"
+    fi
+
+    if [[ -z "$fallback_template" ]]; then
+      msg_error "No template found for $os_type $fallback_ver."
+      return 1
+    fi
+
+    msg_ok "Found template: $fallback_template"
+
+    # Download if needed
+    local fallback_path
+    fallback_path="$(pvesm path "$TEMPLATE_STORAGE:vztmpl/$fallback_template" 2>/dev/null || true)"
+    [[ -z "$fallback_path" ]] && fallback_path="/var/lib/vz/template/cache/$fallback_template"
+
+    if [[ ! -f "$fallback_path" ]]; then
+      msg_info "Downloading $os_type $fallback_ver template"
+      if ! pveam download "$TEMPLATE_STORAGE" "$fallback_template" >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+        msg_error "Failed to download $os_type $fallback_ver template."
+        return 1
+      fi
+      msg_ok "Template downloaded"
+    fi
+
+    # Update variables
+    TEMPLATE="$fallback_template"
+    TEMPLATE_PATH="$fallback_path"
+    PCT_OSVERSION="$fallback_ver"
+    export PCT_OSVERSION
+
+    # Retry pct create
+    msg_info "Retrying container creation with $os_type $fallback_ver"
+    if pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" $PCT_OPTIONS >>"$LOGFILE" 2>&1; then
+      msg_ok "Container created successfully with $os_type $fallback_ver (fallback from $old_template)."
+      return 0
+    else
+      msg_error "Container creation with $os_type $fallback_ver also failed. See $LOGFILE"
+      return 1
+    fi
+  }
+
   # Offer upgrade for pve-container/lxc-pve if candidate > installed; optional auto-retry pct create
   # Returns:
-  #   0 = no upgrade needed
+  #   0 = no upgrade needed / container created after upgrade or explicit fallback
   #   1 = upgraded (and if do_retry=yes and retry succeeded, creation done)
-  #   2 = user declined
+  #   2 = user chose ignore
   #   3 = upgrade attempted but failed OR retry failed
+  #   4 = user cancelled
   offer_lxc_stack_upgrade_and_maybe_retry() {
     local do_retry="${1:-no}" # yes|no
     local _pvec_i _pvec_c _lxcp_i _lxcp_c need=0
+    local _ans
+
+    has_previous_os_version_template() {
+      local os_type="${PCT_OSTYPE:-}"
+      local current_ver="${PCT_OSVERSION:-}"
+      local tpl_pattern="${TEMPLATE_PATTERN:-${TEMPLATE:-}}"
+      local -a all_versions=()
+
+      [[ -n "$os_type" && -n "$current_ver" ]] || return 1
+
+      mapfile -t _local_vers < <(
+        pveam list "$TEMPLATE_STORAGE" 2>/dev/null |
+          awk '{print $1}' |
+          sed 's|.*/||' |
+          grep -E "^${os_type}-[0-9]" |
+          { [[ -n "$tpl_pattern" ]] && grep "$tpl_pattern" || cat; } |
+          sed -E "s/^${os_type}-([0-9]+(\.[0-9]+)?).*/\1/" |
+          sort -u -V
+      )
+      all_versions+=("${_local_vers[@]}")
+
+      if command -v timeout &>/dev/null; then
+        timeout 30 pveam update >/dev/null 2>&1 || true
+      else
+        pveam update >/dev/null 2>&1 || true
+      fi
+      mapfile -t _online_vers < <(
+        pveam available -section system 2>/dev/null |
+          awk '{print $2}' |
+          grep -E "^${os_type}-[0-9]" |
+          { [[ -n "$tpl_pattern" ]] && grep "$tpl_pattern" || cat; } |
+          sed -E "s/^${os_type}-([0-9]+(\.[0-9]+)?).*/\1/" |
+          sort -u -V 2>/dev/null || true
+      )
+      all_versions+=("${_online_vers[@]}")
+
+      printf '%s\n' "${all_versions[@]}" | sort -u -V | awk -v cur="$current_ver" '
+        {
+          split($0, a, ".")
+          split(cur, b, ".")
+          if (a[1]+0 < b[1]+0) found=1
+        }
+        END { exit found ? 0 : 1 }
+      '
+    }
 
     _pvec_i="$(pkg_ver pve-container)"
     _lxcp_i="$(pkg_ver lxc-pve)"
@@ -5406,18 +5906,87 @@ create_lxc_container() {
       msg_debug "No newer candidate for pve-container/lxc-pve (installed=$_pvec_i/$_lxcp_i, cand=$_pvec_c/$_lxcp_c)"
       return 0
     fi
+    local _disable_update="${DISABLE_UPDATE:-no}"
+    if [[ "${PHS_SILENT:-0}" == "1" || "${_disable_update,,}" == "yes" ]]; then
+      msg_info "Skipping host LXC stack upgrade prompt (unattended mode)"
+      return 2
+    fi
 
     msg_warn "An update for the Proxmox LXC stack is available"
     echo "  pve-container: installed=${_pvec_i:-n/a}  candidate=${_pvec_c:-n/a}"
     echo "  lxc-pve     : installed=${_lxcp_i:-n/a}  candidate=${_lxcp_c:-n/a}"
+    echo "  note        : option 1 runs host apt update + apt upgrade"
     echo
-    read -rp "Do you want to upgrade now? [y/N] " _ans </dev/tty
+
+    # Offer older OS version fallback when template version might be too new for LXC stack
+    local _has_fallback_option=false
+    if [[ "$do_retry" == "yes" ]] && has_previous_os_version_template; then
+      _has_fallback_option=true
+      echo "  [1] Run host upgrade now (recommended). WARNING: this runs apt upgrade and updates all Packages on your host!"
+      echo "  [2] Use an older ${PCT_OSTYPE} template instead (may not work with all scripts)"
+      echo "  [3] Ignore"
+      echo "  [4] Cancel"
+      echo
+      read -rp "Select option [1/2/3/4]: " _ans </dev/tty
+    else
+      echo "  [1] Run host upgrade now (recommended). WARNING: this runs apt upgrade and updates all Packages on your host!"
+      echo "  [2] Ignore"
+      echo "  [3] Cancel"
+      echo
+      read -rp "Select option [1/2/3]: " _ans </dev/tty
+    fi
+
+    if [[ "$_has_fallback_option" == true ]]; then
+      case "$_ans" in
+      1)
+        _ans="y"
+        ;;
+      2)
+        if fallback_to_previous_os_version; then
+          return 0
+        else
+          return 3
+        fi
+        ;;
+      3)
+        return 2
+        ;;
+      4)
+        return 4
+        ;;
+      *)
+        return 4
+        ;;
+      esac
+    else
+      case "$_ans" in
+      1)
+        _ans="y"
+        ;;
+      2)
+        return 2
+        ;;
+      *)
+        return 4
+        ;;
+      esac
+    fi
+
     case "${_ans,,}" in
     y | yes)
-      msg_info "Upgrading Proxmox LXC stack (pve-container, lxc-pve)"
+      msg_info "Running host upgrade for LXC stack compatibility"
       apt_update_safe
-      if $STD apt-get install -y --only-upgrade pve-container lxc-pve; then
+      if $STD apt-get upgrade -y; then
         msg_ok "LXC stack upgraded."
+        # Verify pct binary still works after upgrade (partial upgrades can break Perl modules)
+        if ! pct list &>/dev/null; then
+          msg_error "LXC stack upgrade caused PVE tool breakage (likely Perl module incompatibility)."
+          msg_custom "⚠️" "${YW}" "A partial package upgrade has left the PVE stack in an inconsistent state."
+          msg_custom "🔧" "${YW}" "Please run the following on the Proxmox host, then retry:"
+          echo -e "${TAB}  apt update && apt upgrade -y"
+          echo -e "${TAB}  reboot"
+          return 3
+        fi
         if [[ "$do_retry" == "yes" ]]; then
           msg_info "Retrying container creation after upgrade"
           if pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" $PCT_OPTIONS >>"$LOGFILE" 2>&1; then
@@ -5436,6 +6005,84 @@ create_lxc_container() {
       ;;
     *) return 2 ;;
     esac
+  }
+
+  ARCH="$(dpkg --print-architecture)"
+
+  # Maps OS type + version to the release variant name used by ARM64 template sources.
+  arm64_template_variant() {
+    case "$1:$2" in
+      debian:12) echo "bookworm" ;;
+      debian:13) echo "trixie" ;;
+      debian:) echo "$DEBIAN_DEFAULT_CODENAME" ;;
+
+      ubuntu:24.04) echo "noble" ;;
+      ubuntu:26.04) echo "questing" ;;
+      ubuntu:) echo "$UBUNTU_DEFAULT_CODENAME" ;;
+
+      alpine:*) echo "${2:-$ALPINE_DEFAULT_VERSION}" ;;
+
+      *) return 1 ;;
+    esac
+  }
+
+  # Downloads an ARM64 LXC rootfs template from jenkins.linuxcontainers.org.
+  download_arm64_template() {
+    local dest="$1" url
+
+    mkdir -p "$(dirname "$dest")" || {
+      msg_error "Cannot create template dir."
+      exit 207
+    }
+
+    url="https://jenkins.linuxcontainers.org/job/image-${PCT_OSTYPE}/architecture=arm64,release=${CUSTOM_TEMPLATE_VARIANT},variant=default/lastStableBuild/artifact/rootfs.tar.xz"
+
+    msg_info "Downloading ${PCT_OSTYPE^} ${CUSTOM_TEMPLATE_VARIANT} ARM64 template"
+    local patched="${dest%/*}/.${dest##*/}.patched"
+    (
+      flock -x 200
+      if [[ -f "$patched" ]] && [[ -s "$dest" ]] && xz -t "$dest" 2>/dev/null; then
+        exit 0
+      fi
+      if ! curl -fsSL -o "$dest" "$url"; then
+        msg_error "Failed to download ARM64 template from: $url"
+        exit 208
+      fi
+      # Some linuxcontainers.org rootfs builds ship without /etc/network,
+      # which makes pve-container's post-create hook fail when it writes the
+      # interfaces file. This appends an empty /etc/network/interfaces if missing.
+      if ! tar -tJf "$dest" 2>/dev/null | grep -q '/etc/network/$'; then
+        fixdir=$(mktemp -d)
+        tmptar="${dest%.xz}"
+        mkdir -p "$fixdir/etc/network"
+        : >"$fixdir/etc/network/interfaces"
+        if xz -d -f "$dest" && tar -C "$fixdir" --append -f "$tmptar" ./etc/network && xz -1 -f "$tmptar"; then
+          rm -rf "$fixdir"
+        else
+          rm -rf "$fixdir" "$tmptar"
+          msg_error "Failed to patch ARM64 template (missing /etc/network)"
+          exit 208
+        fi
+      fi
+      touch "$patched"
+    ) 200>"${dest}.lock"
+    local dl_rc=$?
+    if [[ $dl_rc -ne 0 ]]; then
+      exit "$dl_rc"
+    fi
+    msg_ok "Downloaded ARM64 LXC template"
+  }
+
+  download_template() {
+    local dest="${1:-$TEMPLATE_PATH}"
+    if [[ "$ARCH" == "arm64" ]]; then
+      download_arm64_template "$dest"
+    else
+      pveam download "$TEMPLATE_STORAGE" "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1 || {
+        msg_error "Failed to download template '$TEMPLATE' to storage '$TEMPLATE_STORAGE'"
+        exit 222
+      }
+    fi
   }
 
   # ------------------------------------------------------------------------------
@@ -5516,10 +6163,35 @@ create_lxc_container() {
   fi
 
   msg_info "Validating storage '$CONTAINER_STORAGE'"
-  STORAGE_TYPE=$(grep -E "^[^:]+: $CONTAINER_STORAGE$" /etc/pve/storage.cfg | cut -d: -f1 | head -1 || true)
+  # Check if storage.cfg is accessible (pmxcfs must be mounted)
+  if [[ ! -f /etc/pve/storage.cfg ]]; then
+    if ! mountpoint -q /etc/pve 2>/dev/null; then
+      msg_error "Proxmox cluster filesystem (pmxcfs) is not mounted at /etc/pve."
+      msg_custom "🔧" "${YW}" "Try: systemctl restart pve-cluster"
+    else
+      msg_error "/etc/pve/storage.cfg does not exist."
+      msg_custom "🔧" "${YW}" "Check Proxmox cluster filesystem integrity: pvecm status"
+    fi
+    exit 213
+  fi
+
+  STORAGE_TYPE=$(grep -E "^[^:]+:[[:space:]]*$CONTAINER_STORAGE[[:space:]]*$" /etc/pve/storage.cfg | cut -d: -f1 | head -1 || true)
+
+  # Fallback: use pvesm status to determine storage type
+  if [[ -z "$STORAGE_TYPE" ]]; then
+    STORAGE_TYPE=$(pvesm status -storage "$CONTAINER_STORAGE" 2>/dev/null | awk 'NR>1{print $2}')
+  fi
 
   if [[ -z "$STORAGE_TYPE" ]]; then
     msg_error "Storage '$CONTAINER_STORAGE' not found in /etc/pve/storage.cfg"
+    msg_custom "📋" "${YW}" "Available storages: $(pvesm status 2>/dev/null | awk 'NR>1{printf "%s (%s) ", $1, $2}' || echo 'n/a')"
+    if [[ -r /etc/pve/storage.cfg ]]; then
+      msg_custom "📋" "${YW}" "Storage definitions found in config:"
+      grep -E '^[a-z]+:' /etc/pve/storage.cfg 2>/dev/null | while IFS= read -r _line; do
+        echo "${TAB}  $_line"
+      done
+    fi
+    msg_custom "📖" "${YW}" "See https://pve.proxmox.com/wiki/Storage for storage configuration details."
     exit 213
   fi
 
@@ -5550,6 +6222,10 @@ create_lxc_container() {
 
   if ! pvesm status -content rootdir 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$CONTAINER_STORAGE"; then
     msg_error "Storage '$CONTAINER_STORAGE' ($STORAGE_TYPE) does not support 'rootdir' content."
+    msg_custom "💡" "${YW}" "Enable 'Disk image' (rootdir) for storage '${CONTAINER_STORAGE}' in:"
+    msg_custom "   " "${YW}" "Datacenter → Storage → ${CONTAINER_STORAGE} → Edit → Content"
+    msg_custom "📖" "${YW}" "See: https://pve.proxmox.com/wiki/Storage"
+    msg_custom "🔗" "${YW}" "Help: https://github.com/community-scripts/ProxmoxVE/discussions"
     exit 213
   fi
   msg_ok "Storage '$CONTAINER_STORAGE' ($STORAGE_TYPE) validated"
@@ -5575,153 +6251,120 @@ create_lxc_container() {
   # ------------------------------------------------------------------------------
   # Template discovery & validation
   # ------------------------------------------------------------------------------
-  TEMPLATE_SEARCH="${PCT_OSTYPE}-${PCT_OSVERSION:-}"
-  case "$PCT_OSTYPE" in
-  debian | ubuntu) TEMPLATE_PATTERN="-standard_" ;;
-  alpine | fedora | rocky | centos) TEMPLATE_PATTERN="-default_" ;;
-  *) TEMPLATE_PATTERN="" ;;
-  esac
+  CUSTOM_TEMPLATE_VARIANT=""
 
-  msg_info "Searching for template '$TEMPLATE_SEARCH'"
+  if [[ "$ARCH" == "arm64" ]]; then
+    # ARM64: use custom template download from linuxcontainers.org / GitHub
+    msg_info "Preparing ARM64 template"
 
-  # Initialize variables
-  ONLINE_TEMPLATE=""
-  ONLINE_TEMPLATES=()
+    CUSTOM_TEMPLATE_VARIANT=$(arm64_template_variant "$PCT_OSTYPE" "${PCT_OSVERSION:-}") || {
+      msg_error "No ARM64 template mapping for ${PCT_OSTYPE} ${PCT_OSVERSION:-latest}"
+      exit 207
+    }
 
-  # Step 1: Check local templates first (instant)
-  mapfile -t LOCAL_TEMPLATES < <(
-    pveam list "$TEMPLATE_STORAGE" 2>/dev/null |
-      awk -v search="${TEMPLATE_SEARCH}" -v pattern="${TEMPLATE_PATTERN}" '$1 ~ search && $1 ~ pattern {print $1}' |
-      sed 's|.*/||' | sort -t - -k 2 -V
-  )
+    TEMPLATE="${PCT_OSTYPE}-${CUSTOM_TEMPLATE_VARIANT}-rootfs.tar.xz"
+    TEMPLATE_SOURCE="custom-arm64"
 
-  # Step 2: If local template found, use it immediately (skip pveam update)
-  if [[ ${#LOCAL_TEMPLATES[@]} -gt 0 ]]; then
-    TEMPLATE="${LOCAL_TEMPLATES[-1]}"
-    TEMPLATE_SOURCE="local"
-    msg_ok "Template search completed"
-  else
-    # Step 3: No local template - need to check online (this may be slow)
-    msg_info "No local template found, checking online catalog..."
-
-    # Update catalog with timeout to prevent long hangs
-    if command -v timeout &>/dev/null; then
-      if ! timeout 30 pveam update >/dev/null 2>&1; then
-        msg_warn "Template catalog update timed out (possible network/DNS issue). Run 'pveam update' manually to diagnose."
-      fi
-    else
-      pveam update >/dev/null 2>&1 || msg_warn "Could not update template catalog (pveam update failed)"
+    # Resolve template path
+    TEMPLATE_PATH="$(pvesm path "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" 2>/dev/null || true)"
+    if [[ -z "$TEMPLATE_PATH" ]]; then
+      local _tpl_base
+      _tpl_base=$(awk -v s="$TEMPLATE_STORAGE" '
+        $0 ~ "^[^:]+:[[:space:]]*" s "$" {f=1; next}
+        f && /^[^[:space:]]/ {f=0}
+        f && $1 == "path" {print $2; exit}
+      ' /etc/pve/storage.cfg)
+      TEMPLATE_PATH="${_tpl_base:-/var/lib/vz}/template/cache/$TEMPLATE"
     fi
 
+    # Download if missing, too small, or corrupt
+    if [[ ! -f "$TEMPLATE_PATH" ]]; then
+      download_arm64_template "$TEMPLATE_PATH"
+    elif [[ "$(stat -c%s "$TEMPLATE_PATH")" -lt 1000000 ]] || ! tar -tf "$TEMPLATE_PATH" &>/dev/null; then
+      msg_warn "Local template invalid - re-downloading."
+      rm -f "$TEMPLATE_PATH"
+      download_arm64_template "$TEMPLATE_PATH"
+    else
+      msg_ok "Template ${BL}$TEMPLATE${CL} found locally."
+    fi
+
+  else
+    TEMPLATE_SEARCH="${PCT_OSTYPE}-${PCT_OSVERSION:-}"
+    case "$PCT_OSTYPE" in
+    debian | ubuntu) TEMPLATE_PATTERN="-standard_" ;;
+    alpine | fedora | rocky | centos) TEMPLATE_PATTERN="-default_" ;;
+    *) TEMPLATE_PATTERN="" ;;
+    esac
+
+    msg_info "Searching for template '$TEMPLATE_SEARCH'"
+
+    # Initialize variables
+    ONLINE_TEMPLATE=""
     ONLINE_TEMPLATES=()
-    mapfile -t ONLINE_TEMPLATES < <(pveam available -section system 2>/dev/null | grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$' | awk '{print $2}' | grep -E "^${TEMPLATE_SEARCH}.*${TEMPLATE_PATTERN}" | sort -t - -k 2 -V 2>/dev/null || true)
-    [[ ${#ONLINE_TEMPLATES[@]} -gt 0 ]] && ONLINE_TEMPLATE="${ONLINE_TEMPLATES[-1]}"
 
-    TEMPLATE="$ONLINE_TEMPLATE"
-    TEMPLATE_SOURCE="online"
-    msg_ok "Template search completed"
-  fi
-
-  # If still no template, try to find alternatives
-  if [[ -z "$TEMPLATE" ]]; then
-    msg_warn "No template found for ${PCT_OSTYPE} ${PCT_OSVERSION}, searching for alternatives..."
-
-    # Get all available versions for this OS type
-    AVAILABLE_VERSIONS=()
-    mapfile -t AVAILABLE_VERSIONS < <(
-      pveam available -section system 2>/dev/null |
-        grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$' |
-        awk -F'\t' '{print $1}' |
-        grep "^${PCT_OSTYPE}-" |
-        sed -E "s/.*${PCT_OSTYPE}-([0-9]+(\.[0-9]+)?).*/\1/" |
-        sort -u -V 2>/dev/null
+    # Step 1: Check local templates first (instant)
+    mapfile -t LOCAL_TEMPLATES < <(
+      pveam list "$TEMPLATE_STORAGE" 2>/dev/null |
+        awk -v search="${TEMPLATE_SEARCH}" -v pattern="${TEMPLATE_PATTERN}" '$1 ~ search && $1 ~ pattern {print $1}' |
+        sed 's|.*/||' | sort -t - -k 2 -V
     )
 
-    if [[ ${#AVAILABLE_VERSIONS[@]} -gt 0 ]]; then
-      echo ""
-      echo "${BL}Available ${PCT_OSTYPE} versions:${CL}"
-      for i in "${!AVAILABLE_VERSIONS[@]}"; do
-        echo "  [$((i + 1))] ${AVAILABLE_VERSIONS[$i]}"
-      done
-      echo ""
-      read -p "Select version [1-${#AVAILABLE_VERSIONS[@]}] or press Enter to cancel: " choice </dev/tty
+    # Step 2: If local template found, use it immediately (skip pveam update)
+    if [[ ${#LOCAL_TEMPLATES[@]} -gt 0 ]]; then
+      TEMPLATE="${LOCAL_TEMPLATES[-1]}"
+      TEMPLATE_SOURCE="local"
+      msg_ok "Template search completed"
+    else
+      # Step 3: No local template - need to check online (this may be slow)
+      msg_info "No local template found, checking online catalog..."
 
-      if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 ]] && [[ "$choice" -le ${#AVAILABLE_VERSIONS[@]} ]]; then
-        PCT_OSVERSION="${AVAILABLE_VERSIONS[$((choice - 1))]}"
-        TEMPLATE_SEARCH="${PCT_OSTYPE}-${PCT_OSVERSION}"
-
-        ONLINE_TEMPLATES=()
-        mapfile -t ONLINE_TEMPLATES < <(
-          pveam available -section system 2>/dev/null |
-            grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$' |
-            awk '{print $2}' |
-            grep -E "^${TEMPLATE_SEARCH}-.*${TEMPLATE_PATTERN}" |
-            sort -t - -k 2 -V 2>/dev/null || true
-        )
-
-        if [[ ${#ONLINE_TEMPLATES[@]} -gt 0 ]]; then
-          TEMPLATE="${ONLINE_TEMPLATES[-1]}"
-          TEMPLATE_SOURCE="online"
-        else
-          msg_error "No templates available for ${PCT_OSTYPE} ${PCT_OSVERSION}"
-          exit 225
+      # Update catalog with timeout to prevent long hangs
+      if command -v timeout &>/dev/null; then
+        if ! timeout 30 pveam update >/dev/null 2>&1; then
+          msg_warn "Template catalog update timed out (possible network/DNS issue). Run 'pveam update' manually to diagnose."
         fi
       else
-        msg_custom "🚫" "${YW}" "Installation cancelled"
-        exit 0
+        pveam update >/dev/null 2>&1 || msg_warn "Could not update template catalog (pveam update failed)"
       fi
-    else
-      msg_error "No ${PCT_OSTYPE} templates available at all"
-      exit 225
+
+      ONLINE_TEMPLATES=()
+      mapfile -t ONLINE_TEMPLATES < <(pveam available -section system 2>/dev/null | grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$' | awk '{print $2}' | grep -E "^${TEMPLATE_SEARCH}.*${TEMPLATE_PATTERN}" | sort -t - -k 2 -V 2>/dev/null || true)
+      [[ ${#ONLINE_TEMPLATES[@]} -gt 0 ]] && ONLINE_TEMPLATE="${ONLINE_TEMPLATES[-1]}"
+
+      TEMPLATE="$ONLINE_TEMPLATE"
+      TEMPLATE_SOURCE="online"
+      msg_ok "Template search completed"
     fi
-  fi
 
-  TEMPLATE_PATH="$(pvesm path $TEMPLATE_STORAGE:vztmpl/$TEMPLATE 2>/dev/null || true)"
-  if [[ -z "$TEMPLATE_PATH" ]]; then
-    TEMPLATE_BASE=$(awk -v s="$TEMPLATE_STORAGE" '$1==s {f=1} f && /path/ {print $2; exit}' /etc/pve/storage.cfg)
-    [[ -n "$TEMPLATE_BASE" ]] && TEMPLATE_PATH="$TEMPLATE_BASE/template/cache/$TEMPLATE"
-  fi
-
-  # If we still don't have a path but have a valid template name, construct it
-  if [[ -z "$TEMPLATE_PATH" && -n "$TEMPLATE" ]]; then
-    TEMPLATE_PATH="/var/lib/vz/template/cache/$TEMPLATE"
-  fi
-
-  [[ -n "$TEMPLATE_PATH" ]] || {
+    # If still no template, try to find alternatives
     if [[ -z "$TEMPLATE" ]]; then
-      msg_error "Template ${PCT_OSTYPE} ${PCT_OSVERSION} not available"
+      msg_warn "No template found for ${PCT_OSTYPE} ${PCT_OSVERSION}, searching for alternatives..."
 
-      # Get available versions
+      # Get all available versions for this OS type
+      AVAILABLE_VERSIONS=()
       mapfile -t AVAILABLE_VERSIONS < <(
         pveam available -section system 2>/dev/null |
+          grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$' |
+          awk -F'\t' '{print $1}' |
           grep "^${PCT_OSTYPE}-" |
-          sed -E 's/.*'"${PCT_OSTYPE}"'-([0-9]+\.[0-9]+).*/\1/' |
-          grep -E '^[0-9]+\.[0-9]+$' |
-          sort -u -V 2>/dev/null || sort -u
+          sed -E "s/.*${PCT_OSTYPE}-([0-9]+(\.[0-9]+)?).*/\1/" |
+          sort -u -V 2>/dev/null
       )
 
       if [[ ${#AVAILABLE_VERSIONS[@]} -gt 0 ]]; then
-        echo -e "\n${BL}Available versions:${CL}"
+        echo ""
+        echo "${BL}Available ${PCT_OSTYPE} versions:${CL}"
         for i in "${!AVAILABLE_VERSIONS[@]}"; do
           echo "  [$((i + 1))] ${AVAILABLE_VERSIONS[$i]}"
         done
-
         echo ""
-        read -p "Select version [1-${#AVAILABLE_VERSIONS[@]}] or Enter to exit: " choice </dev/tty
+        read -p "Select version [1-${#AVAILABLE_VERSIONS[@]}] or press Enter to cancel: " choice </dev/tty
 
         if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 ]] && [[ "$choice" -le ${#AVAILABLE_VERSIONS[@]} ]]; then
-          export var_version="${AVAILABLE_VERSIONS[$((choice - 1))]}"
-          export PCT_OSVERSION="$var_version"
-          msg_ok "Switched to ${PCT_OSTYPE} ${var_version}"
+          PCT_OSVERSION="${AVAILABLE_VERSIONS[$((choice - 1))]}"
+          TEMPLATE_SEARCH="${PCT_OSTYPE}-${PCT_OSVERSION}"
 
-          # Retry template search with new version
-          TEMPLATE_SEARCH="${PCT_OSTYPE}-${PCT_OSVERSION:-}"
-
-          mapfile -t LOCAL_TEMPLATES < <(
-            pveam list "$TEMPLATE_STORAGE" 2>/dev/null |
-              awk -v search="${TEMPLATE_SEARCH}-" -v pattern="${TEMPLATE_PATTERN}" '$1 ~ search && $1 ~ pattern {print $1}' |
-              sed 's|.*/||' | sort -t - -k 2 -V
-          )
+          ONLINE_TEMPLATES=()
           mapfile -t ONLINE_TEMPLATES < <(
             pveam available -section system 2>/dev/null |
               grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$' |
@@ -5729,109 +6372,181 @@ create_lxc_container() {
               grep -E "^${TEMPLATE_SEARCH}-.*${TEMPLATE_PATTERN}" |
               sort -t - -k 2 -V 2>/dev/null || true
           )
-          ONLINE_TEMPLATE=""
-          [[ ${#ONLINE_TEMPLATES[@]} -gt 0 ]] && ONLINE_TEMPLATE="${ONLINE_TEMPLATES[-1]}"
 
-          if [[ ${#LOCAL_TEMPLATES[@]} -gt 0 ]]; then
-            TEMPLATE="${LOCAL_TEMPLATES[-1]}"
-            TEMPLATE_SOURCE="local"
-          else
-            TEMPLATE="$ONLINE_TEMPLATE"
+          if [[ ${#ONLINE_TEMPLATES[@]} -gt 0 ]]; then
+            TEMPLATE="${ONLINE_TEMPLATES[-1]}"
             TEMPLATE_SOURCE="online"
+          else
+            msg_error "No templates available for ${PCT_OSTYPE} ${PCT_OSVERSION}"
+            exit 225
           fi
-
-          TEMPLATE_PATH="$(pvesm path $TEMPLATE_STORAGE:vztmpl/$TEMPLATE 2>/dev/null || true)"
-          if [[ -z "$TEMPLATE_PATH" ]]; then
-            TEMPLATE_BASE=$(awk -v s="$TEMPLATE_STORAGE" '$1==s {f=1} f && /path/ {print $2; exit}' /etc/pve/storage.cfg)
-            [[ -n "$TEMPLATE_BASE" ]] && TEMPLATE_PATH="$TEMPLATE_BASE/template/cache/$TEMPLATE"
-          fi
-
-          # If we still don't have a path but have a valid template name, construct it
-          if [[ -z "$TEMPLATE_PATH" && -n "$TEMPLATE" ]]; then
-            TEMPLATE_PATH="/var/lib/vz/template/cache/$TEMPLATE"
-          fi
-
-          [[ -n "$TEMPLATE_PATH" ]] || {
-            msg_error "Template still not found after version change"
-            exit 220
-          }
         else
           msg_custom "🚫" "${YW}" "Installation cancelled"
           exit 0
         fi
       else
         msg_error "No ${PCT_OSTYPE} templates available"
-        exit 220
+        exit 225
       fi
     fi
-  }
 
-  # Validate that we found a template
-  if [[ -z "$TEMPLATE" ]]; then
-    msg_error "No template found for ${PCT_OSTYPE} ${PCT_OSVERSION}"
-    msg_custom "ℹ️" "${YW}" "Please check:"
-    msg_custom "  •" "${YW}" "Is pveam catalog available? (run: pveam available -section system)"
-    msg_custom "  •" "${YW}" "Does the template exist for your OS version?"
-    exit 225
-  fi
-
-  msg_ok "Template ${BL}$TEMPLATE${CL} [$TEMPLATE_SOURCE]"
-  msg_debug "Resolved TEMPLATE_PATH=$TEMPLATE_PATH"
-
-  NEED_DOWNLOAD=0
-  if [[ ! -f "$TEMPLATE_PATH" ]]; then
-    msg_info "Template not present locally – will download."
-    NEED_DOWNLOAD=1
-  elif [[ ! -r "$TEMPLATE_PATH" ]]; then
-    msg_error "Template file exists but is not readable – check permissions."
-    exit 221
-  elif [[ "$(stat -c%s "$TEMPLATE_PATH")" -lt 1000000 ]]; then
-    if [[ -n "$ONLINE_TEMPLATE" ]]; then
-      msg_warn "Template file too small (<1MB) – re-downloading."
-      NEED_DOWNLOAD=1
-    else
-      msg_warn "Template looks too small, but no online version exists. Keeping local file."
+    TEMPLATE_PATH="$(pvesm path $TEMPLATE_STORAGE:vztmpl/$TEMPLATE 2>/dev/null || true)"
+    if [[ -z "$TEMPLATE_PATH" ]]; then
+      TEMPLATE_BASE=$(awk -v s="$TEMPLATE_STORAGE" '$1==s {f=1} f && /path/ {print $2; exit}' /etc/pve/storage.cfg)
+      [[ -n "$TEMPLATE_BASE" ]] && TEMPLATE_PATH="$TEMPLATE_BASE/template/cache/$TEMPLATE"
     fi
-  elif ! tar -tf "$TEMPLATE_PATH" &>/dev/null; then
-    if [[ -n "$ONLINE_TEMPLATE" ]]; then
-      msg_warn "Template appears corrupted – re-downloading."
-      NEED_DOWNLOAD=1
-    else
-      msg_warn "Template appears corrupted, but no online version exists. Keeping local file."
-    fi
-  else
-    $STD msg_ok "Template $TEMPLATE is present and valid."
-  fi
 
-  if [[ "$TEMPLATE_SOURCE" == "local" && -n "$ONLINE_TEMPLATE" && "$TEMPLATE" != "$ONLINE_TEMPLATE" ]]; then
-    msg_warn "Local template is outdated: $TEMPLATE (latest available: $ONLINE_TEMPLATE)"
-    if whiptail --yesno "A newer template is available:\n$ONLINE_TEMPLATE\n\nDo you want to download and use it instead?" 12 70; then
-      TEMPLATE="$ONLINE_TEMPLATE"
-      NEED_DOWNLOAD=1
-    else
-      msg_custom "ℹ️" "${BL}" "Continuing with local template $TEMPLATE"
+    # If we still don't have a path but have a valid template name, construct it
+    if [[ -z "$TEMPLATE_PATH" && -n "$TEMPLATE" ]]; then
+      TEMPLATE_PATH="/var/lib/vz/template/cache/$TEMPLATE"
     fi
-  fi
 
-  if [[ "$NEED_DOWNLOAD" -eq 1 ]]; then
-    [[ -f "$TEMPLATE_PATH" ]] && rm -f "$TEMPLATE_PATH"
-    for attempt in {1..3}; do
-      msg_info "Attempt $attempt: Downloading template $TEMPLATE to $TEMPLATE_STORAGE"
-      if pveam download "$TEMPLATE_STORAGE" "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1; then
-        msg_ok "Template download successful."
-        break
+    [[ -n "$TEMPLATE_PATH" ]] || {
+      if [[ -z "$TEMPLATE" ]]; then
+        msg_error "Template ${PCT_OSTYPE} ${PCT_OSVERSION} not available"
+
+        # Get available versions
+        mapfile -t AVAILABLE_VERSIONS < <(
+          pveam available -section system 2>/dev/null |
+            grep "^${PCT_OSTYPE}-" |
+            sed -E 's/.*'"${PCT_OSTYPE}"'-([0-9]+\.[0-9]+).*/\1/' |
+            grep -E '^[0-9]+\.[0-9]+$' |
+            sort -u -V 2>/dev/null || sort -u
+        )
+
+        if [[ ${#AVAILABLE_VERSIONS[@]} -gt 0 ]]; then
+          echo -e "\n${BL}Available versions:${CL}"
+          for i in "${!AVAILABLE_VERSIONS[@]}"; do
+            echo "  [$((i + 1))] ${AVAILABLE_VERSIONS[$i]}"
+          done
+
+          echo ""
+          read -p "Select version [1-${#AVAILABLE_VERSIONS[@]}] or press Enter to exit: " choice </dev/tty
+
+          if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 ]] && [[ "$choice" -le ${#AVAILABLE_VERSIONS[@]} ]]; then
+            export var_version="${AVAILABLE_VERSIONS[$((choice - 1))]}"
+            export PCT_OSVERSION="$var_version"
+            msg_ok "Switched to ${PCT_OSTYPE} ${var_version}"
+
+            # Retry template search with new version
+            TEMPLATE_SEARCH="${PCT_OSTYPE}-${PCT_OSVERSION:-}"
+
+            mapfile -t LOCAL_TEMPLATES < <(
+              pveam list "$TEMPLATE_STORAGE" 2>/dev/null |
+                awk -v search="${TEMPLATE_SEARCH}-" -v pattern="${TEMPLATE_PATTERN}" '$1 ~ search && $1 ~ pattern {print $1}' |
+                sed 's|.*/||' | sort -t - -k 2 -V
+            )
+            mapfile -t ONLINE_TEMPLATES < <(
+              pveam available -section system 2>/dev/null |
+                grep -E '\.(tar\.zst|tar\.xz|tar\.gz)$' |
+                awk '{print $2}' |
+                grep -E "^${TEMPLATE_SEARCH}-.*${TEMPLATE_PATTERN}" |
+                sort -t - -k 2 -V 2>/dev/null || true
+            )
+            ONLINE_TEMPLATE=""
+            [[ ${#ONLINE_TEMPLATES[@]} -gt 0 ]] && ONLINE_TEMPLATE="${ONLINE_TEMPLATES[-1]}"
+
+            if [[ ${#LOCAL_TEMPLATES[@]} -gt 0 ]]; then
+              TEMPLATE="${LOCAL_TEMPLATES[-1]}"
+              TEMPLATE_SOURCE="local"
+            else
+              TEMPLATE="$ONLINE_TEMPLATE"
+              TEMPLATE_SOURCE="online"
+            fi
+
+            TEMPLATE_PATH="$(pvesm path $TEMPLATE_STORAGE:vztmpl/$TEMPLATE 2>/dev/null || true)"
+            if [[ -z "$TEMPLATE_PATH" ]]; then
+              TEMPLATE_BASE=$(awk -v s="$TEMPLATE_STORAGE" '$1==s {f=1} f && /path/ {print $2; exit}' /etc/pve/storage.cfg)
+              [[ -n "$TEMPLATE_BASE" ]] && TEMPLATE_PATH="$TEMPLATE_BASE/template/cache/$TEMPLATE"
+            fi
+
+            # If we still don't have a path but have a valid template name, construct it
+            if [[ -z "$TEMPLATE_PATH" && -n "$TEMPLATE" ]]; then
+              TEMPLATE_PATH="/var/lib/vz/template/cache/$TEMPLATE"
+            fi
+
+            [[ -n "$TEMPLATE_PATH" ]] || {
+              msg_error "Template still not found after version change"
+              exit 220
+            }
+          else
+            msg_custom "🚫" "${YW}" "Installation cancelled"
+            exit 0
+          fi
+        else
+          msg_error "No ${PCT_OSTYPE} templates available"
+          exit 220
+        fi
       fi
-      if [[ $attempt -eq 3 ]]; then
-        msg_error "Failed after 3 attempts. Please check network access, permissions, or manually run:\n  pveam download $TEMPLATE_STORAGE $TEMPLATE"
-        exit 222
-      fi
-      sleep $((attempt * 5))
-    done
-  fi
+    }
 
-  if ! pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -q "$TEMPLATE"; then
-    msg_error "Template $TEMPLATE not available in storage $TEMPLATE_STORAGE after download."
-    exit 223
+    # Validate that we found a template
+    if [[ -z "$TEMPLATE" ]]; then
+      msg_error "No template found for ${PCT_OSTYPE} ${PCT_OSVERSION}"
+      msg_custom "ℹ️" "${YW}" "Please check:"
+      msg_custom "  •" "${YW}" "Is pveam catalog available? (run: pveam available -section system)"
+      msg_custom "  •" "${YW}" "Does the template exist for your OS version?"
+      exit 225
+    fi
+
+    msg_ok "Template ${BL}$TEMPLATE${CL} [$TEMPLATE_SOURCE]"
+    msg_debug "Resolved TEMPLATE_PATH=$TEMPLATE_PATH"
+
+    NEED_DOWNLOAD=0
+    if [[ ! -f "$TEMPLATE_PATH" ]]; then
+      msg_info "Template not present locally, will download it."
+      NEED_DOWNLOAD=1
+    elif [[ ! -r "$TEMPLATE_PATH" ]]; then
+      msg_error "Template file exists but is not readable, check permissions."
+      exit 221
+    elif [[ "$(stat -c%s "$TEMPLATE_PATH")" -lt 1000000 ]]; then
+      if [[ -n "$ONLINE_TEMPLATE" ]]; then
+        msg_warn "Template file too small (<1MB), re-downloading."
+        NEED_DOWNLOAD=1
+      else
+        msg_warn "Template looks too small, but no online version exists. Keeping local file."
+      fi
+    elif ! tar -tf "$TEMPLATE_PATH" &>/dev/null; then
+      if [[ -n "$ONLINE_TEMPLATE" ]]; then
+        msg_warn "Template appears corrupted, re-downloading."
+        NEED_DOWNLOAD=1
+      else
+        msg_warn "Template appears corrupted, but no online version exists. Keeping local file."
+      fi
+    else
+      $STD msg_ok "Template $TEMPLATE is present and valid."
+    fi
+
+    if [[ "$TEMPLATE_SOURCE" == "local" && -n "$ONLINE_TEMPLATE" && "$TEMPLATE" != "$ONLINE_TEMPLATE" ]]; then
+      msg_warn "Local template is outdated: $TEMPLATE (latest available: $ONLINE_TEMPLATE)"
+      if whiptail --yesno "A newer template is available:\n$ONLINE_TEMPLATE\n\nDo you want to download and use it instead?" 12 70; then
+        TEMPLATE="$ONLINE_TEMPLATE"
+        NEED_DOWNLOAD=1
+      else
+        msg_custom "ℹ️" "${BL}" "Continuing with local template $TEMPLATE"
+      fi
+    fi
+
+    if [[ "$NEED_DOWNLOAD" -eq 1 ]]; then
+      [[ -f "$TEMPLATE_PATH" ]] && rm -f "$TEMPLATE_PATH"
+      for attempt in {1..3}; do
+        msg_info "Attempt $attempt: Downloading template $TEMPLATE to $TEMPLATE_STORAGE"
+        if pveam download "$TEMPLATE_STORAGE" "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+          msg_ok "Template download successful."
+          break
+        fi
+        if [[ $attempt -eq 3 ]]; then
+          msg_error "Failed after 3 attempts. Please check network access, permissions, or manually run:\n  pveam download $TEMPLATE_STORAGE $TEMPLATE"
+          exit 222
+        fi
+        sleep $((attempt * 5))
+      done
+    fi
+
+    if ! pveam list "$TEMPLATE_STORAGE" 2>/dev/null | grep -q "$TEMPLATE"; then
+      msg_error "Template $TEMPLATE not available in storage $TEMPLATE_STORAGE after download."
+      exit 223
+    fi
   fi
 
   # ------------------------------------------------------------------------------
@@ -5908,21 +6623,15 @@ create_lxc_container() {
 
   # Validate template before pct create (while holding lock)
   if [[ ! -s "$TEMPLATE_PATH" || "$(stat -c%s "$TEMPLATE_PATH" 2>/dev/null || echo 0)" -lt 1000000 ]]; then
-    msg_info "Template file missing or too small – downloading"
+    msg_info "Template file missing or too small - downloading"
     rm -f "$TEMPLATE_PATH"
-    pveam download "$TEMPLATE_STORAGE" "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1 || {
-      msg_error "Failed to download template '$TEMPLATE' to storage '$TEMPLATE_STORAGE'"
-      exit 222
-    }
+    download_template
     msg_ok "Template downloaded"
   elif ! tar -tf "$TEMPLATE_PATH" &>/dev/null; then
-    if [[ -n "$ONLINE_TEMPLATE" ]]; then
-      msg_info "Template appears corrupted – re-downloading"
+    if [[ "$ARCH" == "arm64" || -n "$ONLINE_TEMPLATE" ]]; then
+      msg_info "Template appears corrupted - re-downloading"
       rm -f "$TEMPLATE_PATH"
-      pveam download "$TEMPLATE_STORAGE" "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1 || {
-        msg_error "Failed to re-download template '$TEMPLATE'"
-        exit 222
-      }
+      download_template
       msg_ok "Template re-downloaded"
     else
       msg_warn "Template appears corrupted, but no online version exists. Skipping re-download."
@@ -5936,8 +6645,22 @@ create_lxc_container() {
   msg_debug "Logfile: $LOGFILE"
 
   # First attempt (PCT_OPTIONS is a multi-line string, use it directly)
+  # Disable globbing: unquoted $PCT_OPTIONS needs word-splitting but must not glob-expand
+  # (e.g. passwords containing * or ? would match filenames otherwise)
+  set -f
   if ! pct create "$CTID" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" $PCT_OPTIONS >"$LOGFILE" 2>&1; then
     msg_debug "Container creation failed on ${TEMPLATE_STORAGE}. Checking error..."
+
+    # Check for Perl module breakage (partial PVE upgrade)
+    if grep -qiE 'Compilation failed|Bareword.*not allowed' "$LOGFILE"; then
+      msg_error "Container creation failed due to broken Perl modules on the PVE host."
+      msg_custom "⚠️" "${YW}" "This usually happens after a partial PVE package upgrade."
+      msg_custom "🔧" "${YW}" "Please run the following on the Proxmox host, then retry:"
+      echo -e "${TAB}  apt update && apt dist-upgrade -y"
+      echo -e "${TAB}  reboot"
+      _flush_pct_log
+      exit 232
+    fi
 
     # Check if CTID collision (race condition: ID claimed between validation and creation)
     if grep -qiE 'already exists|already in use' "$LOGFILE"; then
@@ -5956,9 +6679,9 @@ create_lxc_container() {
     else
       # Not a CTID collision - check if template issue and retry with fresh download
       if grep -qiE 'unable to open|corrupt|invalid' "$LOGFILE"; then
-        msg_info "Template may be corrupted – re-downloading"
+        msg_info "Template may be corrupted - re-downloading"
         rm -f "$TEMPLATE_PATH"
-        pveam download "$TEMPLATE_STORAGE" "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1
+        download_template
         msg_ok "Template re-downloaded"
       fi
 
@@ -5971,7 +6694,11 @@ create_lxc_container() {
           if [[ ! -f "$LOCAL_TEMPLATE_PATH" ]]; then
             msg_ok "Trying local storage fallback"
             msg_info "Downloading template to local"
-            pveam download local "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1
+            if [[ "$ARCH" == "arm64" ]]; then
+              download_arm64_template "$LOCAL_TEMPLATE_PATH"
+            else
+              pveam download local "$TEMPLATE" >>"${BUILD_LOG:-/dev/null}" 2>&1
+            fi
             msg_ok "Template downloaded to local"
           else
             msg_ok "Trying local storage fallback"
@@ -5985,12 +6712,17 @@ create_lxc_container() {
               case $rc in
               0) : ;; # success - container created, continue
               2)
-                msg_error "Upgrade declined. Please update and re-run: apt update && apt install --only-upgrade pve-container lxc-pve"
+                msg_error "LXC stack upgrade ignored. Please inspect: $LOGFILE"
                 _flush_pct_log
                 exit 231
                 ;;
               3)
-                msg_error "Upgrade and/or retry failed. Please inspect: $LOGFILE"
+                msg_error "LXC stack upgrade failed. Please inspect: $LOGFILE"
+                _flush_pct_log
+                exit 231
+                ;;
+              4)
+                msg_error "Cancelled by user."
                 _flush_pct_log
                 exit 231
                 ;;
@@ -6017,12 +6749,17 @@ create_lxc_container() {
             case $rc in
             0) : ;; # success - container created, continue
             2)
-              msg_error "Upgrade declined. Please update and re-run: apt update && apt install --only-upgrade pve-container lxc-pve"
+              msg_error "LXC stack upgrade ignored. Please inspect: $LOGFILE"
               _flush_pct_log
               exit 231
               ;;
             3)
-              msg_error "Upgrade and/or retry failed. Please inspect: $LOGFILE"
+              msg_error "LXC stack upgrade failed. Please inspect: $LOGFILE"
+              _flush_pct_log
+              exit 231
+              ;;
+            4)
+              msg_error "Cancelled by user."
               _flush_pct_log
               exit 231
               ;;
@@ -6043,6 +6780,7 @@ create_lxc_container() {
       fi
     fi # close CTID collision else-branch
   fi
+  set +f # re-enable globbing after pct create block
 
   # Verify container exists (allow up to 10s for pmxcfs sync in clusters)
   local _pct_visible=false
@@ -6146,6 +6884,40 @@ EOF
 
   if [[ -f /etc/systemd/system/ping-instances.service ]]; then
     systemctl start ping-instances.service
+  fi
+
+  # Optional host-side post-install hook
+  # Path comes from var_post_install (default.vars / app.vars / advanced settings).
+  # Runs ON THE PROXMOX HOST after the container is up and configured.
+  # Exposed env vars: APP, NSAPP, CTID, IP, HN, STORAGE, BRG.
+  # Output (stdout/stderr) is captured to /var/log/community-scripts/post-install-<CTID>.log
+  if [[ -n "${var_post_install:-}" ]]; then
+    local _hook_log_dir="/var/log/community-scripts"
+    local _hook_log="${_hook_log_dir}/post-install-${CTID}.log"
+    mkdir -p "$_hook_log_dir" 2>/dev/null || true
+
+    if [[ ! -f "${var_post_install}" ]]; then
+      msg_error "Post-install hook not found on host: ${var_post_install}"
+      whiptail --backtitle "Proxmox VE Helper Scripts" \
+        --title "POST-INSTALL HOOK FAILED" \
+        --msgbox "The configured post-install hook was not found on the Proxmox host:\n\n${var_post_install}\n\nThe LXC was created successfully, but the hook did NOT run." 14 72 || true
+    else
+      msg_info "Running post-install hook: ${var_post_install}"
+      local _hook_rc=0
+      APP="$APP" NSAPP="${NSAPP:-}" CTID="$CTID" IP="$IP" HN="${HN:-}" \
+        STORAGE="${STORAGE:-}" BRG="${BRG:-}" \
+        bash "${var_post_install}" >"${_hook_log}" 2>&1 || _hook_rc=$?
+      if [[ $_hook_rc -eq 0 ]]; then
+        msg_ok "Post-install hook completed (log: ${_hook_log})"
+      else
+        msg_error "Post-install hook failed (rc=${_hook_rc}) – see ${_hook_log}"
+        local _hook_tail=""
+        _hook_tail="$(tail -n 15 "${_hook_log}" 2>/dev/null || true)"
+        whiptail --backtitle "Proxmox VE Helper Scripts" \
+          --title "POST-INSTALL HOOK FAILED" \
+          --msgbox "Hook exited with code ${_hook_rc}.\n\nScript: ${var_post_install}\nLog:    ${_hook_log}\n\n--- Last log lines ---\n${_hook_tail}\n\nThe LXC itself was created successfully." 22 78 || true
+      fi
+    fi
   fi
 
   INSTALL_COMPLETE=true

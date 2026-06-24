@@ -140,10 +140,12 @@ ensure_profile_loaded() {
   [[ -n "${_PROFILE_LOADED:-}" ]] && return
   command -v pveversion &>/dev/null && return
 
-  # Source all profile.d scripts to ensure PATH is complete
+  # Source all profile.d scripts to ensure PATH is complete.
+  # Redirect stdout to suppress banner/MOTD output (e.g. 00_lxc-details.sh)
+  # while still allowing env/PATH exports to take effect.
   if [[ -d /etc/profile.d ]]; then
     for script in /etc/profile.d/*.sh; do
-      [[ -r "$script" ]] && source "$script" || true
+      [[ -r "$script" ]] && source "$script" >/dev/null || true
     done
   fi
 
@@ -301,7 +303,7 @@ root_check() {
 # pve_check()
 #
 # - Validates Proxmox VE version compatibility
-# - Supported: PVE 8.0-8.9 and PVE 9.0-9.1
+# - Supported: PVE 8.0-8.9 and PVE 9.0-9.2
 # - Exits with error message if unsupported version detected
 # ------------------------------------------------------------------------------
 pve_check() {
@@ -344,12 +346,39 @@ pve_check() {
 # - Provides link to ARM64-compatible scripts
 # ------------------------------------------------------------------------------
 arch_check() {
-  if [ "$(dpkg --print-architecture)" != "amd64" ]; then
-    msg_error "This script will not work with PiMox (ARM architecture detected)."
-    msg_warn "Visit https://github.com/asylumexp/Proxmox for ARM64 support."
+  local arch
+  arch="$(dpkg --print-architecture)"
+  if [[ "$arch" != "amd64" && "$arch" != "arm64" ]]; then
+    msg_error "This script requires amd64 or arm64 (detected: $arch)."
     sleep 2
     exit 106
   fi
+  if [[ "$arch" == "arm64" && "${var_arm64:-}" != "yes" ]]; then
+    msg_error "This script does not yet support arm64."
+    sleep 2
+    exit 106
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# arch_resolve()
+#
+# - Selects an architecture-specific value while preserving amd64 defaults
+# - Usage: arch_resolve "amd64-value" "arm64-value"
+# - Defaults: amd64="amd64", arm64="arm64"
+# ------------------------------------------------------------------------------
+arch_resolve() {
+  local amd64_val="${1:-amd64}"
+  local arm64_val="${2:-arm64}"
+  local arch="${PCT_ARCH:-$(dpkg --print-architecture 2>/dev/null || uname -m)}"
+  case "$arch" in
+  amd64 | x86_64) echo "$amd64_val" ;;
+  arm64 | aarch64) echo "$arm64_val" ;;
+  *)
+    msg_error "Unsupported architecture: $arch"
+    return 106
+    ;;
+  esac
 }
 
 # ------------------------------------------------------------------------------
@@ -683,7 +712,7 @@ msg_info() {
 
   if is_verbose_mode || is_alpine; then
     local HOURGLASS="${TAB}⏳${TAB}"
-    printf "\r\e[2K%s %b" "$HOURGLASS" "${YW}${msg}${CL}" >&2
+    printf "\r\e[2K%s%b" "$HOURGLASS" "${YW}${msg}${CL}" >&2
 
     # Pause mode: Wait for Enter after each step
     if [[ "${DEV_MODE_PAUSE:-false}" == "true" ]]; then
@@ -720,7 +749,7 @@ msg_ok() {
   [[ -z "$msg" ]] && return
   stop_spinner
   clear_line
-  echo -e "$CM ${GN}${msg}${CL}"
+  echo -e "$CM${GN}${msg}${CL}"
   log_msg "[OK] $msg"
   local sanitized_msg
   sanitized_msg=$(printf '%s' "$msg" | sed 's/\x1b\[[0-9;]*m//g; s/[^a-zA-Z0-9_]/_/g')
@@ -738,7 +767,7 @@ msg_ok() {
 msg_error() {
   stop_spinner
   local msg="$1"
-  echo -e "${BFR:-}${CROSS:-✖️} ${RD}${msg}${CL}" >&2
+  echo -e "${BFR:-}${CROSS:-✖️}${RD}${msg}${CL}" >&2
   log_msg "[ERROR] $msg"
 }
 
@@ -753,7 +782,7 @@ msg_error() {
 msg_warn() {
   stop_spinner
   local msg="$1"
-  echo -e "${BFR:-}${INFO:-ℹ️} ${YWB}${msg}${CL}" >&2
+  echo -e "${BFR:-}${INFO:-ℹ️}${YWB}${msg}${CL}" >&2
   log_msg "[WARN] $msg"
 }
 
@@ -868,6 +897,12 @@ get_header() {
 # - Returns silently if header not available
 # ------------------------------------------------------------------------------
 header_info() {
+  # Guard against printing the header twice in the same session (e.g. when
+  # the ct script calls header_info at global scope AND again inside
+  # update_script()).
+  [[ "${_HEADER_SHOWN:-0}" == "1" ]] && return 0
+  _HEADER_SHOWN=1
+
   local app_name=$(echo "${APP,,}" | tr -d ' ')
   local header_content
 
@@ -1706,6 +1741,38 @@ function get_lxc_ip() {
   export LOCAL_IP
 }
 
+# ------------------------------------------------------------------------------
+# ensure_whiptail()
+#
+# - Ensures whiptail is installed
+# - Some ARM64 systems will not have whiptail installed
+# - Exits with error message if installation fails
+# ------------------------------------------------------------------------------
+ensure_whiptail() {
+  command -v whiptail >/dev/null 2>&1 && return 0
+
+  msg_info "Installing whiptail"
+  apt_update_safe
+  $STD apt-get install -y whiptail || {
+    msg_error "Failed to install whiptail"
+    exit 100
+  }
+  msg_ok "Installed whiptail"
+}
+
+# ------------------------------------------------------------------------------
+# arm64_notice()
+#
+# - Shows a short warning when running scripts on ARM64 systems
+# ------------------------------------------------------------------------------
+arm64_notice() {
+  [[ "$(dpkg --print-architecture)" == "arm64" ]] || return 0
+
+  whiptail --backtitle "Proxmox VE Helper Scripts" \
+    --title "ARM64 SUPPORT" \
+    --ok-button "Continue" \
+    --msgbox "ARM64 support is in active development.\n\nSome scripts, packages, or application releases may not be fully tested or working yet." 10 68
+}
 # ==============================================================================
 # SIGNAL TRAPS
 # ==============================================================================
