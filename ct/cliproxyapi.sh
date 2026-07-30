@@ -36,7 +36,11 @@ function update_script() {
     systemctl stop cliproxyapi
     msg_ok "Stopped CLIProxyAPI"
 
+    create_backup /opt/cliproxyapi/config.yaml
+
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "cliproxyapi" "router-for-me/CLIProxyAPI" "prebuild" "latest" "/opt/cliproxyapi" "CLIProxyAPI_*_linux_$(arch_resolve "amd64" "aarch64").tar.gz"
+
+    restore_backup
 
     msg_info "Starting CLIProxyAPI"
     systemctl start cliproxyapi
@@ -52,5 +56,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW}Access it using the following URL:${CL}"
-echo -e "${GATEWAY}${BGN}http://${IP}:8317${CL}"
+echo -e "${INFO}${YW}Authenticate your AI providers via the management panel at:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8317/management.html${CL}"

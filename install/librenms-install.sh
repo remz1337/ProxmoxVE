@@ -17,7 +17,6 @@ msg_info "Installing Dependencies"
 $STD apt install -y \
   acl \
   fping \
-  git \
   graphviz \
   imagemagick \
   mtr-tiny \
@@ -65,16 +64,6 @@ EOF
 chown -R librenms:librenms /opt/librenms
 chmod 771 /opt/librenms
 chmod -R ug=rwX /opt/librenms/bootstrap/cache /opt/librenms/storage /opt/librenms/logs /opt/librenms/rrd
-if [[ ! -d /opt/librenms/.git ]]; then
-  LIBRENMS_VERSION=$(cat ~/.librenms 2>/dev/null)
-  cd /opt/librenms
-  git init -q
-  git remote add origin https://github.com/librenms/librenms.git
-  git fetch --depth 1 origin "refs/tags/v${LIBRENMS_VERSION}" 2>/dev/null ||
-    git fetch --depth 1 origin "refs/tags/${LIBRENMS_VERSION}" 2>/dev/null || true
-  git checkout -qf FETCH_HEAD 2>/dev/null || true
-  chown -R librenms:librenms .git
-fi
 msg_ok "Configured LibreNMS"
 
 msg_info "Configure MariaDB"
@@ -91,7 +80,7 @@ sed -i "s/listen = \/run\/php\/php8.4-fpm.sock/listen = \/run\/php-fpm-librenms.
 msg_ok "Configured PHP-FPM"
 
 msg_info "Configure Nginx"
-cat <<EOF >/etc/nginx/sites-enabled/librenms
+cat <<EOF >/etc/nginx/sites-available/librenms
 server {
  listen      80;
  server_name ${LOCAL_IP};
@@ -114,8 +103,7 @@ server {
  }
 }
 EOF
-rm /etc/nginx/sites-enabled/default
-$STD systemctl reload nginx
+nginx_enable_site librenms
 systemctl restart php8.4-fpm
 msg_ok "Configured Nginx"
 
@@ -127,11 +115,11 @@ cp /opt/librenms/snmpd.conf.example /etc/snmp/snmpd.conf
 
 APP_PASSWORD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c13)
 APP_USER="admin"
-{
-  echo "LibreNMS Credentials"
-  echo "Username: ${APP_USER}"
-  echo "Password: ${APP_PASSWORD}"
-} >>~/librenms.creds
+cat <<EOF >~/librenms.creds
+LibreNMS Credentials
+Username: ${APP_USER}
+Password: ${APP_PASSWORD}
+EOF
 
 $STD su - librenms -s /bin/bash -c "cd /opt/librenms && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev"
 $STD su - librenms -s /bin/bash -c "cd /opt/librenms && php8.4 artisan migrate --force"

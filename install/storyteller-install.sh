@@ -24,11 +24,11 @@ $STD apt install -y \
   ffmpeg
 msg_ok "Installed Dependencies"
 
-NODE_VERSION="22" NODE_MODULE="corepack,yarn" setup_nodejs
+NODE_VERSION="24" NODE_MODULE="corepack,yarn" setup_nodejs
 
 fetch_and_deploy_gh_release "readium" "readium/cli" "prebuild" "latest" "/opt/readium" "readium_linux_$(arch_resolve "x86_64" "arm64").tar.gz"
 ln -sf /opt/readium/readium /usr/local/bin/readium
-fetch_and_deploy_gl_release "storyteller" "storyteller-platform/storyteller" "tarball" "latest" "/opt/storyteller"
+fetch_and_deploy_gl_release "storyteller" "storyteller-platform/storyteller" "tarball" "latest" "/opt/storyteller" "" "web-v2"
 
 msg_info "Setting up Storyteller"
 cd /opt/storyteller
@@ -46,11 +46,11 @@ NODE_ENV=production
 NEXT_TELEMETRY_DISABLED=1
 EOF
 mkdir -p /opt/storyteller/data
-{
-  echo "Storyteller Credentials"
-  echo "======================="
-  echo "Secret Key: ${STORYTELLER_SECRET_KEY}"
-} >~/storyteller.creds
+cat <<EOF >~/storyteller.creds
+Storyteller Credentials
+=======================
+Secret Key: ${STORYTELLER_SECRET_KEY}
+EOF
 msg_ok "Set up Storyteller"
 
 msg_info "Building Storyteller"

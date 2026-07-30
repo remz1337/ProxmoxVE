@@ -37,13 +37,14 @@ function update_script() {
     msg_ok "Stopped Services"
 
     create_backup /opt/postiz/.env \
-                  /opt/postiz/uploads
+      /opt/postiz/uploads
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "postiz" "gitroomhq/postiz-app" "tarball"
 
+    restore_backup
+
     msg_info "Building Application"
     cd /opt/postiz
-    cp /opt/postiz_env.bak /opt/postiz/.env
     set -a && source /opt/postiz/.env && set +a
     export NODE_OPTIONS="--max-old-space-size=4096"
     $STD pnpm install
@@ -56,9 +57,7 @@ function update_script() {
     $STD pnpm run prisma-db-push
     msg_ok "Ran Database Migrations"
 
-
     mkdir -p /opt/postiz/uploads
-    restore_backup
 
     msg_info "Starting Services"
     systemctl start postiz-backend postiz-frontend postiz-orchestrator
@@ -74,5 +73,5 @@ description
 
 msg_ok "Completed Successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}${CL}"

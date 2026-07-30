@@ -152,7 +152,7 @@ EOF
   yes)
     msg_info "Enabling 'pve-no-subscription' repository"
     cat <<EOF >/etc/apt/sources.list.d/pve-install-repo.list
-deb https://download.proxmox.com/debian/pve bookworm pve-no-subscription
+deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription
 EOF
     msg_ok "Enabled 'pve-no-subscription' repository"
     ;;
@@ -300,7 +300,7 @@ EOF
       --title "PVE-ENTERPRISE" \
       --menu "'pve-enterprise' repository already exists.\n\nWhat do you want to do?" 14 58 2 \
       "keep" "Keep as is" \
-      "disable" "Comment out (disable) this repo" \
+      "disable" "Disable this repo (set Enabled: false)" \
       "delete" "Delete this repo file" \
       3>&2 2>&1 1>&3)
     case $CHOICE in

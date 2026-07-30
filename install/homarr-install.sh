@@ -49,10 +49,10 @@ chmod 744 /appdata/redis
 cp /opt/homarr/redis.conf /etc/redis/redis.conf
 sed -i -e '$a\' /etc/redis/redis.conf
 grep -q '^bind 127.0.0.1 -::1$' /etc/redis/redis.conf || echo "bind 127.0.0.1 -::1" >>/etc/redis/redis.conf
-rm /etc/nginx/nginx.conf
+rm -f /etc/nginx/nginx.conf
 mkdir -p /etc/nginx/templates
 cp /opt/homarr/nginx.conf /etc/nginx/templates/nginx.conf
-echo $'#!/bin/bash\ncd /opt/homarr/apps/cli && node ./cli.cjs "$@"' >/usr/bin/homarr
+echo $'#!/bin/bash\nset -a\nsource /opt/homarr.env\nset +a\ncd /opt/homarr/apps/cli && node ./cli.cjs "$@"' >/usr/bin/homarr
 chmod +x /usr/bin/homarr
 msg_ok "Copied config files"
 

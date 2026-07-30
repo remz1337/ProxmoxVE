@@ -12,13 +12,17 @@ body:
         Requests may be closed if the application is out of scope, abandoned, too new, not publicly verifiable, or not suitable for a reliable Proxmox VE Helper-Scripts integration.
 
         General requirements:
-        - The application should be self-hosted.
-        - The project should have an official public source repository.
-        - The project should provide official releases, tags, or release tarballs.
-        - The project should be actively maintained.
-        - The project should generally have at least 1,000 stars or a comparable public adoption signal.
-        - The latest official release or tag should not be older than 6 months.
-        - The project itself should be at least 6 months old.
+        - The application must be self-hosted.
+        - The project must have an official public source repository.
+        - The project must provide official releases, tags, or release tarballs.
+        - The project must be actively maintained.
+        - The official source repository must have at least 1,000 stars.
+        - The latest official release or tag must not be older than 6 months.
+        - The project itself must be at least 6 months old.
+
+        Projects that do not meet these requirements may be closed without further evaluation.
+
+        Exceptions to the 1,000-star requirement are rare and require a clearly verifiable, significant public adoption signal.
 
   - type: input
     id: application-name
@@ -46,6 +50,35 @@ body:
       placeholder: "e.g., https://github.com/home-assistant/core"
     validations:
       required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ Project Eligibility
+
+        Before continuing, verify that the requested project meets the minimum requirements below.
+
+        **Projects with fewer than 1,000 stars are generally not eligible for a script request.**
+
+        Exceptions are only considered where there is a clearly verifiable, significant public adoption signal.
+
+  - type: input
+    id: repository-stars
+    attributes:
+      label: Repository Stars
+      description: Enter the current number of stars of the official source repository.
+      placeholder: "e.g., 15,000"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: minimum-stars
+    attributes:
+      label: Minimum Adoption Requirement
+      description: Confirm that you have verified the project's public adoption.
+      options:
+        - label: The official source repository has at least 1,000 stars.
+          required: true
 
   - type: textarea
     id: app-description

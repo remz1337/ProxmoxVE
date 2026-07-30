@@ -31,13 +31,14 @@ NODE_VERSION="24" NODE_MODULE="corepack,yarn" setup_nodejs
 
 fetch_and_deploy_gh_release "manyfold" "manyfold3d/manyfold" "tarball" "latest" "/opt/manyfold/app"
 
+useradd -m -s /usr/bin/bash manyfold
+
 RUBY_INSTALL_VERSION=$(cat /opt/manyfold/app/.ruby-version)
 RUBY_VERSION=${RUBY_INSTALL_VERSION} RUBY_INSTALL_RAILS="true" HOME=/home/manyfold setup_ruby
 
 msg_info "Configuring Manyfold"
 YARN_VERSION=$(grep '"packageManager":' /opt/manyfold/app/package.json | sed -E 's/.*"(yarn@[0-9\.]+)".*/\1/')
 RELEASE=$(get_latest_github_release "manyfold3d/manyfold")
-useradd -m -s /usr/bin/bash manyfold
 cat <<EOF >/opt/manyfold/.env
 export APP_VERSION=${RELEASE}
 export GUID=1002
@@ -133,9 +134,7 @@ server {
     }
 }
 EOF
-ln -s /etc/nginx/sites-available/manyfold.conf /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-$STD systemctl reload nginx
+nginx_enable_site manyfold.conf
 msg_ok "Created Services"
 
 motd_ssh

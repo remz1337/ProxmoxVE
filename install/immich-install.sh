@@ -162,7 +162,7 @@ PG_VERSION="16" PG_MODULES="pgvector" setup_postgresql
 ACTUAL_PG_VERSION=$(ls /etc/postgresql/ 2>/dev/null | sort -V | tail -1)
 ACTUAL_PG_VERSION=${ACTUAL_PG_VERSION:-16}
 
-VCHORD_RELEASE="0.5.3"
+VCHORD_RELEASE="1.1.1"
 fetch_and_deploy_gh_release "VectorChord" "tensorchord/VectorChord" "binary" "${VCHORD_RELEASE}" "/tmp" "postgresql-${ACTUAL_PG_VERSION}-vchord_*_$(arch_resolve).deb"
 
 sed -i "s/^#shared_preload.*/shared_preload_libraries = 'vchord.so'/" /etc/postgresql/${ACTUAL_PG_VERSION}/main/postgresql.conf
@@ -282,10 +282,11 @@ msg_ok "(4/5) Compiled imagemagick"
 
 msg_info "(5/5) Compiling libvips"
 SOURCE=$SOURCE_DIR/libvips
-LIBVIPS_REVISION="17ad2f62dda7e39985955da189183e594683d45e"
+LIBVIPS_REVISION="e01a4797cabe77d457fdfa7d776b7a7e7ca6d6a7"
 $STD git clone https://github.com/libvips/libvips.git "$SOURCE"
 cd "$SOURCE"
 $STD git reset --hard "$LIBVIPS_REVISION"
+$STD git apply "$BASE_DIR"/server/sources/libvips-patches/0001-put-other-loaders-ahead-of-dcrawload.patch
 $STD meson setup build --buildtype=release --libdir=lib -Dintrospection=disabled -Dtiff=disabled
 cd build
 $STD ninja install
@@ -293,27 +294,33 @@ ldconfig /usr/local/lib
 cd "$STAGING_DIR"
 rm -rf "$SOURCE"/build
 msg_ok "(5/5) Compiled libvips"
-{
-  echo "imagemagick: $IMAGEMAGICK_REVISION"
-  echo "libheif: $LIBHEIF_REVISION"
-  echo "libjxl: $LIBJXL_REVISION"
-  echo "libraw: $LIBRAW_REVISION"
-  echo "libvips: $LIBVIPS_REVISION"
-} >~/.immich_library_revisions
+cat <<EOF >~/.immich_library_revisions
+imagemagick: $IMAGEMAGICK_REVISION
+libheif: $LIBHEIF_REVISION
+libjxl: $LIBJXL_REVISION
+libraw: $LIBRAW_REVISION
+libvips: $LIBVIPS_REVISION
+EOF
 msg_ok "Custom Photo-processing Libraries Compiled Successfully"
 
 INSTALL_DIR="/opt/${APPLICATION}"
 UPLOAD_DIR="${INSTALL_DIR}/upload"
 SRC_DIR="${INSTALL_DIR}/source"
 APP_DIR="${INSTALL_DIR}/app"
-PLUGIN_DIR="${APP_DIR}/corePlugin"
+PLUGIN_DIR="${APP_DIR}/plugins/immich-plugin-core"
 ML_DIR="${APP_DIR}/machine-learning"
 GEO_DIR="${INSTALL_DIR}/geodata"
 mkdir -p {"${APP_DIR}","${UPLOAD_DIR}","${GEO_DIR}","${INSTALL_DIR}"/cache}
 
-fetch_and_deploy_gh_release "Immich" "immich-app/immich" "tarball" "v2.7.5" "$SRC_DIR"
+fetch_and_deploy_gh_release "Immich" "immich-app/immich" "tarball" "v3.0.3" "$SRC_DIR"
 PNPM_VERSION="$(jq -r '.packageManager | split("@")[1] | split("+")[0]' ${SRC_DIR}/package.json)"
-NODE_VERSION="24" NODE_MODULE="corepack,pnpm@${PNPM_VERSION}" setup_nodejs
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+NODE_VERSION="24" NODE_MODULE="corepack" setup_nodejs
+# Provision the exact pnpm pinned in package.json's packageManager field via corepack instead
+# of `npm i -g pnpm@X`, which collides (EEXIST) with the corepack pnpm shim shipped by the
+$STD corepack prepare "pnpm@${PNPM_VERSION}" --activate
+export PATH="/root/.local/share/pnpm/bin:$PATH"
+$STD pnpm config set --global dangerouslyAllowAllBuilds true
 
 msg_info "Installing Immich (patience)"
 
@@ -323,10 +330,10 @@ export CI=1
 
 # server build
 export SHARP_IGNORE_GLOBAL_LIBVIPS=true
-$STD pnpm --filter immich --frozen-lockfile build
+$STD pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter immich build
 unset SHARP_IGNORE_GLOBAL_LIBVIPS
 export SHARP_FORCE_GLOBAL_LIBVIPS=true
-$STD pnpm --filter immich --frozen-lockfile --prod --no-optional deploy "$APP_DIR"
+$STD pnpm --filter immich --prod --no-optional deploy "$APP_DIR"
 
 # Patch helmet.json: disable upgrade-insecure-requests for HTTP access
 if [[ -f "$APP_DIR/helmet.json" ]]; then
@@ -336,31 +343,35 @@ fi
 cp "$APP_DIR"/package.json "$APP_DIR"/bin
 sed -i "s|^start|${APP_DIR}/bin/start|" "$APP_DIR"/bin/immich-admin
 
-# openapi & web build
+# sdk, cli & web build
 cd "$SRC_DIR"
 echo "packageImportMethod: hardlink" >>./pnpm-workspace.yaml
-$STD pnpm --filter @immich/sdk --filter immich-web --frozen-lockfile --force install
 unset SHARP_FORCE_GLOBAL_LIBVIPS
 export SHARP_IGNORE_GLOBAL_LIBVIPS=true
-$STD pnpm --filter @immich/sdk --filter immich-web build
+$STD pnpm --filter @immich/sdk --filter immich-web --filter @immich/cli build
+$STD pnpm --filter @immich/cli --prod --no-optional deploy "$APP_DIR"/cli
 cp -a web/build "$APP_DIR"/www
 cp LICENSE "$APP_DIR"
-
-# cli build
-$STD pnpm --filter @immich/sdk --filter @immich/cli --frozen-lockfile install
-$STD pnpm --filter @immich/sdk --filter @immich/cli build
-$STD pnpm --filter @immich/cli --prod --no-optional deploy "$APP_DIR"/cli
-
-# plugins
 cd "$SRC_DIR"
-$STD mise trust --ignore ./mise.toml
-$STD mise trust ./plugins/mise.toml
-cd plugins
+export MISE_TRUSTED_CONFIG_PATHS="$SRC_DIR"/mise.toml
+export MISE_DISABLE_TOOLS=github:jellyfin/jellyfin-ffmpeg
 $STD mise install
-$STD mise run build
+export PATH="$(mise bin-paths 2>/dev/null | tr '\n' ':')$PATH"
+if ! command -v extism-js >/dev/null 2>&1; then
+  # extism-js is published as a bare gzip-compressed single binary (.gz), which
+  # fetch_and_deploy_gh_release cannot deploy (singlefile leaves it compressed,
+  # prebuild only handles zip/tar). Fetch + gunzip it directly.
+  EXTISM_ARCH="$(arch_resolve x86_64 aarch64)"
+  curl_download /tmp/extism-js.gz "https://github.com/extism/js-pdk/releases/download/v1.6.0/extism-js-${EXTISM_ARCH}-linux-v1.6.0.gz"
+  gunzip -f /tmp/extism-js.gz
+  install -m 0755 /tmp/extism-js /usr/local/bin/extism-js
+  rm -f /tmp/extism-js
+fi
+$STD mise exec -- pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter @immich/plugin-core install --frozen-lockfile
+$STD mise exec -- pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter @immich/plugin-core build
 mkdir -p "$PLUGIN_DIR"
-cp -r ./dist "$PLUGIN_DIR"/dist
-cp ./manifest.json "$PLUGIN_DIR"
+cp -r ./packages/plugin-core/dist "$PLUGIN_DIR"/dist
+cp ./packages/plugin-core/manifest.json "$PLUGIN_DIR"
 msg_ok "Installed Immich Server, Web and Plugin Components"
 
 cd "$SRC_DIR"/machine-learning
@@ -376,13 +387,13 @@ if [[ -f ~/.openvino ]]; then
   ML_PYTHON="python3.13"
   msg_info "Pre-installing Python ${ML_PYTHON} for machine-learning"
   for attempt in $(seq 1 3); do
-    $STD sudo --preserve-env=VIRTUAL_ENV -nu immich uv python install "${ML_PYTHON}" && break
+    $STD sudo --preserve-env=VIRTUAL_ENV -Pnu immich uv python install "${ML_PYTHON}" && break
     [[ $attempt -lt 3 ]] && msg_warn "Python download attempt $attempt failed, retrying..." && sleep 5
   done
   msg_ok "Pre-installed Python ${ML_PYTHON}"
   msg_info "Installing Intel OpenVINO machine-learning"
   for attempt in $(seq 1 3); do
-    $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT -nu immich uv sync --extra openvino --no-dev --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
+    $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT -Pnu immich uv sync --extra openvino --no-dev --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
     [[ $attempt -lt 3 ]] && msg_warn "uv sync attempt $attempt failed, retrying..." && sleep 10
   done
   patchelf --clear-execstack "${VIRTUAL_ENV}/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-313-$(arch_resolve "x86_64" "aarch64")-linux-gnu.so"
@@ -391,13 +402,13 @@ else
   ML_PYTHON="python3.11"
   msg_info "Pre-installing Python ${ML_PYTHON} for machine-learning"
   for attempt in $(seq 1 3); do
-    $STD sudo --preserve-env=VIRTUAL_ENV -nu immich uv python install "${ML_PYTHON}" && break
+    $STD sudo --preserve-env=VIRTUAL_ENV -Pnu immich uv python install "${ML_PYTHON}" && break
     [[ $attempt -lt 3 ]] && msg_warn "Python download attempt $attempt failed, retrying..." && sleep 5
   done
   msg_ok "Pre-installed Python ${ML_PYTHON}"
   msg_info "Installing machine-learning"
   for attempt in $(seq 1 3); do
-    $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT -nu immich uv sync --extra cpu --no-dev --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
+    $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT -Pnu immich uv sync --extra cpu --no-dev --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
     [[ $attempt -lt 3 ]] && msg_warn "uv sync attempt $attempt failed, retrying..." && sleep 10
   done
   msg_ok "Installed machine-learning"
@@ -426,6 +437,27 @@ rm cities500.zip
 cd "$INSTALL_DIR"
 ln -s "$GEO_DIR" "$APP_DIR"
 msg_ok "Installed GeoNames data"
+
+# MickLesk temporary patch for HEIC thumbnail gen
+msg_info "Patching media.repository.js"
+MEDIA_REPO_JS="/opt/immich/app/dist/repositories/media.repository.js"
+if [[ -f "$MEDIA_REPO_JS" ]]; then
+  python3 - <<'PY'
+from pathlib import Path
+p = Path('/opt/immich/app/dist/repositories/media.repository.js')
+s = p.read_text()
+old = "(0, sharp_1.default)(input).metadata()"
+new = "(0, sharp_1.default)(input, { unlimited: true, limitInputPixels: false }).metadata()"
+if new in s:
+    print('hotfix already there')
+elif old in s:
+    p.write_text(s.replace(old, new, 1))
+    print('hotfix applied')
+else:
+    print('pattern not found, skipped')
+PY
+fi
+msg_ok "Patched media.repository.js"
 
 mkdir -p /var/log/immich
 touch /var/log/immich/{web.log,ml.log}

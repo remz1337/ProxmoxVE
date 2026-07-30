@@ -39,11 +39,11 @@ function update_script() {
 
   JAVA_VERSION="21" setup_java
 
-  OMADA_URL=$(curl -fsSL "https://support.omadanetworks.com/en/download/software/omada-controller/" |
+  OMADA_URL=$(curl -fsSL -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15" "https://support.omadanetworks.com/en/download/software/omada-controller/" |
     grep -o 'https://static\.tp-link\.com/upload/software/[^"]*linux_x64[^"]*\.deb' |
     head -n1)
   OMADA_PKG=$(basename "${OMADA_URL}")
-  VERSION=$(sed -n 's/.*_v\([0-9.]*\)_.*_\([0-9]\{14\}\)\.deb$/\1-\2/p' <<<"${OMADA_PKG}")
+  VERSION=$(sed -n 's/.*_v\([0-9.]*\)_linux.*/\1/p' <<<"${OMADA_PKG}")
 
   CURRENT_VERSION=$(cat $HOME/.omada 2>/dev/null || echo "0")
 

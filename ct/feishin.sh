@@ -59,9 +59,7 @@ function update_script() {
 
     envsubst </opt/feishin/settings.js.template >/etc/nginx/conf.d/settings.js
     envsubst '${PUBLIC_PATH}' </opt/feishin/ng.conf.template >/etc/nginx/sites-available/feishin
-    ln -sf /etc/nginx/sites-available/feishin /etc/nginx/sites-enabled/feishin
-    rm -f /etc/nginx/sites-enabled/default
-    systemctl restart nginx
+    nginx_enable_site feishin
     msg_ok "Published Web Assets"
 
     msg_ok "Updated successfully!"
@@ -75,5 +73,5 @@ description
 
 msg_ok "Completed Successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:9180${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:9180${CL}"

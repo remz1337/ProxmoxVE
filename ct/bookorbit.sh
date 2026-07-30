@@ -53,6 +53,7 @@ function update_script() {
     mkdir -p /opt/bookorbit/server/migrations
     cp -r /opt/bookorbit/server/src/db/migrations/. /opt/bookorbit/server/migrations/
     chmod +x /opt/bookorbit/server/bin/kepubify/*
+    restore_backup
     APP_VER=$(cat ~/.bookorbit)
     sed -i "s/^APP_VERSION=.*/APP_VERSION=v$APP_VER/" /opt/bookorbit/.env
     msg_ok "Rebuilt Application"
@@ -75,5 +76,5 @@ description
 
 msg_ok "Completed Successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:3000${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:3000${CL}"

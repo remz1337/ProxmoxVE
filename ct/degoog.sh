@@ -38,7 +38,7 @@ function update_script() {
     create_backup /opt/degoog/.env \
       /opt/degoog/data
 
-    if ! command -v bun >/dev/null 2>&1; then
+    if [[ ! -x /root/.bun/bin/bun ]]; then
       msg_info "Installing Bun"
       export BUN_INSTALL="/root/.bun"
       curl -fsSL https://bun.sh/install | $STD bash
@@ -52,7 +52,7 @@ function update_script() {
     msg_ok "Updated Valkey"
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "degoog" "fccview/degoog" "prebuild" "latest" "/opt/degoog" "degoog_*_prebuild.tar.gz"
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "curl-impersonate" "lexiforest/curl-impersonate" "prebuild" "latest" "/usr/local/bin" "curl-impersonate-v*.$(uname -m)-linux-gnu.tar.gz"
+    fetch_and_deploy_gh_release "curl-impersonate" "lexiforest/curl-impersonate" "prebuild" "latest" "/usr/local/bin" "curl-impersonate-v*.$(uname -m)-linux-gnu.tar.gz"
 
     restore_backup
 

@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
@@ -60,8 +60,9 @@ function update_script() {
   fi
   $STD apt install -y build-essential "$pcre_pkg" libssl-dev zlib1g-dev
 
-  if check_for_gh_release "openresty" "openresty/openresty"; then
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "openresty" "openresty/openresty" "prebuild" "${CHECK_UPDATE_RELEASE}" "/opt/openresty" "openresty-*.tar.gz"
+  OPENRESTY_VERSION="1.29.2.5"
+  if [[ "$(cat ~/.openresty 2>/dev/null)" != "$OPENRESTY_VERSION" ]]; then
+    CLEAN_INSTALL=1 fetch_and_deploy_from_url "https://openresty.org/download/openresty-${OPENRESTY_VERSION}.tar.gz" "/opt/openresty"
 
     msg_info "Building OpenResty"
     cd /opt/openresty
@@ -77,6 +78,7 @@ function update_script() {
       --with-stream_ssl_module
     $STD make -j"$(nproc)"
     $STD make install
+    echo "${OPENRESTY_VERSION}" >~/.openresty
     rm -rf /opt/openresty
     cat <<'EOF' >/lib/systemd/system/openresty.service
 [Unit]
@@ -235,6 +237,9 @@ EOF
     fi
     sed -i 's/user npm/user root/g; s/^pid/#pid/g' /usr/local/openresty/nginx/conf/nginx.conf
     sed -r -i 's/^([[:space:]]*)su npm npm/\1#su npm npm/g;' /etc/logrotate.d/nginx-proxy-manager
+    if [ -n "$(command -v node)" ]; then
+      sed -i -E "s|^ExecStart=.*/node index\.js|ExecStart=$(command -v node) index.js|" /lib/systemd/system/npm.service
+    fi
     systemctl daemon-reload
     systemctl enable -q --now openresty
     systemctl enable -q --now npm

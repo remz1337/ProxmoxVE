@@ -11,7 +11,7 @@ var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-256}"
 var_disk="${var_disk:-1}"
 var_os="${var_os:-alpine}"
-var_version="${var_version:-3.23}"
+var_version="${var_version:-3.24}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 var_nesting="${var_nesting:-0}"
@@ -30,16 +30,11 @@ function update_script() {
   fi
 
   if check_for_gh_release "cinny" "cinnyapp/cinny"; then
-    msg_info "Backing up Configuration"
-    cp /opt/cinny/config.json /opt/cinny_config.json.bak
-    msg_ok "Backed up Configuration"
+    create_backup /opt/cinny/config.json
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "cinny" "cinnyapp/cinny" "prebuild" "latest" "/opt/cinny" "cinny-*.tar.gz"
 
-    msg_info "Restoring Configuration"
-    cp /opt/cinny_config.json.bak /opt/cinny/config.json
-    rm -f /opt/cinny_config.json.bak
-    msg_ok "Restored Configuration"
+    restore_backup
 
     msg_info "Restarting nginx"
     $STD rc-service nginx restart
@@ -54,5 +49,5 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following IP:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080${CL}"
+echo -e "${INFO}${YW}Access it using the following IP:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8080${CL}"
