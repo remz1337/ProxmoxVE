@@ -13,5 +13,5 @@ color
 msg_error "This script is no longer available."
 msg_warn "MusicSeerr has been renamed to DroppedNeedle."
 msg_warn "Run the DroppedNeedle script to migrate an existing installation:"
-echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/droppedneedle.sh)"'
+echo 'bash -c "$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/droppedneedle.sh)"'
 exit 1
