@@ -13,32 +13,87 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Dependencies"
-$STD apt install -y \
-  debian-keyring \
-  debian-archive-keyring \
-  apt-transport-https
-msg_ok "Installed Dependencies"
+setup_deb_based() {
+  fetch_and_deploy_gh_release "caddy" "caddyserver/caddy" "binary" "latest" "/opt/caddy" "caddy_*_linux_$(arch_resolve).deb"
+  systemctl enable -q --now caddy
 
-msg_info "Installing Caddy"
-setup_deb822_repo \
-  "caddy" \
-  "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" \
-  "https://dl.cloudsmith.io/public/caddy/stable/deb/debian" \
-  "any-version"
-$STD apt install -y caddy
-msg_ok "Installed Caddy"
+  prompt="${var_caddy_xcaddy:-}"
+  [[ -n "$prompt" ]] || read -r -p "${TAB3}Would you like to install xCaddy Addon? <y/N> " prompt || true
+  if [[ "${prompt,,}" =~ ^(y|yes)$ ]]; then
+    setup_go
+    fetch_and_deploy_gh_release "xcaddy" "caddyserver/xcaddy" "binary"
 
-read -r -p "${TAB3}Would you like to install xCaddy Addon? <y/N> " prompt
-if [[ "${prompt,,}" =~ ^(y|yes)$ ]]; then
-  setup_go
-  fetch_and_deploy_gh_release "xcaddy" "caddyserver/xcaddy" "binary"
+    $STD apt install -y git
+    if (($(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo) < 1900)); then
+      msg_warn "xCaddy is installed; its test build was skipped because linking Caddy needs about 2 GB RAM"
+    else
+      msg_info "Setup xCaddy"
+      cd /opt
+      $STD xcaddy build
+      msg_ok "Setup xCaddy"
+    fi
+  fi
+}
 
-  msg_info "Setup xCaddy"
-  $STD apt install -y git
-  $STD xcaddy build
-  msg_ok "Setup xCaddy"
-fi
+setup_alpine() {
+  msg_info "Installing Caddy"
+  $STD apk add --no-cache caddy caddy-openrc
+  cat <<EOF >/etc/caddy/Caddyfile
+:80 {
+        # Set this path to your site's directory.
+        root * /var/www/html
+
+        # Enable the static file server.
+        file_server
+
+        # Another common task is to set up a reverse proxy:
+        # reverse_proxy localhost:8080
+
+        # Or serve a PHP site through php-fpm:
+        # php_fastcgi localhost:9000
+}
+EOF
+  mkdir -p /var/www/html
+  cat <<EOF >/var/www/html/index.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Caddy works!</title>
+  </head>
+  <body>
+    <h1>Hello Caddy!</h1>
+    <p>For more information, refer to the Caddy <a href="https://caddyserver.com/docs/">documentation</a><p>
+  </body>
+</html>
+EOF
+  msg_ok "Installed Caddy"
+
+  prompt="${var_caddy_xcaddy:-}"
+  [[ -n "$prompt" ]] || read -r -p "${TAB3}Would you like to install xCaddy Addon? <y/N> " prompt || true
+  if [[ "${prompt,,}" =~ ^(y|yes)$ ]]; then
+    GO_VERSION="$(curl -fsSL https://go.dev/VERSION?m=text | head -1 | cut -c3-)" setup_go
+    fetch_and_deploy_gh_release "xcaddy" "caddyserver/xcaddy" "prebuild" "latest" "/opt/xcaddy" "xcaddy_*_linux_$(arch_resolve).tar.gz"
+    ln -sf /opt/xcaddy/xcaddy /usr/local/bin/xcaddy
+    if (($(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo) < 1900)); then
+      msg_warn "xCaddy is installed; its test build was skipped because linking Caddy needs about 2 GB RAM"
+    else
+      msg_info "Setup xCaddy"
+      cd /opt
+      $STD xcaddy build
+      msg_ok "Setup xCaddy"
+    fi
+  fi
+
+  msg_info "Enabling Caddy Service"
+  $STD rc-update add caddy default
+  msg_ok "Enabled Caddy Service"
+
+  msg_info "Starting Caddy"
+  $STD service caddy start
+  msg_ok "Started Caddy"
+}
+
+run_os_setup
 
 motd_ssh
 customize

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -35,6 +36,9 @@ function update_script() {
     msg_ok "Services Stopped"
 
     fetch_and_deploy_gh_release "navidrome" "navidrome/navidrome" "binary"
+
+    find /var/lib/navidrome/cache /var/lib/navidrome/artwork /var/lib/navidrome/plugins \
+      -maxdepth 0 -type d -user root -exec chown -h navidrome:navidrome {} + 2>/dev/null || true
 
     msg_info "Starting Services"
     systemctl start navidrome

@@ -78,6 +78,8 @@ $STD yarn config set enableTelemetry 0
 export NODE_OPTIONS="--max-old-space-size=4096"
 export TSC_COMPILE_ON_ERROR=true
 $STD yarn install
+$STD bash ./scripts/set-version.sh "$(cat ~/.affine_app)"
+export BUILD_TYPE=stable
 $STD npm install -g typescript
 $STD yarn affine @affine/native build
 $STD yarn affine @affine/server-native build
@@ -158,7 +160,7 @@ systemctl enable -q --now redis-server affine-web affine-worker
 msg_ok "Created Services"
 
 msg_info "Creating Admin User"
-ADMIN_PASS=$(openssl rand -base64 12)
+ADMIN_PASS=$(random_password 16)
 for i in {1..30}; do
   if curl -s http://localhost:3010/info >/dev/null 2>&1; then
     break

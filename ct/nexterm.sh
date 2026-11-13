@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Mathias Wagner (gnmyt)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -30,6 +31,8 @@ function update_script() {
     exit
   fi
 
+  echo "x /tmp/nexterm-sea-*" >/etc/tmpfiles.d/nexterm.conf
+
   if check_for_gh_release "nexterm-engine" "gnmyt/Nexterm"; then
     msg_info "Stopping nexterm-engine"
     systemctl stop nexterm-engine
@@ -45,6 +48,7 @@ function update_script() {
   if check_for_gh_release "nexterm-server" "gnmyt/Nexterm"; then
     msg_info "Stopping nexterm-server"
     systemctl stop nexterm-server
+    rm -rf /tmp/nexterm-sea-*
     msg_ok "Stopped nexterm-server"
 
     fetch_and_deploy_gh_release "nexterm-server" "gnmyt/Nexterm" "singlefile" "latest" "/opt/nexterm/server" "nexterm-server-linux-$(arch_resolve "x64" "arm64")"

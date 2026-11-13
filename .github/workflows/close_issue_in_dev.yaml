@@ -12,7 +12,7 @@ jobs:
     if: github.event.pull_request.merged == true && github.repository == 'community-scripts/ProxmoxVE'
     runs-on: self-hosted
     env:
-      DEV_REPO: community-scripts/ProxmoxVED
+      DEV_REPO: community-scripts/DevScripts
 
     steps:
       - name: Checkout target repo (merge commit)
@@ -60,7 +60,7 @@ jobs:
           echo "count=$(printf '%s' "$slugs" | wc -w | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
           echo "Slugs in this PR: ${slugs:-<none>}"
 
-      - name: Resolve the matching ProxmoxVED issue
+      - name: Resolve the matching DevScripts issue
         id: find_issue
         shell: bash
         env:
@@ -71,7 +71,7 @@ jobs:
           # creates, so migration PRs carry an exact back-reference. Guessing from
           # titles or file names is never needed for them.
           matched=$(printf '%s' "$PR_BODY" \
-            | grep -oE 'community-scripts/ProxmoxVED#[0-9]+' \
+            | grep -oE 'community-scripts/(ProxmoxVED|DevScripts)#[0-9]+' \
             | sed 's/.*#//' || true)
 
           if [ -n "$matched" ]; then
@@ -96,7 +96,7 @@ jobs:
                   [ -n "$row" ] || continue
                   num=$(printf '%s' "$row" | jq -r '.number')
 
-                  # Same slug derivation the ProxmoxVED workflows use, so both
+                  # Same slug derivation the DevScripts workflows use, so both
                   # sides agree on what "alpine-cinny" means.
                   name=$(printf '%s' "$row" | jq -r '.body // ""' \
                     | sed -n '/^###[[:space:]]*Name of the Script/,/^###/p' \
@@ -124,11 +124,11 @@ jobs:
           echo "issue_numbers=$matched" >> "$GITHUB_OUTPUT"
           echo "Closing: ${matched:-<none>}"
 
-      - name: Comment on and close matching ProxmoxVED issues
+      - name: Comment on and close matching DevScripts issues
         if: steps.find_issue.outputs.issue_numbers != ''
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.PAT_MICHEL }}
+          GH_TOKEN: ${{ secrets.GH_CROSS_REPO_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           ISSUE_NUMBERS: ${{ steps.find_issue.outputs.issue_numbers }}
         run: |
@@ -147,8 +147,8 @@ jobs:
       - name: Set is_dev to false in PocketBase
         if: steps.get_slugs.outputs.count != '0'
         env:
-          POCKETBASE_URL: ${{ secrets.POCKETBASE_URL }}
-          POCKETBASE_COLLECTION: ${{ secrets.POCKETBASE_COLLECTION }}
+          POCKETBASE_URL: ${{ vars.POCKETBASE_URL }}
+          POCKETBASE_COLLECTION: ${{ vars.POCKETBASE_COLLECTION }}
           POCKETBASE_ADMIN_EMAIL: ${{ secrets.POCKETBASE_ADMIN_EMAIL }}
           POCKETBASE_ADMIN_PASSWORD: ${{ secrets.POCKETBASE_ADMIN_PASSWORD }}
           PR_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
@@ -258,3 +258,20 @@ jobs:
           })().catch(e => { console.error(e); process.exit(1); });
           ENDSCRIPT
         shell: bash
+
+      - name: Move the scripts' telemetry to ProxmoxVE
+        if: ${{ !cancelled() && steps.find_issue.outputs.issue_numbers != '' && steps.get_slugs.outputs.count != '0' }}
+        shell: bash
+        env:
+          TELEMETRY_ADMIN_TOKEN: ${{ secrets.TELEMETRY_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$TELEMETRY_ADMIN_TOKEN" ]; then
+            echo "TELEMETRY_ADMIN_TOKEN is not set, skipping"
+            exit 0
+          fi
+          body=$(jq -cn --arg s "$(cat pocketbase_slugs.txt)" \
+            '{slugs: ($s | split(" ") | map(select(. != ""))), from: "DevScripts", to: "ProxmoxVE"}')
+          curl -fsS -X POST "https://telemetry.community-scripts.org/api/admin/migrate-script" \
+            -H "Authorization: Bearer ${TELEMETRY_ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$body" || echo "::warning::Moving the telemetry history to ProxmoxVE failed"

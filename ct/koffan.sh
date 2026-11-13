@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: (AminGholizad)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -38,6 +39,7 @@ function update_script() {
 
     create_backup /opt/koffan/data
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "koffan" "PanSalut/Koffan" "tarball"
+    GO_VERSION="$(grep -m1 '^go ' /opt/koffan/go.mod | awk '{print $2}')" setup_go
     restore_backup
 
     msg_info "Rebuilding Koffan"

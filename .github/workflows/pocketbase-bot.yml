@@ -19,20 +19,25 @@ jobs:
     steps:
       - name: Execute PocketBase bot command
         env:
-          POCKETBASE_URL: ${{ secrets.POCKETBASE_URL }}
-          POCKETBASE_COLLECTION: ${{ secrets.POCKETBASE_COLLECTION }}
+          POCKETBASE_URL: ${{ vars.POCKETBASE_URL }}
+          POCKETBASE_COLLECTION: ${{ vars.POCKETBASE_COLLECTION }}
           POCKETBASE_ADMIN_EMAIL: ${{ secrets.POCKETBASE_ADMIN_EMAIL }}
           POCKETBASE_ADMIN_PASSWORD: ${{ secrets.POCKETBASE_ADMIN_PASSWORD }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_ID: ${{ github.event.comment.id }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          IS_PR_COMMENT: ${{ github.event.issue.pull_request && 'true' || 'false' }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
           ACTOR: ${{ github.event.comment.user.login }}
           ACTOR_ASSOCIATION: ${{ github.event.comment.author_association }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
-          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          REVALIDATE_SECRET: ${{ secrets.FRONTEND_INGEST_SECRET }}
+          # Screenshot attaching is delegated to the frontend, which owns the
+          # fetching and validation. Without this the subcommand says so rather
+          # than failing halfway.
+          SCREENSHOT_IMPORT_SECRET: ${{ secrets.FRONTEND_INGEST_SECRET }}
         run: |
           node << 'ENDSCRIPT'
           (async function () {
@@ -80,6 +85,7 @@ jobs:
             const owner = process.env.REPO_OWNER;
             const repo = process.env.REPO_NAME;
             const issueNumber = parseInt(process.env.ISSUE_NUMBER, 10);
+            const isPrComment = process.env.IS_PR_COMMENT === 'true';
             const commentId = parseInt(process.env.COMMENT_ID, 10);
             const actor = process.env.ACTOR;
 
@@ -212,11 +218,22 @@ jobs:
 
               const prTitle = 'chore(ct): sync ' + slugValue + ' defaults with PocketBase';
               const prBody =
-                '## Summary\n' +
-                '- Sync default CT variables for `' + slugValue + '` after `/pocketbase` update.\n' +
-                '- Updated vars: `' + updateResult.updatedVars.join('`, `') + '`.\n\n' +
-                '## Source\n' +
-                '- Triggered by @' + actor + ' via PocketBase bot.\n';
+                '## ✍️ Description\n\n' +
+                'Sync of the default CT variables for `' + slugValue + '` after a `/pocketbase` update by @' + actor + '.\n\n' +
+                'Updated: `' + updateResult.updatedVars.join('`, `') + '`\n\n' +
+                '## 🔗 Related Issue\n\n' +
+                (isPrComment ? 'Triggered from #' : 'Fixes #') + issueNumber + '\n\n' +
+                '## ✅ Prerequisites (**X** in brackets)\n\n' +
+                '- [x] **Self-review completed** – Code follows project standards.\n' +
+                '- [ ] **Tested thoroughly** – Changes work as expected.\n' +
+                '- [x] **No security risks** – No hardcoded secrets, unnecessary privilege escalations, or permission issues.\n\n' +
+                '**Tested on:** not tested — generated from the PocketBase record, only `var_` defaults changed.\n\n' +
+                '---\n\n' +
+                '## 🤖 AI Assistance (**X** in brackets)\n\n' +
+                '- [x] **No AI used** – Scripts were written without AI assistance.\n\n' +
+                '---\n\n' +
+                '## 🛠️ Type of Change (**X** in brackets)\n\n' +
+                '- [x] 🐞 **Bug fix** – Resolves an issue without breaking functionality.\n';
               const createPrRes = await ghRequest('/repos/' + owner + '/' + repo + '/pulls', 'POST', {
                 title: prTitle,
                 body: prBody,
@@ -323,10 +340,25 @@ jobs:
               '/pocketbase <slug> method remove <type>\n' +
               '```\n' +
               'Method fields: `cpu` `ram` `hdd` `os` `version` `config_path` `script`\n\n' +
-              '**Editable fields:** `name` `description` `logo` `documentation` `website` `project_url` `github` ' +
+              '`cpu` `ram` `hdd` `os` `version` also work without `method` — they go to the\n' +
+              'default install method, e.g. `/pocketbase <slug> hdd=25`\n\n' +
+              '**Editable fields:** `name` `description` `logo` `documentation` `website` `project_url` `repository` ' +
+              '`oidc_url` `license` ' +
               '`config_path` `port` `default_user` `default_passwd` ' +
-              '`updateable` `privileged` `has_arm` `is_dev` ' +
-              '`is_disabled` `disable_message` `is_deleted` `deleted_message`';
+              '`updateable` `privileged` `is_dev` `has_arm` ' +
+              '`architectures` (amd64,arm64) `platforms` (pve,incus) ' +
+              '`execute_in` (pve,lxc,pbs,vm,pmg,pdm) `categories` (names or ids) ' +
+              '`type` (ct, vm, addon, …) ' +
+              '`is_disabled` `disable_message` `is_deleted` `deleted_message` ' +
+              '`pin_reason` `last_update_commit`\n\n' +
+              'The `var_` names from the ct scripts work too: `var_cpu` `var_ram` `var_disk`\n' +
+              '`var_os` `var_version` `var_port` `var_tags` `var_unprivileged`\n\n' +
+              '**Screenshots:**\n' +
+              '```\n' +
+              '/pocketbase <slug> screenshot https://example.com/one.png https://example.com/two.png\n' +
+              '```\n\n' +
+              '`slug` is deliberately not editable: it is the URL, the JSON filename and the\n' +
+              'ct/<slug>.sh path all at once, so renaming it is a migration rather than an edit.';
 
             if (!withoutCmd) {
               await addReaction('-1');
@@ -384,6 +416,14 @@ jobs:
 
             // ── Shared helpers ─────────────────────────────────────────────────
 
+            // The ct scripts name these var_cpu/var_ram/var_disk, and that is what
+            // people type. Accept them for the PocketBase keys.
+            const KEY_ALIASES = {
+              var_cpu: 'cpu', var_ram: 'ram', var_disk: 'hdd', var_hdd: 'hdd',
+              var_os: 'os', var_version: 'version', var_unprivileged: 'unprivileged',
+              var_port: 'port', var_tags: 'tags', disk: 'hdd', memory: 'ram',
+            };
+
             // Key=value parser: handles unquoted and "quoted" values
             function parseKVPairs(str) {
               const fields = {};
@@ -411,7 +451,7 @@ jobs:
                   while (pos < str.length && !/\s/.test(str[pos])) pos++;
                   value = str.substring(valStart, pos);
                 }
-                fields[key] = value;
+                fields[KEY_ALIASES[key.toLowerCase()] || key] = value;
               }
               return fields;
             }
@@ -489,6 +529,7 @@ jobs:
             const noteMatch   = rest.match(/^note\s+(list|add|edit|remove)\b/i);
             const methodMatch = rest.match(/^method\b/i);
             const setMatch    = rest.match(/^set\s+(\S+)/i);
+            const shotMatch   = rest.match(/^screenshots?\s+(.+)$/i);
 
             if (infoMatch) {
               // ── INFO SUBCOMMAND ──────────────────────────────────────────────
@@ -504,7 +545,9 @@ jobs:
               out.push('- **Port:** ' + (record.port != null ? '`' + record.port + '`' : '—'));
               out.push('- **Updateable:** ' + (record.updateable ? 'Yes' : 'No'));
               out.push('- **Privileged:** ' + (record.privileged ? 'Yes' : 'No'));
-              out.push('- **ARM:** ' + (record.has_arm ? 'Yes' : 'No'));
+              out.push('- **License:** ' + (record.license || '—'));
+              out.push('- **Architectures:** ' + ((record.architectures || []).join(', ') || 'amd64'));
+              out.push('- **Platforms:** ' + ((record.platforms || []).join(', ') || 'pve'));
               if (record.is_dev) out.push('- **Dev:** Yes');
               if (record.is_disabled) out.push('- **Disabled:** Yes' + (record.disable_message ? ' — ' + record.disable_message : ''));
               if (record.is_deleted) out.push('- **Deleted:** Yes' + (record.deleted_message ? ' — ' + record.deleted_message : ''));
@@ -513,6 +556,7 @@ jobs:
               out.push('**Links:**');
               out.push('- **Website:** ' + (record.website || '—'));
               out.push('- **Docs:** ' + (record.documentation || '—'));
+              out.push('- **OIDC docs:** ' + (record.oidc_url || '—'));
               out.push('- **Logo:** ' + (record.logo ? '[link](' + record.logo + ')' : '—'));
               out.push('- **GitHub:** ' + (record.github || '—'));
               if (record.config_path) out.push('- **Config:** `' + record.config_path + '`');
@@ -532,6 +576,44 @@ jobs:
 
               await addReaction('+1');
               await postComment(out.join('\n'));
+
+            } else if (shotMatch) {
+              // ── SCREENSHOT SUBCOMMAND ────────────────────────────────────────
+              // Delegated to the frontend rather than reimplemented here: it
+              // already fetches the URL, checks the content type and size, and
+              // attaches the file to PocketBase. Doing that a second time in a
+              // workflow would be a second set of bugs.
+              const shotUrls = shotMatch[1].split(/[\s,]+/).map(function (u) { return u.trim(); }).filter(Boolean);
+              const bad = shotUrls.filter(function (u) { return !/^https?:\/\//i.test(u); });
+              if (bad.length > 0) {
+                await addReaction('-1');
+                await postComment('❌ **PocketBase Bot**: not a URL: `' + bad.join('`, `') + '`');
+                process.exit(0);
+              }
+              const frontendUrl = process.env.FRONTEND_URL;
+              const shotSecret = process.env.SCREENSHOT_IMPORT_SECRET;
+              if (!frontendUrl || !shotSecret) {
+                await addReaction('-1');
+                await postComment('❌ **PocketBase Bot**: screenshot import is not configured (FRONTEND_URL / SCREENSHOT_IMPORT_SECRET).');
+                process.exit(1);
+              }
+              const shotRes = await request(frontendUrl.replace(/\/$/, '') + '/api/screenshots', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: slug, secret: shotSecret, urls: shotUrls })
+              });
+              if (!shotRes.ok) {
+                await addReaction('-1');
+                await postComment('❌ **PocketBase Bot**: screenshot import failed:\n```\n' + shotRes.body + '\n```');
+                process.exit(1);
+              }
+              await revalidate(slug);
+              await addReaction('+1');
+              await postComment(
+                '✅ **PocketBase Bot**: attached ' + shotUrls.length + ' screenshot' + (shotUrls.length === 1 ? '' : 's') +
+                ' to **`' + slug + '`**\n\n' + shotUrls.map(function (u) { return '- ' + u; }).join('\n') +
+                '\n\n*Executed by @' + actor + '*'
+              );
 
             } else if (noteMatch) {
               // ── NOTE SUBCOMMAND ──────────────────────────────────────────────
@@ -836,15 +918,20 @@ jobs:
             } else if (setMatch) {
               // ── SET SUBCOMMAND (value from code block) ───────────────────────
               const fieldName = setMatch[1].toLowerCase();
+              // app_vars is a JSON column, so it rides the code-block path like
+              // the long text fields - but its content is parsed, not stored
+              // verbatim, or PocketBase ends up with a string where an object
+              // belongs and every reader has to guess.
               const SET_ALLOWED = {
                 name: 'string', description: 'string', logo: 'string',
-                documentation: 'string', website: 'string', project_url: 'string', github: 'string',
-                config_path: 'string', disable_message: 'string', deleted_message: 'string'
+                documentation: 'string', website: 'string', project_url: 'string', repository: 'string',
+                config_path: 'string', disable_message: 'string', deleted_message: 'string',
+                app_vars: 'json'
               };
               if (!SET_ALLOWED[fieldName]) {
                 await addReaction('-1');
                 await postComment(
-                  '❌ **PocketBase Bot**: `set` only supports text fields.\n\n' +
+                  '❌ **PocketBase Bot**: `set` only supports text and JSON fields.\n\n' +
                   '**Allowed:** `' + Object.keys(SET_ALLOWED).join('`, `') + '`\n\n' +
                   'For boolean/number fields use `field=value` syntax instead.'
                 );
@@ -859,7 +946,21 @@ jobs:
                 process.exit(0);
               }
               const setPayload = {};
-              setPayload[fieldName] = codeBlockValue;
+              if (SET_ALLOWED[fieldName] === 'json') {
+                let parsedJson;
+                try {
+                  parsedJson = JSON.parse(codeBlockValue);
+                } catch (e) {
+                  await addReaction('-1');
+                  await postComment(
+                    '❌ **PocketBase Bot**: `' + fieldName + '` must be valid JSON.\n\n```\n' + e.message + '\n```'
+                  );
+                  process.exit(0);
+                }
+                setPayload[fieldName] = parsedJson;
+              } else {
+                setPayload[fieldName] = codeBlockValue;
+              }
               const setPatchRes = await request(recordsUrl + '/' + record.id, {
                 method: 'PATCH',
                 headers: { 'Authorization': token, 'Content-Type': 'application/json' },
@@ -887,8 +988,10 @@ jobs:
                 logo:             'string',
                 documentation:    'string',
                 website:          'string',
+                oidc_url:         'string',
+                license:          'string',
                 project_url:      'string',
-                github:           'string',
+                repository:       'string',
                 config_path:      'string',
                 tags:             'string',
                 port:             'number',
@@ -897,17 +1000,35 @@ jobs:
                 unprivileged:     'number',
                 updateable:       'boolean',
                 privileged:       'boolean',
+                architectures:    'select_list',
+                platforms:        'select_list',
+                execute_in:       'select_list',
                 has_arm:          'boolean',
+                categories:       'relation_list',
+                type:             'relation_single',
                 is_dev:           'boolean',
                 is_disabled:      'boolean',
                 disable_message:  'string',
                 is_deleted:       'boolean',
                 deleted_message:  'string',
+                pin_reason:       'string',
+                last_update_commit: 'string',
               };
 
               const parsedFields = parseKVPairs(rest);
 
-              const unknownFields = Object.keys(parsedFields).filter(function (f) { return !ALLOWED_FIELDS[f]; });
+              // cpu/ram/hdd/os/version live inside install_methods, not on the
+              // record itself. "/pocketbase immich hdd=25" is how people ask for
+              // it, so route those keys there instead of rejecting them as
+              // unknown fields. Everything else stays a plain record field.
+              const TOP_RESOURCE_KEYS = { cpu: 'number', ram: 'number', hdd: 'number', os: 'string', version: 'string' };
+              const resourceFields = {};
+              const scriptFields = {};
+              for (const [rk, rv] of Object.entries(parsedFields)) {
+                if (TOP_RESOURCE_KEYS[rk]) resourceFields[rk] = rv; else scriptFields[rk] = rv;
+              }
+
+              const unknownFields = Object.keys(scriptFields).filter(function (f) { return !ALLOWED_FIELDS[f]; });
               if (unknownFields.length > 0) {
                 await addReaction('-1');
                 await postComment(
@@ -924,8 +1045,13 @@ jobs:
               }
 
               // Cast values to correct types
+              const SELECT_VALUES = {
+                architectures: ['amd64', 'arm64'],
+                platforms: ['pve', 'incus'],
+                execute_in: ['pve', 'lxc', 'pbs', 'vm', 'pmg', 'pdm'],
+              };
               const payload = {};
-              for (const [key, rawVal] of Object.entries(parsedFields)) {
+              for (const [key, rawVal] of Object.entries(scriptFields)) {
                 const type = ALLOWED_FIELDS[key];
                 if (type === 'boolean') {
                   if (rawVal === 'true') payload[key] = true;
@@ -943,11 +1069,118 @@ jobs:
                     process.exit(0);
                   }
                   payload[key] = n;
+                } else if (type === 'select_list') {
+                  // architectures/platforms are multi-selects over a closed set,
+                  // so an unknown value is rejected rather than stored.
+                  const allowed = SELECT_VALUES[key] || [];
+                  const values = rawVal.split(',').map(function (v) { return v.trim(); }).filter(Boolean);
+                  const bad = values.filter(function (v) { return allowed.indexOf(v) === -1; });
+                  if (bad.length > 0) {
+                    await addReaction('-1');
+                    await postComment('❌ **PocketBase Bot**: `' + key + '` accepts ' + allowed.join(', ') + ' — got: `' + bad.join(', ') + '`');
+                    process.exit(0);
+                  }
+                  payload[key] = values;
+                } else if (type === 'relation_list') {
+                  // categories is a relation, so the stored value is a list of
+                  // record ids. People write category names, so resolve them —
+                  // and accept ids too, which is what a copy out of the
+                  // PocketBase UI gives you.
+                  const wanted = rawVal.split(',').map(function (v) { return v.trim(); }).filter(Boolean);
+                  const catRes = await request(apiBase + '/collections/script_categories/records?perPage=500&fields=id,name', {
+                    headers: { 'Authorization': token }
+                  });
+                  if (!catRes.ok) {
+                    await addReaction('-1');
+                    await postComment('❌ **PocketBase Bot**: could not read `script_categories` to resolve `' + key + '`.');
+                    process.exit(1);
+                  }
+                  const cats = JSON.parse(catRes.body).items || [];
+                  const byName = {};
+                  const ids = {};
+                  cats.forEach(function (c) { byName[String(c.name).toLowerCase()] = c.id; ids[c.id] = true; });
+                  const resolved = [];
+                  const unknownCats = [];
+                  wanted.forEach(function (w) {
+                    if (ids[w]) { resolved.push(w); return; }
+                    const id = byName[w.toLowerCase()];
+                    if (id) resolved.push(id); else unknownCats.push(w);
+                  });
+                  if (unknownCats.length > 0) {
+                    await addReaction('-1');
+                    await postComment(
+                      '❌ **PocketBase Bot**: unknown ' + key + ': `' + unknownCats.join('`, `') + '`\n\n' +
+                      '**Available:** `' + cats.map(function (c) { return c.name; }).sort().join('`, `') + '`'
+                    );
+                    process.exit(0);
+                  }
+                  payload[key] = resolved;
+                } else if (type === 'relation_single') {
+                  // type points at one z_ref_script_types record. People write
+                  // "ct" or "vm", not a 15-character id.
+                  const typeRes = await request(apiBase + '/collections/z_ref_script_types/records?perPage=200&fields=id,type', {
+                    headers: { 'Authorization': token }
+                  });
+                  if (!typeRes.ok) {
+                    await addReaction('-1');
+                    await postComment('❌ **PocketBase Bot**: could not read `z_ref_script_types` to resolve `' + key + '`.');
+                    process.exit(1);
+                  }
+                  const types = JSON.parse(typeRes.body).items || [];
+                  const wantType = rawVal.trim().toLowerCase();
+                  const hit = types.find(function (t) {
+                    return t.id === rawVal.trim() || String(t.type).toLowerCase() === wantType;
+                  });
+                  if (!hit) {
+                    await addReaction('-1');
+                    await postComment(
+                      '❌ **PocketBase Bot**: unknown type `' + rawVal + '`\n\n' +
+                      '**Available:** `' + types.map(function (t) { return t.type; }).sort().join('`, `') + '`'
+                    );
+                    process.exit(0);
+                  }
+                  payload[key] = hit.id;
                 } else if (type === 'nullable_string') {
                   payload[key] = rawVal === '' ? null : rawVal;
                 } else {
                   payload[key] = rawVal;
                 }
+              }
+
+              // Resources go into install_methods. Which method: the only one if
+              // there is only one, otherwise the non-Alpine default — and the
+              // reply says which, so nobody has to guess where 25 GB landed.
+              const resourceKeys = Object.keys(resourceFields);
+              let resourceTargetType = null;
+              if (resourceKeys.length > 0) {
+                const methodsArr = readJsonBlob(record.install_methods) || [];
+                if (methodsArr.length === 0) {
+                  await addReaction('-1');
+                  await postComment(
+                    '❌ **PocketBase Bot**: `' + slug + '` has no install methods, so there is nowhere to put `' +
+                    resourceKeys.join('`, `') + '`.\n\nAdd one first: `/pocketbase ' + slug + ' method add default cpu=2 ram=2048 hdd=8`'
+                  );
+                  process.exit(0);
+                }
+                let target = methodsArr.find(function (m) {
+                  return String(m.type || '').toLowerCase() !== 'alpine';
+                }) || methodsArr[0];
+                resourceTargetType = target.type || 'default';
+                if (!target.resources) target.resources = {};
+                for (const [rk, rv] of Object.entries(resourceFields)) {
+                  if (TOP_RESOURCE_KEYS[rk] === 'number') {
+                    const n = parseInt(rv, 10);
+                    if (isNaN(n)) {
+                      await addReaction('-1');
+                      await postComment('❌ **PocketBase Bot**: `' + rk + '` must be a number, got: `' + rv + '`');
+                      process.exit(0);
+                    }
+                    target.resources[rk] = n;
+                  } else {
+                    target.resources[rk] = rv;
+                  }
+                }
+                payload.install_methods = methodsArr;
               }
 
               const patchRes = await request(recordsUrl + '/' + record.id, {
@@ -962,9 +1195,15 @@ jobs:
               }
               await revalidate(slug);
               const FIELD_TO_CT_VAR = { tags: 'var_tags', unprivileged: 'var_unprivileged' };
+              const RESOURCE_CT_VAR = { cpu: 'var_cpu', ram: 'var_ram', hdd: 'var_disk', os: 'var_os', version: 'var_version' };
               const fieldCtChanges = {};
               for (const [k, v] of Object.entries(payload)) {
                 if (FIELD_TO_CT_VAR[k]) fieldCtChanges[FIELD_TO_CT_VAR[k]] = v;
+              }
+              // Resources belong in the CT script too, exactly as the `method`
+              // path syncs them - otherwise PocketBase and ct/<slug>.sh drift.
+              for (const [k, v] of Object.entries(resourceFields)) {
+                if (RESOURCE_CT_VAR[k]) fieldCtChanges[RESOURCE_CT_VAR[k]] = v;
               }
               let fieldCtSync = null;
               try {
@@ -973,8 +1212,14 @@ jobs:
                 fieldCtSync = { status: 'skipped', reason: 'CT sync failed: ' + e.message };
               }
               await addReaction('+1');
+              // install_methods is skipped here: dumping the whole array as JSON
+              // buries the one number that actually changed.
               const changesLines = Object.entries(payload)
+                .filter(function (e) { return e[0] !== 'install_methods'; })
                 .map(function ([k, v]) { return '- `' + k + '` → `' + JSON.stringify(v) + '`'; })
+                .concat(Object.entries(resourceFields).map(function ([k, v]) {
+                  return '- `' + k + '` → `' + v + '` *(install method `' + resourceTargetType + '`)*';
+                }))
                 .join('\n');
               await postComment(
                 '✅ **PocketBase Bot**: Updated **`' + slug + '`** successfully!\n\n' +

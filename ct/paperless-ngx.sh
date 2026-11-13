@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -42,7 +43,7 @@ function update_script() {
       echo -e ""
       msg_custom "🔄" "Migration required to new data structure (/opt/paperless_data/)"
       msg_custom "📖" "Please follow the migration guide:"
-      echo -e "${GATEWAY}${BGN}https://github.com/community-scripts/ProxmoxVE/discussions/9223${CL}"
+      echo -e "${GATEWAY}${BGN}https://github.com/community-scripts/ProxmoxVE/pull/9223${CL}"
       echo -e ""
       msg_custom "⚠️" "Update aborted. Please migrate your data first."
       exit 253
@@ -62,12 +63,21 @@ function update_script() {
       echo -e "${GATEWAY}${BGN}https://docs.paperless-ngx.com/migration-v3/#encryption-support${CL}"
       msg_warn "Before continuing make sure that you do not use encryption or have decrypted all documents."
       echo ""
+      if [[ "${PHS_SILENT:-0}" == "1" ]]; then
+        msg_warn "Paperless-ngx v3 migration detected - skipping update, requires an interactive run"
+        exit 75
+      fi
       read -rp "Do you want to continue with the update? (y/N): " MIGRATE
       echo
       if [[ ! "$MIGRATE" =~ ^[Yy]$ ]]; then
-        msg_info "Update aborted. Decrypt all documents before upgrading to v3."
+        msg_custom "⚠️" "Update aborted. Decrypt all documents before upgrading to v3."
         exit 0
       fi
+    fi
+
+    if [[ "${PHS_SILENT:-0}" == "1" ]] && ! grep -q "uv run" /etc/systemd/system/paperless-webserver.service; then
+      msg_warn "Paperless-ngx uv migration detected - skipping update, requires an interactive run"
+      exit 75
     fi
 
     msg_info "Stopping all Paperless-ngx Services"
@@ -81,13 +91,13 @@ function update_script() {
       [[ -f /opt/paperless/paperless.conf ]] && cp /opt/paperless/paperless.conf "$BACKUP_DIR/"
       msg_ok "Backup completed to $BACKUP_DIR"
 
-      PYTHON_VERSION="3.13" setup_uv  
       if ((BRIDGE_UPDATE)); then
         CLEAN_INSTALL=1 fetch_and_deploy_gh_release "paperless" "paperless-ngx/paperless-ngx" "prebuild" "v2.20.15" "/opt/paperless" "paperless*tar.xz"
       else
         CLEAN_INSTALL=1 fetch_and_deploy_gh_release "paperless" "paperless-ngx/paperless-ngx" "prebuild" "latest" "/opt/paperless" "paperless*tar.xz"
       fi
       CLEAN_INSTALL=1 fetch_and_deploy_gh_release "jbig2enc" "ie13/jbig2enc" "tarball" "latest" "/opt/jbig2enc"
+      PYTHON_VERSION="3.13" UV_PROJECT_DIR="/opt/paperless" setup_uv
 
       . /etc/os-release
       if [ "$VERSION_CODENAME" = "bookworm" ]; then
@@ -156,8 +166,6 @@ function update_script() {
             sed -i '$a\PAPERLESS_ARCHIVE_FILE_GENERATION=never' "$PAPERLESS_CONF"
           fi
         fi
-        [[ -n "$(sed -n '/^PAPERLESS_CONSUMER_IGNORE_PATTERNS=/p' "$PAPERLESS_CONF")" ]] &&
-          msg_warn "PAPERLESS_CONSUMER_IGNORE_PATTERNS now uses regex patterns; please verify custom values."
         [[ -n "$(sed -n '/^PAPERLESS_PRE_CONSUME_SCRIPT=/p;/^PAPERLESS_POST_CONSUME_SCRIPT=/p' "$PAPERLESS_CONF")" ]] &&
           msg_warn "Pre/post consume scripts no longer receive positional arguments in v3; please verify custom scripts."
         msg_ok "Migrated Paperless-ngx configuration"
@@ -165,14 +173,50 @@ function update_script() {
 
       msg_info "Updating Paperless-ngx"
       if ((BRIDGE_UPDATE == 0)); then
-        sed -i 's|^ExecStart=.*|ExecStart=uv run -- granian --interface asginl --ws --loop uvloop "paperless.asgi:application"|' /etc/systemd/system/paperless-webserver.service
-        $STD systemctl daemon-reload
+        sed -i 's|^ExecStart=.*|ExecStart=uv run --no-sync -- granian --interface asginl --ws --loop uvloop "paperless.asgi:application"|' /etc/systemd/system/paperless-webserver.service
+        grep -q "document_index reindex" /etc/systemd/system/paperless-webserver.service ||
+          sed -i '/^ExecStart=/i ExecStartPre=uv run --no-sync -- python manage.py document_index reindex --if-needed --no-progress-bar' /etc/systemd/system/paperless-webserver.service
       fi
+      for svc in consumer scheduler task-queue webserver; do
+        unit="/etc/systemd/system/paperless-${svc}.service"
+        [[ -f "$unit" ]] || continue
+        sed -i 's|uv run -- |uv run --no-sync -- |g' "$unit"
+        grep -q '^Restart=' "$unit" || sed -i '/^\[Service\]/a Restart=on-failure\nRestartSec=5' "$unit"
+      done
+      $STD systemctl daemon-reload
       cd /opt/paperless
       $STD uv sync --all-extras
       cd /opt/paperless/src
       $STD uv run -- python manage.py migrate
       msg_ok "Updated Paperless-ngx"
+
+      if ((BRIDGE_UPDATE == 0)); then
+        IGNORE_FIXED="$(
+          /opt/paperless/.venv/bin/python - /opt/paperless/paperless.conf <<'EOF'
+import json, re, sys
+key = "PAPERLESS_CONSUMER_IGNORE_PATTERNS="
+lines = open(sys.argv[1]).read().splitlines(True)
+
+def is_glob(p):
+    if p.startswith("^") or p.endswith("$"):
+        return False
+    try:
+        return bool(re.search(p, "scan.pdf"))
+    except re.error:
+        return True
+
+for i, line in enumerate(lines):
+    if line.startswith(key):
+        patterns = json.loads(line[len(key):].strip().strip("'"))
+        fixed = ["^" + re.escape(p).replace(r"\*", ".*").replace(r"\?", ".") + "$" if is_glob(p) else p for p in patterns]
+        if fixed != patterns:
+            lines[i] = key + json.dumps(fixed) + "\n"
+            print(json.dumps(fixed))
+open(sys.argv[1], "w").writelines(lines)
+EOF
+        )" || IGNORE_FIXED=""
+        [[ -n "$IGNORE_FIXED" ]] && msg_warn "Converted glob PAPERLESS_CONSUMER_IGNORE_PATTERNS to regex (required since v3): ${IGNORE_FIXED}"
+      fi
 
       if ((BRIDGE_UPDATE == 0)) && [[ "$PAPERLESS_INSTALLED_VERSION" == "2.20.15" ]]; then
         $STD apt -y purge libzbar0t64 libzbar0 2>/dev/null || true
@@ -205,10 +249,10 @@ function update_script() {
       msg_ok "Backup completed to $BACKUP_DIR"
 
       declare -A PATCHES=(
-        ["paperless-consumer.service"]="ExecStart=uv run -- python manage.py document_consumer"
-        ["paperless-scheduler.service"]="ExecStart=uv run -- celery --app paperless beat --loglevel INFO"
-        ["paperless-task-queue.service"]="ExecStart=uv run -- celery --app paperless worker --loglevel INFO"
-        ["paperless-webserver.service"]="ExecStart=uv run -- granian --interface asgi --ws \"paperless.asgi:application\""
+        ["paperless-consumer.service"]="ExecStart=uv run --no-sync -- python manage.py document_consumer"
+        ["paperless-scheduler.service"]="ExecStart=uv run --no-sync -- celery --app paperless beat --loglevel INFO"
+        ["paperless-task-queue.service"]="ExecStart=uv run --no-sync -- celery --app paperless worker --loglevel INFO"
+        ["paperless-webserver.service"]="ExecStart=uv run --no-sync -- granian --interface asgi --ws \"paperless.asgi:application\""
       )
 
       for svc in "${!PATCHES[@]}"; do

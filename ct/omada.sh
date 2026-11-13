@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -11,7 +12,7 @@ var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-3072}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
@@ -31,7 +32,7 @@ function update_script() {
 
   msg_info "Updating MongoDB"
   if [[ "$(arch_resolve)" == "arm64" ]] || lscpu | grep -q 'avx'; then
-    MONGO_VERSION="8.0"
+    MONGO_VERSION="8.0" setup_mongodb
   else
     msg_error "No AVX detected (CPU-Flag)! We have discontinued support for this. You are welcome to try it manually with a Debian LXC, but due to the many issues with Omada, we currently only support AVX CPUs."
     exit 10
@@ -39,9 +40,12 @@ function update_script() {
 
   JAVA_VERSION="21" setup_java
 
-  OMADA_URL=$(curl -fsSL -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15" "https://support.omadanetworks.com/en/download/software/omada-controller/" |
+  OMADA_URL=$(curl -fsSL -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15" \
+    "https://support.omadanetworks.com/en/product/omada-software-controller/?resourceType=download" \
+    "https://support.omadanetworks.com/en/download/software/omada-controller/" |
     grep -o 'https://static\.tp-link\.com/upload/software/[^"]*linux_x64[^"]*\.deb' |
-    head -n1)
+    sed -n 's/.*_v\([0-9.]*\)_linux.*/\1 &/p' |
+    sort -V | tail -n1 | cut -d' ' -f2)
   OMADA_PKG=$(basename "${OMADA_URL}")
   VERSION=$(sed -n 's/.*_v\([0-9.]*\)_linux.*/\1/p' <<<"${OMADA_PKG}")
 

@@ -15,7 +15,7 @@ update_os
 
 msg_info "Installing Dependencies"
 echo "davfs2 davfs2/suid_file boolean false" | debconf-set-selections
-$STD apt-get install -y \
+$STD apt install -y \
   bzip2 \
   fuse3 \
   git \
@@ -53,6 +53,7 @@ export VITE_SHOUTRRR_VERSION=$(cat ~/.shoutrrr)
 export NODE_OPTIONS="--max-old-space-size=3072"
 $STD bun install
 $STD node ./node_modules/vite/bin/vite.js build
+$STD bun build apps/agent/src/index.ts --outfile .output/agent/index.mjs --target bun
 msg_ok "Built Zerobyte"
 
 msg_info "Configuring Zerobyte"

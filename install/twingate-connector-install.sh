@@ -14,27 +14,27 @@ network_check
 update_os
 
 install -d -m 0700 /etc/twingate
-access_token=""
-refresh_token=""
-network=""
+access_token="${var_twingate_connector_access_token:-}"
+refresh_token="${var_twingate_connector_refresh_token:-}"
+network="${var_twingate_connector_network:-}"
 while [[ -z "$access_token" ]]; do
-  read -rp "${TAB3}Please enter your access token: " access_token
+  read -rp "${TAB3}Please enter your access token: " access_token || { msg_error "No access token given; set var_twingate_connector_access_token or answer the prompt"; exit 64; }
 done
 while [[ -z "$refresh_token" ]]; do
-  read -rp "${TAB3}Please enter your refresh token: " refresh_token
+  read -rp "${TAB3}Please enter your refresh token: " refresh_token || { msg_error "No refresh token given; set var_twingate_connector_refresh_token or answer the prompt"; exit 64; }
 done
 while [[ -z "$network" ]]; do
-  read -rp "${TAB3}Please enter your network name: " network
+  read -rp "${TAB3}Please enter your network name: " network || { msg_error "No network name given; set var_twingate_connector_network or answer the prompt"; exit 64; }
 done
 
 msg_info "Setup Twingate Repository"
 curl -fsSL "https://packages.twingate.com/apt/gpg.key" | gpg --dearmor -o /usr/share/keyrings/twingate-connector-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/twingate-connector-keyring.gpg] https://packages.twingate.com/apt/ /" >/etc/apt/sources.list.d/twingate.list
-$STD apt-get update
+apt_update_safe
 msg_ok "Setup Twingate Repository"
 
 msg_info "Setup Twingate Connector"
-$STD apt-get install -y twingate-connector
+$STD apt install -y twingate-connector
 msg_ok "Setup Twingate Connector"
 
 msg_info "Configure Twingate-Connector"

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: vhsdream
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -54,7 +55,7 @@ Pin:release a=testing
 Pin-Priority: 450
 EOF
     [[ -f /etc/apt/preferences.d/immich ]] && rm /etc/apt/preferences.d/immich
-    $STD apt update
+    apt_update_safe
     msg_ok "Added Debian Testing repo"
   fi
 
@@ -64,26 +65,27 @@ EOF
     msg_ok "Installed/upgraded Testing repo packages"
   fi
 
-  if [[ ! -f /etc/apt/sources.list.d/mise.list ]]; then
-    msg_info "Installing Mise"
-    curl -fSs https://mise.jdx.dev/gpg-key.pub | tee /etc/apt/keyrings/mise-archive-keyring.pub 1>/dev/null
-    echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.pub arch=$(arch_resolve)] https://mise.jdx.dev/deb stable main" >/etc/apt/sources.list.d/mise.list
-    ensure_dependencies mise
-    msg_ok "Installed Mise"
+  if ! command -v mise >/dev/null 2>&1; then
+    MISE_ARCH="x64"
+    [[ "$(arch_resolve)" == "arm64" ]] && MISE_ARCH="arm64"
+    fetch_and_deploy_gh_release "mise" "jdx/mise" "singlefile" "latest" "/usr/local/bin" "mise-v*-linux-${MISE_ARCH}"
   fi
 
   STAGING_DIR=/opt/staging
   BASE_DIR=${STAGING_DIR}/base-images
   SOURCE_DIR=${STAGING_DIR}/image-source
   cd /tmp
+  RELEASE="v3.3.6"
   if [[ -f ~/.intel_version ]]; then
-    curl_with_retry "https://raw.githubusercontent.com/immich-app/immich/refs/heads/main/machine-learning/Dockerfile" "Dockerfile"
-    readarray -t INTEL_URLS < <(
-      sed -n "/intel-[igc|opencl]/p" ./Dockerfile | awk '{print $3}'
-      sed -n "/libigdgmm12/p" ./Dockerfile | awk '{print $3}'
-    )
-    INTEL_RELEASE="$(grep "intel-opencl-icd_" ./Dockerfile | awk -F '_' '{print $2}')"
-    if [[ "$INTEL_RELEASE" != "$(cat ~/.intel_version)" ]]; then
+    INTEL_SRC="https://raw.githubusercontent.com/immich-app/immich/${RELEASE}/machine-learning"
+    curl -fsSL "${INTEL_SRC}/scripts/install-intel-runtime.sh" -o ./intel-runtime 2>/dev/null ||
+      curl_with_retry "${INTEL_SRC}/Dockerfile" "./intel-runtime"
+    readarray -t INTEL_URLS < <(grep -oE 'https://github\.com/intel/[^[:space:]]+\.deb' ./intel-runtime)
+    INTEL_RELEASE="$(grep -oE 'intel-opencl-icd_[^_]+' ./intel-runtime | cut -d_ -f2)" || true
+    rm -f ./intel-runtime
+    if [[ -z "$INTEL_RELEASE" ]]; then
+      msg_warn "No Intel runtime found for Immich ${RELEASE}, keeping the installed one"
+    elif [[ "$INTEL_RELEASE" != "$(cat ~/.intel_version)" ]]; then
       msg_info "Updating Intel OpenVINO dependencies"
       for url in "${INTEL_URLS[@]}"; do
         curl_with_retry "$url" "$(basename "$url")"
@@ -95,31 +97,62 @@ EOF
       rm ./*.deb
       $STD apt-mark hold libigdgmm12
       dpkg-query -W -f='${Version}\n' intel-opencl-icd >~/.intel_version
-      rm -f ./Dockerfile
       msg_ok "Updated Intel OpenVINO dependencies"
     fi
   fi
-  if [[ -f ~/.immich_library_revisions ]]; then
-    libraries=("libjxl" "libheif" "libraw" "imagemagick" "libvips")
-    cd "$BASE_DIR"
-    msg_warn "Checking for updates to custom image-processing libraries (recompile time: 2-15min per library)"
-    $STD git pull
-    for library in "${libraries[@]}"; do
-      compile_"$library"
-    done
-    msg_ok "Image-processing libraries up to date"
+  # Without the revision file the refresh was skipped and sharp failed on an old libvips (#17914).
+  [[ -f ~/.immich_library_revisions ]] || msg_warn "No record of the compiled image-processing libraries, rebuilding all of them"
+  for lib in imagemagick jpegli libheif libjxl libraw libvips; do
+    grep -q "^${lib}:" ~/.immich_library_revisions 2>/dev/null || echo "${lib}: unknown" >>~/.immich_library_revisions
+  done
+  [[ -d "$BASE_DIR/.git" ]] || $STD git clone -b main https://github.com/immich-app/base-images "$BASE_DIR"
+  libraries=("libjxl" "jpegli" "libheif" "libraw" "imagemagick" "libvips")
+  cd "$BASE_DIR"
+  msg_warn "Checking for updates to custom image-processing libraries (recompile time: 2-15min per library)"
+  ensure_dependencies liblcms2-dev libjpeg62-turbo-dev libspng-dev libexif-dev libopenjp2-7-dev
+  $STD git pull
+  for library in "${libraries[@]}"; do
+    compile_"$library"
+  done
+  msg_ok "Image-processing libraries up to date"
+
+  # 3.3.0 reads geodata/countryInfo.txt; the update before #17823 saved it into app/ instead.
+  if [[ -d /opt/immich/geodata && ! -s /opt/immich/geodata/countryInfo.txt ]]; then
+    msg_info "Restoring geodata/countryInfo.txt"
+    if [[ -s /opt/immich/app/countryInfo.txt ]]; then
+      mv /opt/immich/app/countryInfo.txt /opt/immich/geodata/countryInfo.txt
+    else
+      curl_with_retry "https://download.geonames.org/export/dump/countryInfo.txt" /opt/immich/geodata/countryInfo.txt
+    fi
+    chown immich:immich /opt/immich/geodata/countryInfo.txt
+    systemctl restart immich-web
+    msg_ok "Restored geodata/countryInfo.txt"
   fi
 
-  RELEASE="v3.0.3"
   if check_for_gh_release "Immich" "immich-app/immich" "${RELEASE}" "each release is tested individually before the version is updated. Please do not open issues for this"; then
-    if [[ $(cat ~/.immich) > "2.5.1" ]]; then
+    msg_warn "The update takes 5-15 minutes, do not interrupt it"
+    PREV_IMMICH="${CS_PREVIOUS_VERSION:-$(cat ~/.immich)}"
+    INSTALL_DIR="/opt/${APP}"
+    UPLOAD_DIR="$(sed -n '/^IMMICH_MEDIA_LOCATION/s/[^=]*=//p' /opt/immich/.env)"
+    SRC_DIR="${INSTALL_DIR}/source"
+    APP_DIR="${INSTALL_DIR}/app"
+    PLUGIN_DIR="${APP_DIR}/plugins/immich-plugin-core"
+    ML_DIR="${APP_DIR}/machine-learning"
+    GEO_DIR="${INSTALL_DIR}/geodata"
+
+    setup_uv
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "Immich" "immich-app/immich" "tarball" "${RELEASE}" "$SRC_DIR"
+
+    # An interrupted update leaves app/ empty, so there may be no immich-admin to call.
+    if [[ "$PREV_IMMICH" > "2.5.1" && -x /opt/immich/app/bin/immich-admin ]]; then
       msg_info "Enabling Maintenance Mode"
       cd /opt/immich/app/bin
-      $STD ./immich-admin enable-maintenance-mode
+      $STD ./immich-admin enable-maintenance-mode || true
       export MAINT_MODE=1
       $STD cd -
       msg_ok "Enabled Maintenance Mode"
     fi
+    [[ -x /opt/immich/app/bin/immich-admin ]] || export MAINT_MODE=1
     msg_info "Stopping Services"
     systemctl stop immich-web
     systemctl stop immich-ml
@@ -128,13 +161,13 @@ EOF
     PG_VERSION=$(ls /etc/postgresql/ 2>/dev/null | sort -V | tail -1)
     PG_VERSION=${PG_VERSION:-16}
     [[ -f ~/.vchord_version ]] && mv ~/.vchord_version ~/.vectorchord
-    if check_for_gh_release "VectorChord" "tensorchord/VectorChord" "${VCHORD_RELEASE}" "updated together with Immich after testing"; then
+    if check_for_gh_release "VectorChord" "supervc-stack/VectorChord" "${VCHORD_RELEASE}" "updated together with Immich after testing"; then
       # dead tuples in smart_search/face_search make the REINDEX below fail with
       # "missing chunk ... for toast value" on VectorChord 1.0.0 (#15588); must vacuum
       # while still on the old extension version, a post-upgrade vacuum errors instead
       $STD sudo -u postgres psql -d immich -c "VACUUM (ANALYZE) smart_search;"
       $STD sudo -u postgres psql -d immich -c "VACUUM (ANALYZE) face_search;"
-      fetch_and_deploy_gh_release "VectorChord" "tensorchord/VectorChord" "binary" "${VCHORD_RELEASE}" "/tmp" "postgresql-${PG_VERSION}-vchord_*_$(arch_resolve).deb"
+      fetch_and_deploy_gh_release "VectorChord" "supervc-stack/VectorChord" "binary" "${VCHORD_RELEASE}" "/tmp" "postgresql-${PG_VERSION}-vchord_*_$(arch_resolve).deb"
       systemctl restart postgresql
       $STD sudo -u postgres psql -d immich -c "ALTER EXTENSION vector UPDATE;"
       $STD sudo -u postgres psql -d immich -c "ALTER EXTENSION vchord UPDATE;"
@@ -142,14 +175,6 @@ EOF
       $STD sudo -u postgres psql -d immich -c "REINDEX INDEX clip_index;"
     fi
     ensure_dependencies ccache gcc-13 g++-13
-
-    INSTALL_DIR="/opt/${APP}"
-    UPLOAD_DIR="$(sed -n '/^IMMICH_MEDIA_LOCATION/s/[^=]*=//p' /opt/immich/.env)"
-    SRC_DIR="${INSTALL_DIR}/source"
-    APP_DIR="${INSTALL_DIR}/app"
-    PLUGIN_DIR="${APP_DIR}/plugins/immich-plugin-core"
-    ML_DIR="${APP_DIR}/machine-learning"
-    GEO_DIR="${INSTALL_DIR}/geodata"
 
     [[ -f "$ML_DIR"/ml_start.sh ]] && cp "$ML_DIR"/ml_start.sh "$INSTALL_DIR"
     if grep -qs "set -a" "$APP_DIR"/bin/start.sh && grep -qs "warnings" "$APP_DIR"/bin/start.sh; then
@@ -172,8 +197,6 @@ EOF
       rm -rf "${APP_DIR:?}"/*
     )
 
-    setup_uv
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "Immich" "immich-app/immich" "tarball" "${RELEASE}" "$SRC_DIR"
     PNPM_VERSION="$(jq -r '.packageManager | split("@")[1] | split("+")[0]' ${SRC_DIR}/package.json)"
     export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
     export CI=1
@@ -185,11 +208,10 @@ EOF
     msg_info "Updating Immich web and microservices"
     cd "$SRC_DIR"/server
     # server build
-    export SHARP_IGNORE_GLOBAL_LIBVIPS=true
     $STD pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter immich build
-    unset SHARP_IGNORE_GLOBAL_LIBVIPS
-    export SHARP_FORCE_GLOBAL_LIBVIPS=true
     $STD pnpm --filter immich --prod --no-optional deploy "$APP_DIR"
+    export SHARP_FORCE_GLOBAL_LIBVIPS=true
+    $STD pnpm --dir "$APP_DIR/node_modules/sharp" exec npm run build
 
     # Patch helmet.json: disable upgrade-insecure-requests for HTTP access
     if [[ -f "$APP_DIR/helmet.json" ]]; then
@@ -203,7 +225,6 @@ EOF
     cd "$SRC_DIR"
     echo "packageImportMethod: hardlink" >>./pnpm-workspace.yaml
     unset SHARP_FORCE_GLOBAL_LIBVIPS
-    export SHARP_IGNORE_GLOBAL_LIBVIPS=true
     $STD pnpm --filter @immich/sdk --filter immich-web --filter @immich/cli build
     $STD pnpm --filter @immich/cli --prod --no-optional deploy "$APP_DIR"/cli
     cp -a web/build "$APP_DIR"/www
@@ -213,8 +234,18 @@ EOF
     # plugins
     cd "$SRC_DIR"
     export MISE_TRUSTED_CONFIG_PATHS="$SRC_DIR"/mise.toml
-    export MISE_DISABLE_TOOLS=github:jellyfin/jellyfin-ffmpeg
-    $STD mise install
+    export MISE_DISABLE_TOOLS=github:jellyfin/jellyfin-ffmpeg,java,terragrunt,opentofu,npm:@openapitools/openapi-generator-cli
+    export MISE_LOCKFILE_MODE=merge MISE_LOCKFILE_PLATFORMS="linux-$(arch_resolve x64 arm64)"
+    mise_ok=0
+    for i in 1 2 3; do
+      $STD mise install && {
+        mise_ok=1
+        break
+      }
+      msg_warn "mise install failed (attempt $i/3) - retrying"
+      sleep 5
+    done
+    [[ "$mise_ok" -eq 1 ]] || exit 1
     export PATH="$(mise bin-paths 2>/dev/null | tr '\n' ':')$PATH"
     if ! command -v extism-js >/dev/null 2>&1; then
       # extism-js ships as a bare gzip-compressed single binary (.gz) that
@@ -253,7 +284,6 @@ EOF
     chown immich:immich "${UPLOAD_DIR:-$INSTALL_DIR/upload}" 2>/dev/null || true
     chown immich:immich ./uv.lock
     export VIRTUAL_ENV="${ML_DIR}"/ml-venv
-    export UV_HTTP_TIMEOUT=300
     if [[ -f ~/.openvino ]]; then
       ML_PYTHON="python3.13"
       msg_info "Pre-installing Python ${ML_PYTHON} for machine-learning"
@@ -264,13 +294,16 @@ EOF
       msg_ok "Pre-installed Python ${ML_PYTHON}"
       msg_info "Updating Intel OpenVINO machine-learning"
       for attempt in $(seq 1 3); do
-        $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT -Pnu immich uv sync --extra openvino --no-dev --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
-        [[ $attempt -lt 3 ]] && msg_warn "uv sync attempt $attempt failed, retrying..." && sleep 10
+        $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT,UV_CONCURRENT_DOWNLOADS,UV_CONCURRENT_BUILDS,UV_CONCURRENT_INSTALLS -Pnu immich uv sync --extra openvino --no-dev --upgrade-package watchfiles --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
+        [[ $attempt -eq 3 ]] && { ML_FAILED=1; break; }
+        # Parallel fetches can trip DNS rate limits (AdGuard, Pi-hole); retry one at a time.
+        export UV_CONCURRENT_DOWNLOADS=1 UV_CONCURRENT_BUILDS=1 UV_CONCURRENT_INSTALLS=1
+        msg_warn "uv sync attempt $attempt failed, retrying one download at a time..." && sleep 10
       done
-      patchelf --clear-execstack "${VIRTUAL_ENV}/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-313-$(arch_resolve "x86_64" "aarch64")-linux-gnu.so"
-      msg_ok "Updated Intel OpenVINO machine-learning"
+      [[ "${ML_FAILED:-0}" == 1 ]] || patchelf --clear-execstack "${VIRTUAL_ENV}/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-313-$(arch_resolve "x86_64" "aarch64")-linux-gnu.so"
+      [[ "${ML_FAILED:-0}" == 1 ]] || msg_ok "Updated Intel OpenVINO machine-learning"
     else
-      ML_PYTHON="python3.11"
+      ML_PYTHON="python3.13"
       msg_info "Pre-installing Python ${ML_PYTHON} for machine-learning"
       for attempt in $(seq 1 3); do
         $STD sudo --preserve-env=VIRTUAL_ENV -Pnu immich uv python install "${ML_PYTHON}" && break
@@ -279,11 +312,15 @@ EOF
       msg_ok "Pre-installed Python ${ML_PYTHON}"
       msg_info "Updating machine-learning"
       for attempt in $(seq 1 3); do
-        $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT -Pnu immich uv sync --extra cpu --no-dev --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
-        [[ $attempt -lt 3 ]] && msg_warn "uv sync attempt $attempt failed, retrying..." && sleep 10
+        $STD sudo --preserve-env=VIRTUAL_ENV,UV_HTTP_TIMEOUT,UV_CONCURRENT_DOWNLOADS,UV_CONCURRENT_BUILDS,UV_CONCURRENT_INSTALLS -Pnu immich uv sync --extra cpu --no-dev --upgrade-package watchfiles --active --link-mode copy -n -p "${ML_PYTHON}" --managed-python && break
+        [[ $attempt -eq 3 ]] && { ML_FAILED=1; break; }
+        # Parallel fetches can trip DNS rate limits (AdGuard, Pi-hole); retry one at a time.
+        export UV_CONCURRENT_DOWNLOADS=1 UV_CONCURRENT_BUILDS=1 UV_CONCURRENT_INSTALLS=1
+        msg_warn "uv sync attempt $attempt failed, retrying one download at a time..." && sleep 10
       done
-      msg_ok "Updated machine-learning"
+      [[ "${ML_FAILED:-0}" == 1 ]] || msg_ok "Updated machine-learning"
     fi
+    [[ "${ML_FAILED:-0}" == 1 ]] && msg_warn "uv sync failed three times, machine learning was not updated"
     cd "$SRC_DIR"
     cp -a machine-learning/{ann,immich_ml} "$ML_DIR"
     [[ -f "$INSTALL_DIR"/ml_start.sh ]] && mv "$INSTALL_DIR"/ml_start.sh "$ML_DIR"
@@ -310,9 +347,10 @@ EOF
     grep -rl /usr/src | xargs -n1 sed -i "s|\/usr/src|$INSTALL_DIR|g"
     grep -rlE "'/build'" | xargs -n1 sed -i "s|'/build'|'$APP_DIR'|g"
     sed -i "s@\"/cache\"@\"$INSTALL_DIR/cache\"@g" "$ML_DIR"/immich_ml/config.py
+    [[ ! -f "$GEO_DIR/countryInfo.txt" ]] && curl_with_retry "https://download.geonames.org/export/dump/countryInfo.txt" "$GEO_DIR/countryInfo.txt"
     ln -s "${UPLOAD_DIR:-/opt/immich/upload}" "$APP_DIR"/upload
     ln -s "${UPLOAD_DIR:-/opt/immich/upload}" "$ML_DIR"/upload
-    ln -s "$GEO_DIR" "$APP_DIR"
+    ln -sfn "$GEO_DIR" "$APP_DIR/geodata"
     [[ ! -f /usr/bin/immich ]] && ln -sf "$APP_DIR"/cli/bin/immich /usr/bin/immich
     [[ ! -f /usr/bin/immich-admin ]] && ln -sf "$APP_DIR"/bin/immich-admin /usr/bin/immich-admin
 
@@ -323,33 +361,28 @@ EOF
       sed -i -e '$a\' "$INSTALL_DIR"/.env
       echo "IMMICH_HELMET_FILE=true" >>"$INSTALL_DIR"/.env
     fi
+    if ! grep -q 'MODEL_REVISION' "$INSTALL_DIR"/.env; then
+      sed -i -e '$a\' "$INSTALL_DIR"/.env
+      echo "MACHINE_LEARNING_MODEL_REVISION=v2" >>"$INSTALL_DIR"/.env
+    fi
 
     if grep -q 'ExecStart=/usr/bin/node' /etc/systemd/system/immich-web.service; then
       sed -i '/^EnvironmentFile=/d' /etc/systemd/system/immich-web.service
       sed -i "s|^ExecStart=.*|ExecStart=${APP_DIR}/bin/start.sh|" /etc/systemd/system/immich-web.service
       systemctl daemon-reload
     fi
+    if grep -q "^ExecStart=${INSTALL_DIR}/ml_start.sh" /etc/systemd/system/immich-ml.service; then
+      sed -i "s|^ExecStart=.*|ExecStart=${ML_DIR}/ml_start.sh|" /etc/systemd/system/immich-ml.service
+      systemctl daemon-reload
+    fi
 
     # MickLesk temporary patch for HEIC thumbnail gen
-    msg_info "Patching media.repository.js"
     MEDIA_REPO_JS="/opt/immich/app/dist/repositories/media.repository.js"
-    if [[ -f "$MEDIA_REPO_JS" ]]; then
-      python3 - <<'PY'
-from pathlib import Path
-p = Path('/opt/immich/app/dist/repositories/media.repository.js')
-s = p.read_text()
-old = "(0, sharp_1.default)(input).metadata()"
-new = "(0, sharp_1.default)(input, { unlimited: true, limitInputPixels: false }).metadata()"
-if new in s:
-    print('hotfix already there')
-elif old in s:
-    p.write_text(s.replace(old, new, 1))
-    print('hotfix applied')
-else:
-    print('pattern not found, skipped')
-PY
+    if grep -qF "(0, sharp_1.default)(input).metadata()" "$MEDIA_REPO_JS" 2>/dev/null; then
+      msg_info "Patching media.repository.js"
+      sed -i '0,/(0, sharp_1\.default)(input)\.metadata()/s//(0, sharp_1.default)(input, { unlimited: true, limitInputPixels: false }).metadata()/' "$MEDIA_REPO_JS"
+      msg_ok "Patched media.repository.js"
     fi
-    msg_ok "Patched media.repository.js"
 
     # chown excluding upload dir contents (may be a mount with restricted permissions)
     chown immich:immich "$INSTALL_DIR"
@@ -363,6 +396,15 @@ PY
       $STD cd -
       msg_ok "Disabled Maintenance Mode"
     fi
+    # A crash loop before the update leaves the units rate-limited, and restart would refuse.
+    systemctl reset-failed immich-ml immich-web 2>/dev/null || true
+    if [[ "${ML_FAILED:-0}" == 1 ]]; then
+      systemctl restart immich-web || true
+      [[ -f /etc/systemd/system/immich-proxy.service ]] && systemctl restart immich-proxy
+      echo "$PREV_IMMICH" >~/.immich
+      msg_error "Immich runs, but without machine learning (see the uv output above). Run update again to retry."
+      exit 1
+    fi
     systemctl restart immich-ml immich-web
     [[ -f /etc/systemd/system/immich-proxy.service ]] && systemctl restart immich-proxy
     msg_ok "Updated successfully!"
@@ -372,19 +414,14 @@ PY
 
 function compile_libjxl() {
   SOURCE=${SOURCE_DIR}/libjxl
-  JPEGLI_LIBJPEG_LIBRARY_SOVERSION="62"
-  JPEGLI_LIBJPEG_LIBRARY_VERSION="62.3.0"
-  LIBJXL_REVISION="332feb17d17311c748445f7ee75c4fb55cc38530"
-  # : "${LIBJXL_REVISION:=$(jq -cr '.revision' "$BASE_DIR"/server/sources/libjxl.json)}"
+  LIBJXL_REVISION="$(jq -cr '.revision' "$BASE_DIR"/server/sources/libjxl.json)"
   if [[ "$LIBJXL_REVISION" != "$(grep 'libjxl' ~/.immich_library_revisions | awk '{print $2}')" ]]; then
     msg_info "Recompiling libjxl"
     [[ -d "$SOURCE" ]] && rm -rf "$SOURCE"
     $STD git clone https://github.com/libjxl/libjxl.git "$SOURCE"
     cd "$SOURCE"
     $STD git reset --hard "$LIBJXL_REVISION"
-    $STD git submodule update --init --recursive --depth 1 --recommend-shallow
-    $STD git apply "$BASE_DIR"/server/sources/libjxl-patches/jpegli-empty-dht-marker.patch
-    $STD git apply "$BASE_DIR"/server/sources/libjxl-patches/jpegli-icc-warning.patch
+    $STD git submodule update --init --recursive --depth 1 --recommend-shallow -- third_party
     mkdir build
     cd build
     $STD cmake \
@@ -392,18 +429,16 @@ function compile_libjxl() {
       -DBUILD_TESTING=OFF \
       -DJPEGXL_ENABLE_DOXYGEN=OFF \
       -DJPEGXL_ENABLE_MANPAGES=OFF \
-      -DJPEGXL_ENABLE_PLUGIN_GIMP210=OFF \
       -DJPEGXL_ENABLE_BENCHMARK=OFF \
       -DJPEGXL_ENABLE_EXAMPLES=OFF \
       -DJPEGXL_FORCE_SYSTEM_BROTLI=ON \
       -DJPEGXL_FORCE_SYSTEM_HWY=ON \
-      -DJPEGXL_ENABLE_JPEGLI=ON \
-      -DJPEGXL_ENABLE_JPEGLI_LIBJPEG=ON \
-      -DJPEGXL_INSTALL_JPEGLI_LIBJPEG=ON \
+      -DJPEGXL_ENABLE_HWY_AVX3=ON \
+      -DJPEGXL_ENABLE_HWY_AVX3_ZEN4=ON \
+      -DJPEGXL_ENABLE_HWY_SVE=OFF \
+      -DJPEGXL_ENABLE_HWY_SVE2=OFF \
+      -DJPEGXL_ENABLE_HWY_SVE2_128=ON \
       -DJPEGXL_ENABLE_PLUGINS=ON \
-      -DJPEGLI_LIBJPEG_LIBRARY_SOVERSION="$JPEGLI_LIBJPEG_LIBRARY_SOVERSION" \
-      -DJPEGLI_LIBJPEG_LIBRARY_VERSION="$JPEGLI_LIBJPEG_LIBRARY_VERSION" \
-      -DLIBJPEG_TURBO_VERSION_NUMBER=2001005 \
       ..
     $STD cmake --build . -- -j"$(nproc)"
     $STD cmake --install .
@@ -416,11 +451,63 @@ function compile_libjxl() {
   fi
 }
 
+function compile_jpegli() {
+  SOURCE=${SOURCE_DIR}/jpegli
+  JPEGLI_LIBJPEG_LIBRARY_SOVERSION="62"
+  JPEGLI_LIBJPEG_LIBRARY_VERSION="62.3.0"
+  JPEGLI_REVISION="$(jq -cr '.revision' "$BASE_DIR"/server/sources/jpegli.json)"
+  if [[ "$JPEGLI_REVISION" != "$(grep 'jpegli' ~/.immich_library_revisions | awk '{print $2}')" ]]; then
+    msg_info "Recompiling jpegli"
+    [[ -d "$SOURCE" ]] && rm -rf "$SOURCE"
+    $STD git clone https://github.com/google/jpegli.git "$SOURCE"
+    cd "$SOURCE"
+    $STD git reset --hard "$JPEGLI_REVISION"
+    $STD git submodule update --init --depth 1 --recommend-shallow third_party/libjpeg-turbo
+    $STD git apply -3 "$BASE_DIR"/server/sources/jpegli-patches/jpegli-empty-dht-marker.patch
+    $STD git apply -3 "$BASE_DIR"/server/sources/jpegli-patches/jpegli-icc-warning.patch
+    mkdir build
+    cd build
+    $STD cmake \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_TESTING=OFF \
+      -DJPEGLI_ENABLE_DOXYGEN=OFF \
+      -DJPEGLI_ENABLE_MANPAGES=OFF \
+      -DJPEGLI_ENABLE_BENCHMARK=OFF \
+      -DJPEGLI_ENABLE_TOOLS=OFF \
+      -DJPEGLI_ENABLE_DEVTOOLS=OFF \
+      -DJPEGLI_ENABLE_FUZZERS=OFF \
+      -DJPEGLI_ENABLE_JNI=OFF \
+      -DJPEGLI_ENABLE_OPENEXR=OFF \
+      -DJPEGLI_ENABLE_SJPEG=OFF \
+      -DJPEGLI_ENABLE_SKCMS=OFF \
+      -DJPEGLI_FORCE_SYSTEM_HWY=ON \
+      -DJPEGLI_FORCE_SYSTEM_LCMS2=ON \
+      -DJPEGLI_ENABLE_JPEGLI_LIBJPEG=ON \
+      -DJPEGLI_INSTALL_JPEGLI_LIBJPEG=ON \
+      -DJPEGLI_ENABLE_HWY_AVX3=ON \
+      -DJPEGLI_ENABLE_HWY_AVX3_ZEN4=ON \
+      -DJPEGLI_ENABLE_HWY_SVE=OFF \
+      -DJPEGLI_ENABLE_HWY_SVE2=OFF \
+      -DJPEGLI_ENABLE_HWY_SVE2_128=ON \
+      -DJPEGLI_LIBJPEG_LIBRARY_SOVERSION="$JPEGLI_LIBJPEG_LIBRARY_SOVERSION" \
+      -DJPEGLI_LIBJPEG_LIBRARY_VERSION="$JPEGLI_LIBJPEG_LIBRARY_VERSION" \
+      -DLIBJPEG_TURBO_VERSION_NUMBER=2001005 \
+      ..
+    $STD cmake --build . -- -j"$(nproc)"
+    $STD cmake --install .
+    ldconfig /usr/local/lib
+    $STD make clean
+    cd "$STAGING_DIR"
+    rm -rf "$SOURCE"/{build,third_party}
+    sed -i "s/jpegli: .*$/jpegli: $JPEGLI_REVISION/" ~/.immich_library_revisions
+    msg_ok "Recompiled jpegli"
+  fi
+}
+
 function compile_libheif() {
   SOURCE=${SOURCE_DIR}/libheif
   ensure_dependencies libaom-dev
-  LIBHEIF_REVISION="62f1b8c76ed4d8305071fdacbe74ef9717bacac5"
-  # : "${LIBHEIF_REVISION:=$(jq -cr '.revision' "$BASE_DIR"/server/sources/libheif.json)}"
+  LIBHEIF_REVISION="$(jq -cr '.revision' "$BASE_DIR"/server/sources/libheif.json)"
   if [[ "${update:-}" ]] || [[ "$LIBHEIF_REVISION" != "$(grep 'libheif' ~/.immich_library_revisions | awk '{print $2}')" ]]; then
     msg_info "Recompiling libheif"
     [[ -d "$SOURCE" ]] && rm -rf "$SOURCE"
@@ -451,7 +538,7 @@ function compile_libheif() {
 
 function compile_libraw() {
   SOURCE=${SOURCE_DIR}/libraw
-  LIBRAW_REVISION="b860248a89d9082b8e0a1e202e516f46af9adb29"
+  LIBRAW_REVISION="e419de08001de28ae6988ecb22df47e52b9c5eaa"
   # : "${LIBRAW_REVISION:=$(jq -cr '.revision' "$BASE_DIR"/server/sources/libraw.json)}"
   if [[ "$LIBRAW_REVISION" != "$(grep 'libraw' ~/.immich_library_revisions | awk '{print $2}')" ]]; then
     msg_info "Recompiling libraw"
@@ -494,8 +581,9 @@ function compile_imagemagick() {
 
 function compile_libvips() {
   SOURCE=$SOURCE_DIR/libvips
-  LIBVIPS_REVISION="e01a4797cabe77d457fdfa7d776b7a7e7ca6d6a7"
-  if [[ "$LIBVIPS_REVISION" != "$(grep 'libvips' ~/.immich_library_revisions | awk '{print $2}')" ]]; then
+  LIBVIPS_REVISION="$(jq -cr '.revision' "$BASE_DIR"/server/sources/libvips.json)"
+  if [[ "$LIBVIPS_REVISION" != "$(grep 'libvips' ~/.immich_library_revisions | awk '{print $2}')" ]] ||
+    [[ "$(vips -l foreign 2>/dev/null)" != *jp2kload* ]]; then
     msg_info "Recompiling libvips"
     [[ -d "$SOURCE" ]] && rm -rf "$SOURCE"
     $STD git clone https://github.com/libvips/libvips.git "$SOURCE"

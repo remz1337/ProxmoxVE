@@ -7,19 +7,25 @@
 
 if ! command -v curl &>/dev/null; then
   printf "\r\e[2K%b" '\033[93m Setup Source \033[m' >&2
-  apt-get update >/dev/null 2>&1
-  apt-get install -y curl >/dev/null 2>&1
+  if [[ -f /etc/alpine-release ]]; then
+    apk update >/dev/null 2>&1
+    apk add --no-cache curl >/dev/null 2>&1
+  else
+    apt-get update >/dev/null 2>&1
+    apt-get install -y curl >/dev/null 2>&1
+  fi
 fi
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/error_handler.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/core.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/lib/tools.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/error_handler.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "cronmaster" "addon"
 
 # Enable error handling
 set -Eeuo pipefail
-trap 'error_handler' ERR
+catch_errors
 load_functions
+require_debian_like
 
 # ==============================================================================
 # CONFIGURATION
@@ -30,29 +36,6 @@ INSTALL_PATH="/opt/cronmaster"
 CONFIG_PATH="/opt/cronmaster/.env"
 SERVICE_PATH="/etc/systemd/system/cronmaster.service"
 DEFAULT_PORT=3000
-
-# ==============================================================================
-# HEADER
-# ==============================================================================
-function header_info {
-  clear
-  cat <<"EOF"
-   ______                __  ___           __
-  / ____/________  ____ /  |/  /___ ______/ /____  _____
- / /   / ___/ __ \/ __ \/ /|_/ / __ `/ ___/ __/ _ \/ ___/
-/ /___/ /  / /_/ / / / / /  / / /_/ (__  ) /_/  __/ /
-\____/_/   \____/_/ /_/_/  /_/\__,_/____/\__/\___/_/
-
-EOF
-}
-
-# ==============================================================================
-# OS DETECTION
-# ==============================================================================
-if ! grep -qE 'ID=debian|ID=ubuntu' /etc/os-release 2>/dev/null; then
-  echo -e "${CROSS} Unsupported OS detected. This script only supports Debian and Ubuntu."
-  exit 238
-fi
 
 # ==============================================================================
 # UNINSTALL
@@ -77,16 +60,12 @@ function update() {
     systemctl stop cronmaster.service &>/dev/null || true
     msg_ok "Stopped service"
 
-    msg_info "Backing up configuration"
-    cp "$CONFIG_PATH" /tmp/cronmaster.env.bak 2>/dev/null || true
-    msg_ok "Backed up configuration"
+    BACKUP_DIR="/opt/cronmaster_backup"
+    create_backup "$CONFIG_PATH" "$INSTALL_PATH/scripts" "$INSTALL_PATH/data" "$INSTALL_PATH/snippets"
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "cronmaster" "fccview/cronmaster" "prebuild" "latest" "$INSTALL_PATH" "cronmaster_*_prebuild.tar.gz"
 
-    msg_info "Restoring configuration"
-    cp /tmp/cronmaster.env.bak "$CONFIG_PATH" 2>/dev/null || true
-    rm -f /tmp/cronmaster.env.bak
-    msg_ok "Restored configuration"
+    restore_backup
 
     msg_info "Starting service"
     systemctl start cronmaster
@@ -110,7 +89,7 @@ function install() {
   fetch_and_deploy_gh_release "cronmaster" "fccview/cronmaster" "prebuild" "latest" "$INSTALL_PATH" "cronmaster_*_prebuild.tar.gz"
 
   local AUTH_PASS
-  AUTH_PASS="$(openssl rand -base64 18 | cut -c1-13)"
+  AUTH_PASS="$(random_password 13)"
 
   msg_info "Creating configuration"
   cat <<EOF >"$CONFIG_PATH"

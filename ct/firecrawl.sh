@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: esatbayhan
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -30,6 +31,8 @@ function update_script() {
     exit
   fi
 
+  ensure_dependencies build-essential ccache
+
   if check_for_gh_release "firecrawl" "firecrawl/firecrawl"; then
     msg_info "Stopping Services"
     systemctl stop firecrawl firecrawl-playwright
@@ -38,9 +41,10 @@ function update_script() {
     create_backup /opt/firecrawl/.env
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "firecrawl" "firecrawl/firecrawl" "tarball" "latest" "/opt/firecrawl"
+    GO_VERSION="$(grep -m1 '^go ' /opt/firecrawl/apps/api/sharedLibs/go-html-to-md/go.mod | awk '{print $2}')" setup_go
 
     restore_backup
-    
+
     FDB_VERSION="$(awk -F= '/^ARG FDB_VERSION=/{print $2; exit}' /opt/firecrawl/apps/api/Dockerfile)"
     if [[ -z "$FDB_VERSION" ]]; then
       msg_error "FDB_VERSION pin not found in upstream Dockerfile"

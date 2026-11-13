@@ -7,18 +7,23 @@
 
 if ! command -v curl &>/dev/null; then
   printf "\r\e[2K%b" '\033[93m Setup Source \033[m' >&2
-  apt-get update >/dev/null 2>&1
-  apt-get install -y curl >/dev/null 2>&1
+  if [[ -f /etc/alpine-release ]]; then
+    apk update >/dev/null 2>&1
+    apk add --no-cache curl >/dev/null 2>&1
+  else
+    apt-get update >/dev/null 2>&1
+    apt-get install -y curl >/dev/null 2>&1
+  fi
 fi
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/error_handler.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/core.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/lib/tools.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/error_handler.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "jellystat" "addon"
 
 # Enable error handling
 set -Eeuo pipefail
-trap 'error_handler' ERR
+catch_errors
 
 # ==============================================================================
 # CONFIGURATION
@@ -27,39 +32,12 @@ APP="Jellystat"
 APP_TYPE="addon"
 INSTALL_PATH="/opt/jellystat"
 CONFIG_PATH="/opt/jellystat/.env"
+SERVICE_PATH="/etc/systemd/system/jellystat.service"
 DEFAULT_PORT=3000
 
 # Initialize all core functions (colors, formatting, icons, STD mode)
 load_functions
-
-# ==============================================================================
-# HEADER
-# ==============================================================================
-function header_info {
-  clear
-  cat <<"EOF"
-       __     ____           __        __
-      / /__  / / /_  _______/ /_____ _/ /_
- __  / / _ \/ / / / / / ___/ __/ __ `/ __/
-/ /_/ /  __/ / / /_/ (__  ) /_/ /_/ / /_
-\____/\___/_/_/\__, /____/\__/\__,_/\__/
-              /____/
-EOF
-}
-
-# ==============================================================================
-# OS DETECTION
-# ==============================================================================
-if [[ -f "/etc/alpine-release" ]]; then
-  msg_error "Alpine is not supported for ${APP}. Use Debian/Ubuntu."
-  exit 238
-elif [[ -f "/etc/debian_version" ]]; then
-  OS="Debian"
-  SERVICE_PATH="/etc/systemd/system/jellystat.service"
-else
-  echo -e "${CROSS} Unsupported OS detected. Exiting."
-  exit 238
-fi
+require_debian_like
 
 # ==============================================================================
 # UNINSTALL
@@ -102,16 +80,12 @@ function update() {
     systemctl stop jellystat.service &>/dev/null || true
     msg_ok "Stopped service"
 
-    msg_info "Backing up configuration"
-    cp "$CONFIG_PATH" /tmp/jellystat.env.bak 2>/dev/null || true
-    msg_ok "Backed up configuration"
+    BACKUP_DIR="/opt/jellystat_backup"
+    create_backup "$CONFIG_PATH"
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "jellystat" "CyferShepard/Jellystat" "tarball" "latest" "$INSTALL_PATH"
 
-    msg_info "Restoring configuration"
-    cp /tmp/jellystat.env.bak "$CONFIG_PATH" 2>/dev/null || true
-    rm -f /tmp/jellystat.env.bak
-    msg_ok "Restored configuration"
+    restore_backup
 
     msg_info "Installing dependencies"
     cd "$INSTALL_PATH"
@@ -163,7 +137,7 @@ function install() {
     echo ""
   else
     # Generate new password
-    DB_PASS=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c16)
+    DB_PASS=$(random_password 16)
 
     # Check if user exists, create if not
     if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" 2>/dev/null | grep -q 1; then
@@ -213,7 +187,7 @@ function install() {
 
   # Generate JWT Secret
   local JWT_SECRET
-  JWT_SECRET=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c32)
+  JWT_SECRET=$(random_password 32)
 
   # Force fresh download by removing version cache
   rm -f "$HOME/.jellystat"

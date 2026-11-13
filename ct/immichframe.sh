@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Thiago Canozzo Lahr (tclahr)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -8,7 +9,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 APP="ImmichFrame"
 var_tags="${var_tags:-photos;slideshow}"
 var_cpu="${var_cpu:-1}"
-var_ram="${var_ram:-1024}"
+var_ram="${var_ram:-2048}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
@@ -77,6 +78,17 @@ function update_script() {
     restore_backup
     chown -R immichframe:immichframe /opt/immichframe
 
+    if ! grep -q '^Environment=IMMICHFRAME_ADMIN_PASSWORD=' /etc/systemd/system/immichframe.service; then
+      msg_info "Setting Admin Password"
+      ADMIN_PASSWORD=$(openssl rand -hex 16)
+      sed -i "/^Environment=DOTNET_CONTENTROOT=/a Environment=IMMICHFRAME_ADMIN_PASSWORD=${ADMIN_PASSWORD}" /etc/systemd/system/immichframe.service
+      cat <<EOF >>~/immichframe.creds
+ImmichFrame Admin User: admin
+ImmichFrame Admin Password: $ADMIN_PASSWORD
+EOF
+      systemctl daemon-reload
+      msg_ok "Set Admin Password (see ~/immichframe.creds)"
+    fi
 
     msg_info "Starting Service"
     systemctl start immichframe

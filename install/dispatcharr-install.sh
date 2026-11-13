@@ -25,14 +25,29 @@ $STD apt install -y \
   procps \
   vlc-bin \
   vlc-plugin-base \
-  streamlink
+  streamlink \
+  autoconf \
+  libtool \
+  libargtable2-dev \
+  libavformat-dev \
+  libsdl2-dev \
+  libswscale-dev
 msg_ok "Installed Dependencies"
 
-setup_uv
 NODE_VERSION="24" setup_nodejs
 PG_VERSION="16" setup_postgresql
 PG_DB_NAME="dispatcharr_db" PG_DB_USER="dispatcharr_usr" setup_postgresql_db
 fetch_and_deploy_gh_release "dispatcharr" "Dispatcharr/Dispatcharr" "tarball"
+fetch_and_deploy_gh_release "Comskip" "erikkaashoek/Comskip" "tarball"
+UV_PROJECT_DIR="/opt/dispatcharr" setup_uv
+
+msg_info "Compiling Comskip"
+cd /opt/Comskip
+$STD ./autogen.sh
+$STD ./configure
+$STD make
+$STD make install
+msg_ok "Compiled and Installed Comskip"
 
 msg_info "Installing Python Dependencies with uv"
 cd /opt/dispatcharr
@@ -47,7 +62,7 @@ install -d -m 755 \
   /data/uploads/{m3us,epgs} \
   /data/{m3us,epgs}
 chown -R root:root /data
-DJANGO_SECRET=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | cut -c1-50)
+DJANGO_SECRET=$(random_password 50)
 export DATABASE_URL="postgresql://${PG_DB_USER}:${PG_DB_PASS}@localhost:5432/${PG_DB_NAME}"
 export POSTGRES_DB=$PG_DB_NAME
 export POSTGRES_USER=$PG_DB_USER
@@ -174,7 +189,7 @@ cd /opt/dispatcharr
 set -a
 source .env
 set +a
-exec uv run celery -A dispatcharr worker -l info -c 4
+exec uv run celery -A dispatcharr worker -l info -c 4 -Q celery,recordings,dvr,default
 EOF
 chmod +x /opt/dispatcharr/start-celery.sh
 

@@ -14,10 +14,10 @@ if ! command -v curl &>/dev/null; then
     apt-get install -y curl >/dev/null 2>&1
   fi
 fi
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/error_handler.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/core.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/lib/tools.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/error_handler.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "runtipi" "addon"
 
 # Enable error handling
@@ -34,55 +34,6 @@ DEFAULT_PORT=80
 
 # Initialize all core functions (colors, formatting, icons, STD mode)
 load_functions
-
-# ==============================================================================
-# PROXMOX HOST CHECK
-# ==============================================================================
-function check_proxmox_host() {
-  if command -v pveversion &>/dev/null; then
-    msg_error "Running on the Proxmox host is NOT recommended!"
-    msg_error "This should be executed inside an LXC container."
-    echo ""
-    echo -n "${TAB}Continue anyway? (y/N): "
-    read -r confirm
-    if [[ ! "${confirm,,}" =~ ^(y|yes)$ ]]; then
-      msg_warn "Aborted. Please run this inside an LXC container."
-      exit 0
-    fi
-    msg_warn "Proceeding on Proxmox host at your own risk!"
-  fi
-}
-
-# ==============================================================================
-# CHECK / INSTALL DOCKER
-# ==============================================================================
-function check_or_install_docker() {
-  if command -v docker &>/dev/null; then
-    msg_ok "Docker $(docker --version | cut -d' ' -f3 | tr -d ',') is available"
-    if docker compose version &>/dev/null; then
-      msg_ok "Docker Compose is available"
-    else
-      msg_error "Docker Compose plugin is not available. Please install it."
-      exit 10
-    fi
-    return
-  fi
-
-  msg_warn "Docker is not installed."
-  echo -n "${TAB}Install Docker now? (y/N): "
-  read -r install_docker_prompt
-  if [[ ! "${install_docker_prompt,,}" =~ ^(y|yes)$ ]]; then
-    msg_error "Docker is required for ${APP}. Exiting."
-    exit 10
-  fi
-
-  msg_info "Installing Docker"
-  DOCKER_CONFIG_PATH='/etc/docker/daemon.json'
-  mkdir -p "$(dirname "$DOCKER_CONFIG_PATH")"
-  echo -e '{\n  "log-driver": "journald"\n}' >"$DOCKER_CONFIG_PATH"
-  $STD sh <(curl -fsSL https://get.docker.com)
-  msg_ok "Installed Docker"
-}
 
 # ==============================================================================
 # UNINSTALL
@@ -124,7 +75,7 @@ function update() {
 # INSTALL
 # ==============================================================================
 function install() {
-  check_or_install_docker
+  ensure_docker
 
   msg_info "Installing dependencies"
   $STD apt-get update
@@ -174,13 +125,9 @@ if [[ "${type:-}" == "update" ]]; then
   exit 0
 fi
 
-if [[ -f /etc/alpine-release ]]; then
-  msg_error "${APP} does not support Alpine Linux. Please use a Debian or Ubuntu based LXC."
-  exit 238
-fi
-
 header_info
-check_proxmox_host
+require_debian_like
+confirm_not_pve_host
 get_lxc_ip
 
 # Check if already installed

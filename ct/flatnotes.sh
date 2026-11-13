@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: luismco
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -36,19 +37,18 @@ function update_script() {
 
     create_backup /opt/flatnotes/.env /opt/flatnotes/data
 
+    NODE_VERSION="24" setup_nodejs
+
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "flatnotes" "dullage/flatnotes" "tarball"
+    PYTHON_VERSION="3.13" UV_PROJECT_DIR="/opt/flatnotes" setup_uv
 
     restore_backup
 
     msg_info "Updating Flatnotes"
-    cd /opt/flatnotes/client
-    $STD npm install
-    $STD npm run build
     cd /opt/flatnotes
-    rm -f uv.lock
-    sed -i 's/^name = ""$/name = "flatnotes"/' pyproject.toml
-    $STD /usr/local/bin/uvx migrate-to-uv
-    $STD /usr/local/bin/uv sync
+    $STD uv sync --locked --no-dev
+    $STD npm ci
+    $STD npm run build
     msg_ok "Updated Flatnotes"
 
     msg_info "Starting Service"

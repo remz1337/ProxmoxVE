@@ -5,16 +5,27 @@
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://github.com/hansmi/prometheus-paperless-exporter
 
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/error_handler.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+if ! command -v curl &>/dev/null; then
+  printf "\r\e[2K%b" '\033[93m Setup Source \033[m' >&2
+  if [[ -f /etc/alpine-release ]]; then
+    apk update >/dev/null 2>&1
+    apk add --no-cache curl >/dev/null 2>&1
+  else
+    apt-get update >/dev/null 2>&1
+    apt-get install -y curl >/dev/null 2>&1
+  fi
+fi
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/core.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/lib/tools.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/error_handler.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "prometheus-paperless-ngx-exporter" "addon"
 
 # Enable error handling
 set -Eeuo pipefail
-trap 'error_handler' ERR
+catch_errors
 load_functions
+require_debian_like
 
 # ==============================================================================
 # CONFIGURATION
@@ -26,14 +37,6 @@ BINARY_PATH="/usr/bin/prometheus-paperless-exporter"
 CONFIG_PATH="/etc/prometheus-paperless-ngx-exporter/config.env"
 SERVICE_PATH="/etc/systemd/system/prometheus-paperless-ngx-exporter.service"
 AUTH_TOKEN_FILE="/etc/prometheus-paperless-ngx-exporter/paperless_auth_token_file"
-
-# ==============================================================================
-# OS DETECTION
-# ==============================================================================
-if ! grep -qE 'ID=debian|ID=ubuntu' /etc/os-release 2>/dev/null; then
-  echo -e "${CROSS} Unsupported OS detected. This script only supports Debian and Ubuntu."
-  exit 238
-fi
 
 # ==============================================================================
 # UNINSTALL

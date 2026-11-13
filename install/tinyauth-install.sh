@@ -13,33 +13,36 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Dependencies"
-$STD apt install -y \
-  openssl \
-  apache2-utils
-msg_ok "Installed Dependencies"
+setup_deb_based() {
+  msg_info "Installing Dependencies"
+  $STD apt install -y \
+    openssl \
+    apache2-utils
+  msg_ok "Installed Dependencies"
 
-fetch_and_deploy_gh_release "tinyauth" "steveiliop56/tinyauth" "singlefile" "latest" "/opt/tinyauth" "tinyauth-$(arch_resolve)"
+  fetch_and_deploy_gh_release "tinyauth" "steveiliop56/tinyauth" "singlefile" "latest" "/opt/tinyauth" "tinyauth-$(arch_resolve)"
 
-msg_info "Setting up Tinyauth"
-PASS=$(openssl rand -base64 8 | tr -dc 'a-zA-Z0-9' | head -c 8)
-USER=$(htpasswd -Bbn "tinyauth" "${PASS}")
-cat <<EOF >/opt/tinyauth/credentials.txt
+  msg_info "Setting up Tinyauth"
+  PASS=$(random_password 8)
+  USER=$(htpasswd -Bbn "tinyauth" "${PASS}")
+  cat <<EOF >/opt/tinyauth/credentials.txt
 Tinyauth Credentials
 Username: tinyauth
 Password: ${PASS}
 EOF
-msg_ok "Set up Tinyauth"
+  msg_ok "Set up Tinyauth"
 
-read -r -p "${TAB3}Enter your Tinyauth subdomain (e.g. https://tinyauth.example.com): " app_url
+  app_url="${var_tinyauth_app_url:-}"
+  [[ -n "$app_url" ]] || read -r -p "${TAB3}Enter your Tinyauth subdomain (e.g. https://tinyauth.example.com): " app_url || true
+  [[ -n "$app_url" ]] || { msg_error "No Tinyauth app URL given; set var_tinyauth_app_url or answer the prompt"; exit 64; }
 
-msg_info "Creating Service"
-cat <<EOF >/opt/tinyauth/.env
+  msg_info "Creating Service"
+  cat <<EOF >/opt/tinyauth/.env
 TINYAUTH_DATABASE_PATH=/opt/tinyauth/database.db
 TINYAUTH_AUTH_USERS='${USER}'
 TINYAUTH_APPURL=${app_url}
 EOF
-cat <<EOF >/etc/systemd/system/tinyauth.service
+  cat <<EOF >/etc/systemd/system/tinyauth.service
 [Unit]
 Description=Tinyauth Service
 After=network.target
@@ -54,8 +57,68 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now tinyauth
-msg_ok "Created Service"
+  systemctl enable -q --now tinyauth
+  msg_ok "Created Service"
+}
+
+setup_alpine() {
+  msg_info "Installing Dependencies"
+  $STD apk add --no-cache openssl apache2-utils
+  msg_ok "Installed Dependencies"
+
+  fetch_and_deploy_gh_release "tinyauth" "tinyauthapp/tinyauth" "singlefile" "latest" "/opt/tinyauth" "tinyauth-$(arch_resolve)"
+
+  msg_info "Configuring Tinyauth"
+  PASS=$(random_password 8)
+  USER=$(htpasswd -Bbn "tinyauth" "${PASS}")
+
+  cat <<EOF >/opt/tinyauth/credentials.txt
+Tinyauth Credentials
+Username: tinyauth
+Password: ${PASS}
+EOF
+  msg_ok "Configured Tinyauth"
+
+  app_url="${var_tinyauth_app_url:-}"
+  [[ -n "$app_url" ]] || read -r -p "${TAB3}Enter your Tinyauth subdomain (e.g. https://tinyauth.example.com): " app_url || true
+  [[ -n "$app_url" ]] || { msg_error "No Tinyauth app URL given; set var_tinyauth_app_url or answer the prompt"; exit 64; }
+
+  cat <<EOF >/opt/tinyauth/.env
+TINYAUTH_DATABASE_PATH=/opt/tinyauth/database.db
+TINYAUTH_AUTH_USERS='${USER}'
+TINYAUTH_APPURL=${app_url}
+EOF
+
+  msg_info "Creating Service"
+  cat <<'EOF' >/etc/init.d/tinyauth
+#!/sbin/openrc-run
+description="Tinyauth Service"
+
+set -a
+ENV_FILE="/opt/tinyauth/.env"
+[ -f "$ENV_FILE" ] && . "$ENV_FILE"
+set +a
+
+command="/opt/tinyauth/tinyauth"
+directory="/opt/tinyauth"
+command_user="root"
+command_background="true"
+pidfile="/var/run/tinyauth.pid"
+
+depend() {
+    use net
+}
+EOF
+  chmod +x /etc/init.d/tinyauth
+  $STD rc-update add tinyauth default
+  msg_ok "Enabled Tinyauth Service"
+
+  msg_info "Starting Tinyauth"
+  $STD service tinyauth start
+  msg_ok "Started Tinyauth"
+}
+
+run_os_setup
 
 motd_ssh
 customize

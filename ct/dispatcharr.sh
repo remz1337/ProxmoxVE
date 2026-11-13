@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: ekke85 | MickLesk
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -8,7 +9,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 APP="Dispatcharr"
 var_tags="${var_tags:-media;arr}"
 var_cpu="${var_cpu:-2}"
-var_ram="${var_ram:-2048}"
+var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-8}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
@@ -30,7 +31,6 @@ function update_script() {
     exit
   fi
 
-  setup_uv
   NODE_VERSION="24" setup_nodejs
   if [[ -f "/etc/nginx/sites-available/dispatcharr.conf" ]] && ! grep -q "real_forwarded_proto" "/etc/nginx/sites-available/dispatcharr.conf"; then
     msg_info "Migrating Nginx Configuration"
@@ -104,7 +104,18 @@ EOF
     msg_ok "Migrated Nginx Configuration"
   fi
 
-  ensure_dependencies vlc-bin vlc-plugin-base
+  ensure_dependencies vlc-bin vlc-plugin-base build-essential autoconf libtool libargtable2-dev libavformat-dev libsdl2-dev libswscale-dev
+
+  if ! command -v comskip &> /dev/null; then
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "Comskip" "erikkaashoek/Comskip" "tarball"
+    msg_info "Compiling Comskip"
+    cd /opt/Comskip
+    $STD ./autogen.sh
+    $STD ./configure
+    $STD make
+    $STD make install
+    msg_ok "Compiled and Installed Comskip"
+  fi
 
   if check_for_gh_release "Dispatcharr" "Dispatcharr/Dispatcharr"; then
     msg_info "Stopping Services"
@@ -126,19 +137,19 @@ EOF
       set +o allexport
       if [[ -n "$POSTGRES_DB" ]] && [[ -n "$POSTGRES_USER" ]] && [[ -n "$POSTGRES_PASSWORD" ]]; then
         PGPASSWORD=$POSTGRES_PASSWORD pg_dump -U "$POSTGRES_USER" -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5432}" "$POSTGRES_DB" >/tmp/dispatcharr_db_$(date +%F).sql
-        msg_info "Database backup created"
       fi
     fi
     $STD tar -czf "$BACKUP_FILE" -C /opt dispatcharr /tmp/dispatcharr_db_*.sql
     msg_ok "Backup created: $BACKUP_FILE"
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "dispatcharr" "Dispatcharr/Dispatcharr" "tarball"
+    UV_PROJECT_DIR="/opt/dispatcharr" setup_uv
 
     restore_backup
 
     msg_info "Updating Dispatcharr Backend"
     if ! grep -q "DJANGO_SECRET_KEY" /opt/dispatcharr/.env; then
-      DJANGO_SECRET=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | cut -c1-50)
+      DJANGO_SECRET=$(random_password 50)
       echo "DJANGO_SECRET_KEY=$DJANGO_SECRET" >>/opt/dispatcharr/.env
     fi
 

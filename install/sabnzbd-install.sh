@@ -29,7 +29,7 @@ Suites: trixie
 Components: non-free 
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 EOF
-$STD apt update
+apt_update_safe
 $STD apt install -y unrar
 msg_ok "Setup Unrar"
 
@@ -40,7 +40,8 @@ $STD uv venv --clear /opt/sabnzbd/venv
 $STD uv pip install -r /opt/sabnzbd/requirements.txt --python=/opt/sabnzbd/venv/bin/python
 msg_ok "Installed SABnzbd"
 
-read -r -p "Would you like to install par2cmdline-turbo? <y/N> " prompt
+prompt="${var_sabnzbd_par2_turbo:-}"
+[[ -n "$prompt" ]] || read -r -p "Would you like to install par2cmdline-turbo? <y/N> " prompt || true
 if [[ "${prompt,,}" =~ ^(y|yes)$ ]]; then
   mv /usr/bin/par2 /usr/bin/par2.old
   fetch_and_deploy_gh_release "par2cmdline-turbo" "animetosho/par2cmdline-turbo" "prebuild" "latest" "/usr/bin/" "*-linux-$(arch_resolve).zip"

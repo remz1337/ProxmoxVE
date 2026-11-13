@@ -37,20 +37,45 @@ $STD apt install -y \
   redis-server \
   redis-tools \
   p7zip-full \
+  7zip-standalone \
+  libarchive-tools \
   tzdata
 msg_ok "Installed Dependencies"
 
-msg_info "Installing Angie with mod_zip module"
+msg_info "Installing Angie with mod_zip and njs modules"
 setup_deb822_repo \
   "angie" \
   "https://angie.software/keys/angie-signing.gpg" \
   "https://download.angie.software/angie/debian/$(get_os_info version_id)" \
   "$(get_os_info codename)" \
   "main"
-$STD apt-get install -y angie angie-module-zip
-sed -i '1i load_module modules/ngx_http_zip_module.so;' /etc/angie/angie.conf
-msg_ok "Installed Angie with mod_zip module"
-PYTHON_VERSION="3.13" setup_uv
+$STD apt install -y angie angie-module-zip angie-module-njs
+sed -i '1i load_module modules/ngx_http_zip_module.so;\nload_module modules/ngx_http_js_module.so;' /etc/angie/angie.conf
+mkdir -p /etc/angie/js
+cat <<'EOF' >/etc/angie/js/decode.js
+// Decode a Base64 encoded string received as a query parameter named 'value',
+// and return the decoded value in the response body.
+function decodeBase64(r) {
+  var encodedValue = r.args.value;
+
+  if (!encodedValue) {
+    r.return(400, "Missing 'value' query parameter");
+    return;
+  }
+
+  try {
+    // Use Buffer to return raw bytes — atob() returns a JS string which r.return()
+    // would re-encode as UTF-8, corrupting any non-ASCII bytes (e.g. in filenames
+    // like "Pokémon") and causing CRC mismatches in the mod_zip manifest.
+    r.return(200, Buffer.from(encodedValue, 'base64'));
+  } catch (e) {
+    r.return(400, "Invalid Base64 encoding");
+  }
+}
+
+export default { decodeBase64 };
+EOF
+msg_ok "Installed Angie with mod_zip and njs modules"
 NODE_VERSION="24" setup_nodejs
 setup_mariadb
 MARIADB_DB_NAME="romm" MARIADB_DB_USER="romm" setup_mariadb_db
@@ -61,7 +86,8 @@ mkdir -p /opt/romm \
   /var/lib/romm/resources \
   /var/lib/romm/assets/{saves,states,screenshots} \
   /var/lib/romm/library/roms \
-  /var/lib/romm/library/bios
+  /var/lib/romm/library/bios \
+  /var/lib/romm/cache
 msg_ok "Created directories"
 
 msg_info "Creating configuration file"
@@ -91,9 +117,11 @@ cat <<'EOF' >/var/lib/romm/config/config.yml
 #     gc: ngc
 #     ps1: psx
 
-# The folder name where your roms are located (relative to library path)
-# filesystem:
-#   roms_folder: 'roms'
+# Required since 5.3.0: RomM refuses to start without an explicit structure.
+filesystem:
+  structure:
+    default: "roms/{platform}/{game}"
+    firmware: "bios/{platform}"
 
 # scan:
 #   priority:
@@ -134,11 +162,12 @@ else
 fi
 
 fetch_and_deploy_gh_release "romm" "rommapp/romm" "tarball"
-fetch_and_deploy_gh_release "ruffle" "ruffle-rs/ruffle" "prebuild" "latest" "/opt/romm/frontend/dist/assets/ruffle" "ruffle-*-web-selfhosted.zip"
-fetch_and_deploy_gh_release "EmulatorJS" "EmulatorJS/EmulatorJS" "prebuild" "v4.2.3" "/opt/romm/frontend/dist/assets/emulatorjs" "4.2.3.7z"
+PYTHON_VERSION="3.13" UV_PROJECT_DIR="/opt/romm" setup_uv
+echo "__version__ = \"$(cat ~/.romm)\"" >/opt/romm/backend/__version__.py
 
 msg_info "Creating environment file"
 sed -i 's/^supervised no/supervised systemd/' /etc/redis/redis.conf
+echo 'save 3600 1' >>/etc/redis/redis.conf
 systemctl restart redis-server
 systemctl enable -q --now redis-server
 AUTH_SECRET_KEY=$(openssl rand -hex 32)
@@ -189,7 +218,7 @@ msg_ok "Set up RomM Backend"
 if [[ -f /opt/romm/backend/utils/rom_patcher/package.json ]]; then
   msg_info "Building ROM Patcher helper"
   cd /opt/romm/backend/utils/rom_patcher
-  $STD npm install --ignore-scripts --no-audit --no-fund
+  $STD npm install --ignore-scripts --no-audit --no-fund --allow-git=all
   if [[ -d node_modules/rom-patcher/rom-patcher-js ]]; then
     rm -rf rom-patcher-js
     cp -r node_modules/rom-patcher/rom-patcher-js ./rom-patcher-js
@@ -212,8 +241,13 @@ ln -sfn "$ROMM_BASE"/resources /opt/romm/frontend/dist/assets/romm/resources
 ln -sfn "$ROMM_BASE"/assets /opt/romm/frontend/dist/assets/romm/assets
 msg_ok "Set up RomM Frontend"
 
+fetch_and_deploy_gh_release "ruffle" "ruffle-rs/ruffle" "prebuild" "latest" "/opt/romm/frontend/dist/assets/ruffle" "ruffle-*-web-selfhosted.zip"
+fetch_and_deploy_gh_release "EmulatorJS" "EmulatorJS/EmulatorJS" "prebuild" "v4.2.3" "/opt/romm/frontend/dist/assets/emulatorjs" "4.2.3.7z"
+
 msg_info "Configuring Angie"
 cat <<'EOF' >/etc/angie/http.d/romm.conf
+js_import /etc/angie/js/decode.js;
+
 upstream romm_backend {
     server 127.0.0.1:5000;
 }
@@ -223,15 +257,33 @@ map $http_upgrade $connection_upgrade {
     '' close;
 }
 
+# COEP/COOP for the EmulatorJS and js-dos players (SharedArrayBuffer needs a
+# crossOriginIsolated document). Matched on $request_uri because try_files
+# rewrites $uri to /index.html before add_header runs, so a per-location
+# add_header on the player route never fires. Mirrors upstream RomM's
+# docker/nginx/templates/default.conf.template.
+map $request_uri $coep_header {
+    default        "";
+    ~^/rom/.*/(ejs|jsdos)(\?|$) "require-corp";
+}
+map $request_uri $coop_header {
+    default        "";
+    ~^/rom/.*/(ejs|jsdos)(\?|$) "same-origin";
+}
+
 server {
     listen 80;
     server_name _;
     root /opt/romm/frontend/dist;
     client_max_body_size 0;
 
-    # Frontend SPA
+    # Frontend SPA - also emits the player isolation headers: the player URLs
+    # fall through try_files to /index.html, which this location serves
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+        add_header Cross-Origin-Embedder-Policy $coep_header;
+        add_header Cross-Origin-Opener-Policy $coop_header;
     }
 
     # Static assets
@@ -240,13 +292,6 @@ server {
         try_files $uri $uri/ =404;
         expires 1y;
         add_header Cache-Control "public, immutable";
-    }
-
-    # EmulatorJS player - requires COOP/COEP headers for SharedArrayBuffer
-    location ~ ^/rom/.*/ejs$ {
-        add_header Cross-Origin-Embedder-Policy "require-corp";
-        add_header Cross-Origin-Opener-Policy "same-origin";
-        try_files $uri /index.html;
     }
 
     # Backend API
@@ -280,10 +325,40 @@ server {
         internal;
         alias /var/lib/romm/library/;
     }
+
+    # Internally redirect cached zip file requests (Range-resumable downloads)
+    location /cache/ {
+        internal;
+        alias /var/lib/romm/cache/;
+    }
+
+    # Internal decoding endpoint, used by mod_zip to decode base64-encoded
+    # multi-file manifest entries (e.g. the generated .m3u for multi-disc games)
+    location /decode {
+        internal;
+        js_content decode.decodeBase64;
+    }
 }
 EOF
 
-sed -i "s|alias /var/lib/romm/library/;|alias ${ROMM_BASE}/library/;|" /etc/angie/http.d/romm.conf
+cat <<'SYNCEOF' >/usr/local/bin/romm-sync-angie-paths
+#!/usr/bin/env bash
+base="$(grep -m1 '^ROMM_BASE_PATH=' /opt/romm/.env 2>/dev/null | cut -d= -f2)"
+base="${base:-/var/lib/romm}"
+ln -sfn "${base}/resources" /opt/romm/frontend/dist/assets/romm/resources
+ln -sfn "${base}/assets" /opt/romm/frontend/dist/assets/romm/assets
+[[ -f /etc/angie/http.d/romm.conf ]] || exit 0
+sed -i -e "s|alias .*/library/;|alias ${base}/library/;|" \
+  -e "s|alias .*/cache/;|alias ${base}/cache/;|" /etc/angie/http.d/romm.conf
+SYNCEOF
+chmod +x /usr/local/bin/romm-sync-angie-paths
+mkdir -p /etc/systemd/system/angie.service.d
+cat <<'EOF' >/etc/systemd/system/angie.service.d/romm-paths.conf
+[Service]
+ExecStartPre=/usr/local/bin/romm-sync-angie-paths
+EOF
+systemctl daemon-reload
+/usr/local/bin/romm-sync-angie-paths
 rm -f /etc/angie/http.d/default.conf
 systemctl restart angie
 systemctl enable -q --now angie
@@ -320,7 +395,26 @@ Type=simple
 WorkingDirectory=/opt/romm/backend
 EnvironmentFile=/opt/romm/.env
 Environment="PYTHONPATH=/opt/romm/backend"
-ExecStart=/opt/romm/.venv/bin/rq worker --path /opt/romm/backend --url redis://127.0.0.1:6379/0 high default low
+ExecStart=/opt/romm/.venv/bin/rq worker --with-scheduler --path /opt/romm/backend --url redis://127.0.0.1:6379/0 high default low
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat <<EOF >/etc/systemd/system/romm-scan-worker.service
+[Unit]
+Description=RomM RQ Scan Worker
+After=network.target mariadb.service redis-server.service romm-backend.service
+Requires=mariadb.service redis-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/romm/backend
+EnvironmentFile=/opt/romm/.env
+Environment="PYTHONPATH=/opt/romm/backend"
+ExecStart=/opt/romm/.venv/bin/rq worker --with-scheduler --path /opt/romm/backend --url redis://127.0.0.1:6379/0 scans
 Restart=on-failure
 RestartSec=5
 
@@ -339,9 +433,7 @@ Type=simple
 WorkingDirectory=/opt/romm/backend
 EnvironmentFile=/opt/romm/.env
 Environment="PYTHONPATH=/opt/romm/backend"
-Environment="RQ_REDIS_HOST=127.0.0.1"
-Environment="RQ_REDIS_PORT=6379"
-ExecStart=/opt/romm/.venv/bin/rqscheduler --path /opt/romm/backend
+ExecStart=/opt/romm/.venv/bin/rq cron --path /opt/romm/backend --url redis://127.0.0.1:6379/0 tasks.cron_config
 Restart=on-failure
 RestartSec=5
 
@@ -360,7 +452,7 @@ Type=simple
 WorkingDirectory=/opt/romm/backend
 EnvironmentFile=/opt/romm/.env
 Environment="PYTHONPATH=/opt/romm/backend"
-ExecStart=/opt/romm/.venv/bin/watchfiles --target-type command '/opt/romm/.venv/bin/python watcher.py' /var/lib/romm/library
+ExecStart=/opt/romm/.venv/bin/watchfiles --target-type command '/opt/romm/.venv/bin/python watcher.py' \${ROMM_BASE_PATH}/library
 Restart=on-failure
 RestartSec=5
 
@@ -368,7 +460,7 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-systemctl enable -q --now romm-backend romm-worker romm-scheduler romm-watcher
+systemctl enable -q --now romm-backend romm-worker romm-scan-worker romm-scheduler romm-watcher
 msg_ok "Created Services"
 
 motd_ssh

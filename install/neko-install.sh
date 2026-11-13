@@ -48,9 +48,9 @@ $STD apt install -y \
 msg_ok "Installed Build Dependencies"
 
 NODE_VERSION="22" setup_nodejs
-setup_go
 
 fetch_and_deploy_gh_release "neko" "m1k1o/neko" "tarball"
+GO_VERSION="$(grep -m1 '^go ' /opt/neko/server/go.mod | awk '{print $2}')" setup_go
 
 msg_info "Building Client"
 cd /opt/neko/client
@@ -201,6 +201,13 @@ cat <<'EOF' >/etc/neko/openbox.xml
 </openbox_config>
 EOF
 
+NEKO_ADMIN_PASS=$(random_password 20)
+NEKO_USER_PASS=$(random_password 20)
+{
+  echo "Neko Credentials"
+  echo "Admin password: ${NEKO_ADMIN_PASS}"
+  echo "User password: ${NEKO_USER_PASS}"
+} >~/neko.creds
 cat <<EOF >/etc/neko/neko.yaml
 server:
   bind: "0.0.0.0:8080"
@@ -219,8 +226,8 @@ desktop:
 member:
   provider: "multiuser"
   multiuser:
-    admin_password: "admin"
-    user_password: "neko"
+    admin_password: "${NEKO_ADMIN_PASS}"
+    user_password: "${NEKO_USER_PASS}"
 EOF
 msg_ok "Set up Runtime"
 

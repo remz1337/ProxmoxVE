@@ -4,8 +4,9 @@
 # Author: BvdBerg01 | Co-Author: remz1337
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+_CS_CORE_URL="${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}"
+source <(curl -fsSL "${_CS_CORE_URL}/core/core.func")
+source <(curl -fsSL "${_CS_CORE_URL}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "update-apps" "pve"
 
 # =============================================================================
@@ -154,11 +155,45 @@ function sanitize_service_name() {
   return 0
 }
 
-function validate_service_script() {
+function script_exists() {
   local name="$1"
   sanitize_service_name "$name" || return 1
   curl -fsSL --max-time 10 -o /dev/null \
     "https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/ct/${name}.sh" 2>/dev/null
+}
+
+# A container keeps the slug it was built with, so a renamed ct/ script leaves it
+# pointing at a name that no longer exists. Try the successors, but only accept one
+# that is really there -- guessing wrong would run a foreign app's updater.
+function resolve_service_script() {
+  local n="$1" c
+  script_exists "$n" && { printf '%s' "$n"; return 0; }
+  for c in "${n#alpine-}" "$(printf '%s' "$n" | sed -E 's/-v[0-9]+$//')"; do
+    [[ -n "$c" && "$c" != "$n" ]] || continue
+    script_exists "$c" && { printf '%s' "$c"; return 0; }
+  done
+  case "$n" in
+  pbs) script_exists proxmox-backup-server && { printf '%s' proxmox-backup-server; return 0; } ;;
+  esac
+  return 1
+}
+
+# The retired Gitea mirror. The old entrypoint pulls ct/<app>.sh straight from
+# it and never reaches the update helper that would repair itself, so rewrite it
+# here. Only host and /raw/<kind>/ change; owner, repo and ref are kept.
+function repair_update_url() {
+  local container="$1"
+  pct exec "$container" -- sh -c '
+    [ -f /usr/bin/update ] || exit 1
+    grep -q git.community-scripts.org /usr/bin/update || exit 1
+    sed -i \
+      -e "s|https://git[.]community-scripts[.]org/|https://raw.githubusercontent.com/|g" \
+      -e "s|/raw/branch/|/|g" -e "s|/raw/tag/|/|g" -e "s|/raw/commit/|/|g" \
+      /usr/bin/update
+  ' >/dev/null 2>&1 || return 1
+
+  echo -e "${BL}[INFO]${CL} Repaired update URL (Gitea -> GitHub) in container $container"
+  log_write "Container $container: rewrote the retired Gitea base in /usr/bin/update"
 }
 
 function detect_service() {
@@ -172,7 +207,11 @@ function detect_service() {
     rm -rf "$tmpdir"
     return 1
   fi
-  service=$(grep -oE '/ct/[a-zA-Z0-9._-]+\.sh' "$update_file" 2>/dev/null | head -n1 | sed 's|.*/ct/||; s|\.sh$||')
+
+  service=$(sed -n -E 's/^[[:space:]]*export[[:space:]]+UPDATE_SCRIPT_NAME=["'"'"']?([a-zA-Z0-9._-]+).*/\1/p' "$update_file" | head -n1)
+  [[ -z "$service" ]] && service=$(sed -n -E 's/^[[:space:]]*export[[:space:]]+SCRIPT_SLUG=["'"'"']?([a-zA-Z0-9._-]+).*/\1/p' "$update_file" | head -n1)
+  [[ -z "$service" ]] && service=$(grep -oE '/ct/[a-zA-Z0-9._-]+\.sh' "$update_file" 2>/dev/null | head -n1 | sed 's|.*/ct/||; s|\.sh$||')
+
   rm -rf "$tmpdir"
 }
 
@@ -232,15 +271,22 @@ function dry_run_container() {
   fi
 }
 
+# The line of vzdump or pct restore output that says why it failed.
+function failure_reason() {
+  local reason
+  reason=$(grep -m1 '^ERROR:' <<<"$1" | sed 's/^ERROR: //')
+  [[ -n "$reason" ]] || reason=$(grep -v '^[[:space:]]*$' <<<"$1" | tail -n1)
+  printf '%s' "$reason"
+}
+
 function backup_container() {
   msg_info "Creating backup for container $1"
-  vzdump $1 --compress zstd --storage $STORAGE_CHOICE -notes-template "{{guestname}} - community-scripts backup updater" >/dev/null 2>&1
-  status=$?
-
-  if [ $status -eq 0 ]; then
+  local output
+  if output=$(_cs_shield_hangup vzdump $1 --compress zstd --storage $STORAGE_CHOICE -notes-template "{{guestname}} - community-scripts backup updater" 2>&1); then
     msg_ok "Backup created"
   else
-    msg_error "Backup failed for container $1"
+    log_write "Container $1: vzdump failed:"$'\n'"$output"
+    msg_error "Backup failed for container $1: $(failure_reason "$output")"
     exit 235
   fi
 }
@@ -298,7 +344,7 @@ function log_write() {
 
 # Skip confirmation if var_skip_confirm is set to yes
 if [[ "$var_skip_confirm" != "yes" ]]; then
-  whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC App Update" --yesno "This will update apps in LXCs installed by Helper-Scripts. Proceed?" 10 58 || exit
+  whiptail --backtitle "Proxmox VE Helper Scripts" --title "LXC App Update" --yesno "This will update apps in LXCs installed by Helper-Scripts. Proceed?" 10 58 || exit 0
 fi
 
 tags_formatted="${var_tags//|/, }"
@@ -421,12 +467,11 @@ if [ "$BACKUP_CHOICE" == "yes" ]; then
   # Determine storage based on var_backup_storage
   if [[ -n "$var_backup_storage" ]]; then
     # Validate that the specified storage exists and supports backups
-    if echo "$STORAGES" | grep -qw "$var_backup_storage"; then
+    if grep -qxF -- "$var_backup_storage" <<<"$STORAGES"; then
       STORAGE_CHOICE="$var_backup_storage"
       msg_ok "Using backup storage: $STORAGE_CHOICE"
     else
-      msg_error "Specified backup storage '$var_backup_storage' not found or doesn't support backups!"
-      msg_info "Available storages: $(echo $STORAGES | tr '\n' ' ')"
+      msg_error "Specified backup storage '$var_backup_storage' not found or doesn't support backups! Available: $(echo $STORAGES)"
       exit 119
     fi
   else
@@ -468,6 +513,9 @@ for container in $CHOICE; do
     sleep 5
   fi
 
+  #0.5) Rewrite a retired Gitea base before anything reads it.
+  repair_update_url "$container"
+
   #1) Detect service using the service name in the update command
   detect_service $container
 
@@ -479,11 +527,17 @@ for container in $CHOICE; do
     continue
   fi
 
-  if ! validate_service_script "${service}"; then
+  resolved_service="$(resolve_service_script "${service}")"
+  if [ -z "${resolved_service}" ]; then
     echo -e "${RD}[ERROR]${CL} Service '${service}' does not resolve to ct/${service}.sh"
     log_result "$container" "${service}" "ERROR" "No matching ct/${service}.sh script found"
     log_write "Container $container: ERROR — ct/${service}.sh not found"
     continue
+  fi
+  if [ "${resolved_service}" != "${service}" ]; then
+    echo -e "${BL}[INFO]${CL} Script was renamed: ${service} -> ${GN}${resolved_service}${CL}"
+    log_write "Container $container: slug ${service} resolved to ${resolved_service}"
+    service="${resolved_service}"
   fi
 
   echo -e "${BL}[INFO]${CL} Detected service: ${GN}${service}${CL}"
@@ -594,10 +648,21 @@ for container in $CHOICE; do
     log_result "$container" "$service" "SKIPPED" "Storage critically low on /boot (>80%)"
     log_write "Container $container ($service): SKIPPED — storage critically low on /boot"
   elif [ "$BACKUP_CHOICE" == "yes" ]; then
-    msg_error "Update failed for container $container (exit code: $exit_code) — attempting restore"
+    msg_error "Update failed for container $container ($service, exit code: $exit_code) — attempting restore"
     log_write "Container $container ($service): FAILED (exit $exit_code) — attempting restore"
     msg_info "Restoring LXC $container from backup ($STORAGE_CHOICE)"
-    pct stop $container
+    wait
+    pct stop $container &>/dev/null || true
+    for _ in {1..30}; do
+      [[ "$(pct status $container 2>/dev/null)" == "status: stopped" ]] && break
+      sleep 1
+    done
+    if [[ "$(pct status $container 2>/dev/null)" != "status: stopped" ]]; then
+      msg_error "Container $container did not stop, so it cannot be restored"
+      log_result "$container" "$service" "FAILED" "Update failed (exit $exit_code) — container did not stop for the restore"
+      log_write "Container $container ($service): FAILED — container did not stop for the restore"
+      exit 235
+    fi
     LXC_STORAGE=$(pct config $container | awk -F '[:,]' '/rootfs/ {print $2}')
     BACKUP_ENTRY=$(pvesm list "$STORAGE_CHOICE" 2>/dev/null | awk -v ctid="$container" '$1 ~ "vzdump-lxc-"ctid"-" || $1 ~ "/ct/"ctid"/" {print $1}' | sort -r | head -n1)
     if [ -z "$BACKUP_ENTRY" ]; then
@@ -606,22 +671,22 @@ for container in $CHOICE; do
       log_write "Container $container ($service): FAILED — no backup found for restore"
       exit 235
     fi
-    msg_info "Restoring from: $BACKUP_ENTRY"
-    pct restore $container "$BACKUP_ENTRY" --storage $LXC_STORAGE --force >/dev/null 2>&1
+    restore_output=$(pct restore $container "$BACKUP_ENTRY" --storage $LXC_STORAGE --force 2>&1)
     restorestatus=$?
     if [ $restorestatus -eq 0 ]; then
       pct start $container
-      msg_ok "Container $container successfully restored from backup"
+      msg_ok "Container $container restored from ${BACKUP_ENTRY}"
       log_result "$container" "$service" "RESTORED" "Update failed (exit $exit_code) — restored from backup"
       log_write "Container $container ($service): RESTORED from $BACKUP_ENTRY"
     else
-      msg_error "Restore failed for container $container"
+      log_write "Container $container: pct restore failed:"$'\n'"$restore_output"
+      msg_error "Restore failed for container $container: $(failure_reason "$restore_output")"
       log_result "$container" "$service" "FAILED" "Update failed (exit $exit_code) — restore also failed"
       log_write "Container $container ($service): FAILED — restore also failed"
       exit 235
     fi
   else
-    msg_error "Update failed for container $container (exit code: $exit_code)"
+    msg_error "Update failed for container $container ($service, exit code: $exit_code)"
     log_result "$container" "$service" "FAILED" "Exit code $exit_code"
     log_write "Container $container ($service): FAILED (exit $exit_code)"
     if [[ "$var_continue_on_error" == "yes" ]]; then

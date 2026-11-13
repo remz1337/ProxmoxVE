@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: MickLesk (Canbiz)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -36,9 +37,9 @@ function update_script() {
     msg_ok "Services Stopped"
 
     create_backup /opt/adventurelog/backend/server/.env \
-      /opt/adventurelog/backend/server/media
+      /opt/adventurelog/frontend/.env
 
-    fetch_and_deploy_gh_release "adventurelog" "seanmorley15/adventurelog" "tarball"
+    CLEAN_INSTALL=1 CLEAN_INSTALL_KEEP="backend/server/media" fetch_and_deploy_gh_release "adventurelog" "seanmorley15/adventurelog" "tarball"
     PYTHON_VERSION="3.13" setup_uv
 
     msg_info "Ensuring PostgreSQL Extensions"
@@ -55,12 +56,10 @@ function update_script() {
     fi
     $STD .venv/bin/python -m pip install --upgrade pip
     $STD .venv/bin/python -m pip install -r requirements.txt
-    $STD .venv/bin/python -m pip install 'djangorestframework<3.15'
     $STD .venv/bin/python -m manage collectstatic --noinput
     $STD .venv/bin/python -m manage migrate
 
     cd /opt/adventurelog/frontend
-    grep -q "^dangerouslyAllowAllBuilds:" ./pnpm-workspace.yaml 2>/dev/null || echo "dangerouslyAllowAllBuilds: true" >>./pnpm-workspace.yaml
     $STD pnpm i
     $STD pnpm build
     msg_ok "Updated AdventureLog"

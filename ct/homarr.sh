@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ) | Co-Author: CrazyWolf13
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -61,7 +62,7 @@ EOF
     fi
 
     msg_info "Updating Nodejs"
-    $STD apt update
+    apt_update_safe
     $STD apt upgrade nodejs -y
     msg_ok "Updated Nodejs"
 
@@ -83,6 +84,18 @@ EOF
     systemctl start redis-server
     msg_ok "Started Services"
     msg_ok "Updated successfully!"
+  fi
+  # v2.3.0's Debian build ships a musl better-sqlite3 (homarr-labs/homarr#7097).
+  mapfile -t MUSL_MODULES < <(find /opt/homarr -name better_sqlite3.node -exec grep -aqE "ld-musl|libc\.musl" {} \; -print)
+  if ((${#MUSL_MODULES[@]})); then
+    msg_info "Replacing musl better-sqlite3 build"
+    BSQ_VERSION=$(jq -r .version /opt/homarr/node_modules/better-sqlite3/package.json)
+    curl_with_retry "https://github.com/WiseLibs/better-sqlite3/releases/download/v${BSQ_VERSION}/better-sqlite3-v${BSQ_VERSION}-node-v$(node -p process.versions.modules)-linux-$(arch_resolve "x64" "arm64").tar.gz" /tmp/better-sqlite3.tar.gz
+    tar -xzf /tmp/better-sqlite3.tar.gz -C /tmp build/Release/better_sqlite3.node
+    for module in "${MUSL_MODULES[@]}"; do cp /tmp/build/Release/better_sqlite3.node "$module"; done
+    rm -rf /tmp/better-sqlite3.tar.gz /tmp/build
+    systemctl restart homarr
+    msg_ok "Replaced musl better-sqlite3 build"
   fi
   exit
 }

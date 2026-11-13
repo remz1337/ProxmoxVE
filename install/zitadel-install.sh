@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Copyright (c) 2021-2026 community-scripts ORG
-# Author: dave-yap | Co-Author: remz1337
+# Author: dave-yap (dave-yap) | Co-Author: remz1337, MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://zitadel.com/ | Github: https://github.com/zitadel/zitadel
 
@@ -13,303 +13,179 @@ setting_up_container
 network_check
 update_os
 
-# Configuration variables
-ZITADEL_DIR="/opt/zitadel"
-LOGIN_DIR="/opt/login"
-CONFIG_DIR="/etc/zitadel"
-ZITADEL_USER="zitadel"
-ZITADEL_GROUP="zitadel"
-DB_NAME="zitadel"
-DB_USER="zitadel"
-DB_PASSWORD="$(openssl rand -base64 32 | tr -d '=/+' | head -c 32)"
-POSTGRES_ADMIN_PASSWORD="$(openssl rand -base64 32 | tr -d '=/+' | head -c 32)"
-MASTERKEY="$(openssl rand -base64 32 | tr -d '=/+' | head -c 32)"
-API_PORT="8080"
-LOGIN_PORT="3000"
-
-# Detect server IP address
-SERVER_IP=$(hostname -I | awk '{print $1}')
-
-# Create zitadel user
-msg_info "Creating zitadel system user"
-groupadd --system "${ZITADEL_GROUP}"
-useradd --system --gid "${ZITADEL_GROUP}" --shell /bin/bash --home-dir "${ZITADEL_DIR}" "${ZITADEL_USER}"
-msg_ok "Created zitadel system user"
-
-fetch_and_deploy_gh_release "zitadel" "zitadel/zitadel" "prebuild" "latest" "${ZITADEL_DIR}" "zitadel-linux-amd64.tar.gz"
-chown -R "${ZITADEL_USER}:${ZITADEL_GROUP}" "${ZITADEL_DIR}"
-
-fetch_and_deploy_gh_release "login" "zitadel/zitadel" "prebuild" "latest" "${LOGIN_DIR}" "zitadel-login.tar.gz"
-chown -R "${ZITADEL_USER}:${ZITADEL_GROUP}" "${LOGIN_DIR}"
-
-NODE_VERSION="24" setup_nodejs
+var_zitadel_login="${var_zitadel_login:-v2}"
 
 PG_VERSION="17" setup_postgresql
+PG_DB_NAME="zitadel" PG_DB_USER="zitadel" setup_postgresql_db
+fetch_and_deploy_gh_release "zitadel" "zitadel/zitadel" "prebuild" "latest" "/usr/local/bin" "zitadel-linux-$(arch_resolve).tar.gz"
 
-setup_go
-
-msg_info "Configuring Postgresql"
-$STD sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '${POSTGRES_ADMIN_PASSWORD}';"
-msg_ok "Configured PostgreSQL"
-
-msg_info "Installing Zitadel"
-cd "${ZITADEL_DIR}"
-mkdir -p ${CONFIG_DIR}
-echo -n "${MASTERKEY}" > ${CONFIG_DIR}/.masterkey
-chmod 600 "${CONFIG_DIR}/.masterkey"
-chown "${ZITADEL_USER}:${ZITADEL_GROUP}" "${CONFIG_DIR}/.masterkey"
-
-# Update config.yaml for network access
-cat > "${CONFIG_DIR}/config.yaml" <<EOF
-ExternalSecure: false
-ExternalDomain: ${SERVER_IP}
-ExternalPort: ${API_PORT}
-
+msg_info "Configuring Zitadel"
+mkdir -p /opt/zitadel
+random_password 32 >/opt/zitadel/.masterkey
+ADMIN_PASS="$(random_password 20)Aa1!"
+cat <<EOF >/opt/zitadel/config.yaml
+ExternalDomain: ${LOCAL_IP}
+ExternalPort: 8080
 TLS:
   Enabled: false
-
-Log:
-  Level: info
-  Formatter:
-    Format: text
-
 Database:
   Postgres:
     Database: ${DB_NAME}
     Host: localhost
     Port: 5432
-    AwaitInitialConn: 5m
-    MaxOpenConns: 20
-    MaxIdleConns: 20
-    ConnMaxLifetime: 60m
-    ConnMaxIdleTime: 10m
+    Database: zitadel
     User:
-      Username: ${DB_USER}
-      Password: ${DB_PASSWORD}
+      Username: zitadel
+      Password: ${PG_DB_PASS}
       SSL:
         Mode: disable
-    Admin:
-      Username: postgres
-      Password: ${POSTGRES_ADMIN_PASSWORD}
-      SSL:
-        Mode: disable
-
-FirstInstance:
-  LoginClientPatPath: login-client.pat
-  PatPath: admin.pat
-  InstanceName: ZITADEL
-  DefaultLanguage: en
-  Org:
-    LoginClient:
-      Machine:
-        Username: login-client
-        Name: Automatically Initialized IAM Login Client
-      Pat:
-        ExpirationDate: 2099-01-01T00:00:00Z
-    Machine:
-      Machine:
-        Username: admin
-        Name: Automatically Initialized IAM admin Client
-      Pat:
-        ExpirationDate: 2099-01-01T00:00:00Z
-    Human:
-      Username: zitadel-admin@zitadel.localhost
-      Password: Password1!
-      PasswordChangeRequired: false
-
+Machine:
+  Identification:
+    Hostname:
+      Enabled: true
+EOF
+if [[ "$var_zitadel_login" == "v1" ]]; then
+  cat <<EOF >>/opt/zitadel/config.yaml
+Port: 8080
+ExternalSecure: false
 DefaultInstance:
   Features:
     LoginV2:
-      BaseURI: http://${SERVER_IP}:${LOGIN_PORT}/ui/v2/login
+      Required: false
+FirstInstance:
+  Org:
+    Human:
+      UserName: zitadel-admin@zitadel.localhost
+      Password: ${ADMIN_PASS}
+      PasswordChangeRequired: true
 EOF
-chown "${ZITADEL_USER}:${ZITADEL_GROUP}" "${CONFIG_DIR}/config.yaml"
-
-# Initialize database as zitadel user (no masterkey needed for init)
-$STD sudo -u ${ZITADEL_USER} ./zitadel init --config ${CONFIG_DIR}/config.yaml
-
-# Run setup phase as zitadel user (with masterkey and steps)
-$STD sudo -u ${ZITADEL_USER} ./zitadel setup --config ${CONFIG_DIR}/config.yaml --steps ${CONFIG_DIR}/config.yaml --masterkey "${MASTERKEY}"
-
-#Read client token
-CLIENT_PAT=$(cat ${ZITADEL_DIR}/login-client.pat)
-
-# Update Login V2 login.env file
-cat > "${CONFIG_DIR}/login.env" <<EOF
-NEXT_PUBLIC_BASE_PATH=/ui/v2/login
-EMAIL_VERIFICATION=false
-ZITADEL_API_URL=http://${SERVER_IP}:${API_PORT}
-ZITADEL_SERVICE_USER_TOKEN_FILE=../../login-client.pat
-ZITADEL_SERVICE_USER_TOKEN=${CLIENT_PAT}
+else
+  cat <<EOF >>/opt/zitadel/config.yaml
+Port: 8081
+ExternalSecure: true
+DefaultInstance:
+  Features:
+    LoginV2:
+      Required: true
+FirstInstance:
+  LoginClientPatPath: /opt/zitadel/login-client.pat
+  Org:
+    Human:
+      UserName: zitadel-admin@zitadel.localhost
+      Password: ${ADMIN_PASS}
+      PasswordChangeRequired: true
+    LoginClient:
+      Machine:
+        Username: login-client
+        Name: Automatically Initialized IAM_LOGIN_CLIENT
+      Pat:
+        ExpirationDate: 2099-01-01T00:00:00Z
 EOF
-chown "${ZITADEL_USER}:${ZITADEL_GROUP}" "${CONFIG_DIR}/login.env"
+fi
+chmod 600 /opt/zitadel/.masterkey /opt/zitadel/config.yaml
+msg_ok "Configured Zitadel"
 
-# Create api.env file
-cat > "${CONFIG_DIR}/api.env" <<EOF
-ZITADEL_MASTERKEY=${MASTERKEY}
-ZITADEL_DATABASE_POSTGRES_HOST=localhost
-ZITADEL_DATABASE_POSTGRES_PORT=5432
-ZITADEL_DATABASE_POSTGRES_DATABASE=${DB_NAME}
-ZITADEL_DATABASE_POSTGRES_USER_USERNAME=${DB_USER}
-ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=${DB_PASSWORD}
-ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable
-ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=postgres
-ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
-ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable
+msg_info "Initializing Zitadel"
+$STD zitadel init zitadel --config /opt/zitadel/config.yaml
+$STD zitadel setup --masterkeyFile /opt/zitadel/.masterkey --config /opt/zitadel/config.yaml --steps /opt/zitadel/config.yaml
+cat <<EOF >>~/zitadel.creds
+
+Zitadel Admin
+Username: zitadel-admin@zitadel.localhost
+Initial Password: ${ADMIN_PASS}
 EOF
+chmod 600 ~/zitadel.creds
+msg_ok "Initialized Zitadel"
 
-# Set secure permissions
-chmod 600 "${CONFIG_DIR}/api.env"
-chown "${ZITADEL_USER}:${ZITADEL_GROUP}" "${CONFIG_DIR}/api.env"
-msg_ok "Installed Zitadel"
-
-msg_info "Creating Services"
-# Create API service
-cat > /etc/systemd/system/zitadel-api.service <<EOF
+msg_info "Creating Service"
+cat <<EOF >/etc/systemd/system/zitadel.service
 [Unit]
-Description=ZITADEL API Server
+Description=Zitadel
 After=network.target postgresql.service
 Requires=postgresql.service
 
 [Service]
 Type=simple
-User=${ZITADEL_USER}
-Group=${ZITADEL_GROUP}
-WorkingDirectory=${ZITADEL_DIR}
-EnvironmentFile=${CONFIG_DIR}/api.env
-Environment="PATH=/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin"
-ExecStart=${ZITADEL_DIR}/zitadel start --config ${CONFIG_DIR}/config.yaml --masterkeyFile ${CONFIG_DIR}/.masterkey
+ExecStart=/usr/local/bin/zitadel start --masterkeyFile /opt/zitadel/.masterkey --config /opt/zitadel/config.yaml
 Restart=always
-RestartSec=10
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
+systemctl enable -q --now zitadel
+msg_ok "Created Service"
 
-# Create Login V2 service
-cat > /etc/systemd/system/zitadel-login.service <<EOF
+if [[ "$var_zitadel_login" != "v1" ]]; then
+  NODE_VERSION="24" setup_nodejs
+  fetch_and_deploy_gh_release "zitadel-login" "zitadel/zitadel" "prebuild" "latest" "/opt/zitadel-login" "zitadel-login.tar.gz"
+
+  msg_info "Setting up Zitadel Login"
+  $STD apt install -y nginx
+  create_self_signed_cert "zitadel"
+  cat <<EOF >/opt/zitadel/login.env
+ZITADEL_API_URL=http://127.0.0.1:8081
+ZITADEL_API_AWAITINITIALCONN=5m
+ZITADEL_SERVICE_USER_TOKEN_FILE=/opt/zitadel/login-client.pat
+ZITADEL_SESSION_COOKIE_SECRET=$(random_password 48)
+NEXT_PUBLIC_BASE_PATH=/ui/v2/login
+HOSTNAME=127.0.0.1
+PORT=3000
+EOF
+  chmod 600 /opt/zitadel/login.env /opt/zitadel/login-client.pat
+  cat <<EOF >/etc/systemd/system/zitadel-login.service
 [Unit]
-Description=ZITADEL Login V2 Service
-After=network.target zitadel-api.service
-Requires=zitadel-api.service
+Description=Zitadel Login
+After=network.target zitadel.service
+Wants=zitadel.service
 
 [Service]
 Type=simple
-User=${ZITADEL_USER}
-Group=${ZITADEL_GROUP}
-WorkingDirectory=${LOGIN_DIR}/apps/login
-EnvironmentFile=${CONFIG_DIR}/login.env
-Environment="PATH=/usr/local/bin:/usr/bin:/bin"
-Environment="NODE_ENV=production"
-ExecStart=node ${LOGIN_DIR}/apps/login/server.js
+WorkingDirectory=/opt/zitadel-login
+EnvironmentFile=/opt/zitadel/login.env
+ExecStart=/opt/zitadel-login/entrypoint.sh node apps/login/server.js
 Restart=always
-RestartSec=10
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
+  systemctl enable -q --now zitadel-login
+  cat <<'EOF' >/etc/nginx/sites-available/zitadel
+server {
+    listen 8080 ssl;
+    http2 on;
+    server_name _;
+    ssl_certificate /etc/ssl/zitadel/zitadel.crt;
+    ssl_certificate_key /etc/ssl/zitadel/zitadel.key;
+    error_page 497 =301 https://$http_host$request_uri;
 
-# Enable and start API service
-systemctl enable -q --now zitadel-api.service
+    location = / {
+        return 302 /ui/v2/login/;
+    }
 
-# Wait for API to start
-sleep 5
+    location /ui/v2/login {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-# Enable and start Login service
-systemctl enable -q --now zitadel-login.service
-msg_ok "Created Services"
+    location /api/ {
+        rewrite ^/api(/.*)$ $1 break;
+        grpc_pass grpc://127.0.0.1:8081;
+        grpc_set_header Host $http_host;
+    }
 
-msg_info "Saving Credentials"
-# Create credentials file
-cat > "${CONFIG_DIR}/INSTALLATION_INFO.txt" <<EOF
-################################################################################
-# ZITADEL Installation Information
-# Generated: $(date)
-################################################################################
-
-SERVER INFORMATION:
--------------------
-Server IP: ${SERVER_IP}
-API Port: ${API_PORT}
-Login Port: ${LOGIN_PORT}
-
-ACCESS URLS:
-------------
-Management Console: http://${SERVER_IP}:${API_PORT}/ui/console
-Login V2 UI: http://${SERVER_IP}:${LOGIN_PORT}/ui/v2/login
-API Endpoint: http://${SERVER_IP}:${API_PORT}
-
-DEFAULT ADMIN CREDENTIALS:
---------------------------
-Username: zitadel-admin@zitadel.localhost
-Password: Password1!
-
-IMPORTANT: Change this password immediately after first login!
-
-DATABASE CREDENTIALS:
----------------------
-Database Name: ${DB_NAME}
-Database User: ${DB_USER}
-Database Password: ${DB_PASSWORD}
-PostgreSQL Admin Password: ${POSTGRES_ADMIN_PASSWORD}
-
-SECURITY:
----------
-Master Key: ${MASTERKEY}
-
-IMPORTANT: Keep these credentials secure and backup this file!
-
-VERIFICATION:
--------------
-1. Check API health:
-   curl http://${SERVER_IP}:${API_PORT}/debug/healthz
-2. Access Management Console:
-   http://${SERVER_IP}:${API_PORT}/ui/console
-3. Login with admin credentials above
-
-DATABASE INFORMATION:
---------------------
-The database and user are automatically created by ZITADEL on first startup.
-ZITADEL uses the admin credentials to create:
-  - Database: ${DB_NAME}
-  - User: ${DB_USER}
-  - Schemas: eventstore, projections, system
-
-PRODUCTION NOTES:
------------------
-1. This installation uses HTTP (not HTTPS) for simplicity
-2. For production with HTTPS:
-   - Set ExternalSecure: true in config.yaml
-   - Configure TLS certificates
-   - Update firewall rules for port 443
-3. Change all default passwords immediately
-4. Set up regular database backups
-5. Configure proper monitoring and alerting
-6. Review and harden PostgreSQL security settings
-
-BACKUP COMMANDS:
-----------------
-Database backup:
-  PGPASSWORD=${DB_PASSWORD} pg_dump -h localhost -U ${DB_USER} ${DB_NAME} > zitadel_backup_\$(date +%Y%m%d).sql
-
-Database restore:
-  PGPASSWORD=${DB_PASSWORD} psql -h localhost -U ${DB_USER} ${DB_NAME} < zitadel_backup_YYYYMMDD.sql
-
-################################################################################
+    location / {
+        grpc_pass grpc://127.0.0.1:8081;
+        grpc_set_header Host $http_host;
+    }
+}
 EOF
-chmod 600 "${CONFIG_DIR}/INSTALLATION_INFO.txt"
-chown "${ZITADEL_USER}:${ZITADEL_GROUP}" "${CONFIG_DIR}/INSTALLATION_INFO.txt"
-cp ${ZITADEL_DIR}/admin.pat ${CONFIG_DIR}/admin.pat.BAK
-cp ${ZITADEL_DIR}/login-client.pat ${CONFIG_DIR}/login-client.pat.BAK
-msg_ok "Saved Credentials"
-
-msg_info "Create zitadel-rerun.sh"
-cat <<EOF >~/zitadel-rerun.sh
-systemctl stop zitadel-api zitadel-login
-/opt/zitadel/zitadel setup --masterkeyFile ${CONFIG_DIR}/.masterkey --config ${CONFIG_DIR}/config.yaml
-systemctl restart zitadel-api zitadel-login
-EOF
-chmod +x ~/zitadel-rerun.sh
-msg_ok "Bash script for rerunning Zitadel after changing Zitadel config.yaml"
+  nginx_enable_site "zitadel"
+  msg_ok "Set up Zitadel Login"
+fi
 
 motd_ssh
 customize

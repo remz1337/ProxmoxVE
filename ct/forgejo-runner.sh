@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Simon Friedrich (lengschder97)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -18,6 +19,7 @@ var_nesting="${var_nesting:-1}"
 var_keyctl="${var_keyctl:-1}"
 
 export var_forgejo_instance="${var_forgejo_instance:-}"
+export var_forgejo_runner_uuid="${var_forgejo_runner_uuid:-}"
 export var_forgejo_runner_token="${var_forgejo_runner_token:-}"
 export var_runner_labels="${var_runner_labels:-}"
 
@@ -62,6 +64,10 @@ function update_script() {
 if [[ -n "${mode:-}" ]]; then
   if [[ -z "${var_forgejo_instance:-}" ]]; then
     msg_error "var_forgejo_instance is required for unattended installs."
+    exit 1
+  fi
+  if [[ -z "${var_forgejo_runner_uuid:-}" ]]; then
+    msg_error "var_forgejo_runner_uuid is required for unattended installs."
     exit 1
   fi
   if [[ -z "${var_forgejo_runner_token:-}" ]]; then

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -28,8 +29,16 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
+
+  if grep -q "packages.openmediavault.org" /etc/apt/sources.list.d/openmediavault.list; then
+    msg_info "Migrating OpenMediaVault package repository"
+    curl -fsSL "https://openmediavault.github.io/packages/archive.key" | gpg --dearmor >"/etc/apt/trusted.gpg.d/openmediavault-archive-keyring.gpg"
+    sed -i 's#https\?://packages.openmediavault.org/public#https://openmediavault.github.io/packages#' /etc/apt/sources.list.d/openmediavault.list
+    msg_ok "Migrated OpenMediaVault package repository"
+  fi
+
   msg_info "Updating ${APP} LXC"
-  $STD apt update
+  apt_update_safe
   $STD apt -y upgrade
   msg_ok "Updated successfully!"
   exit

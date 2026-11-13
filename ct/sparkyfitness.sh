@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Tom Frenzel (tomfrenzel)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -8,7 +9,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 APP="SparkyFitness"
 var_tags="${var_tags:-health;fitness}"
 var_cpu="${var_cpu:-2}"
-var_ram="${var_ram:-2048}"
+var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-7}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
@@ -30,16 +31,13 @@ function update_script() {
     exit
   fi
 
+  ensure_dependencies git
   if check_for_gh_release "sparkyfitness" "CodeWithCJ/SparkyFitness"; then
     msg_info "Stopping Services"
     systemctl stop sparkyfitness-server nginx
     msg_ok "Stopped Services"
 
-    create_backup /opt/sparkyfitness/SparkyFitnessServer/uploads /opt/sparkyfitness/SparkyFitnessServer/backup
-
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "sparkyfitness" "CodeWithCJ/SparkyFitness" "tarball"
-
-    restore_backup
+    CLEAN_INSTALL=1 CLEAN_INSTALL_KEEP="SparkyFitnessServer/uploads SparkyFitnessServer/backup" fetch_and_deploy_gh_release "sparkyfitness" "CodeWithCJ/SparkyFitness" "tarball"
 
     PNPM_VERSION="$(jq -r '.packageManager | split("@")[1]' /opt/sparkyfitness/package.json)"
     NODE_VERSION="25" NODE_MODULE="pnpm@${PNPM_VERSION}" setup_nodejs
@@ -59,11 +57,14 @@ function update_script() {
 
     msg_info "Refreshing Nginx Config"
     FRONTEND_URL=$(grep -oP '^SPARKY_FITNESS_FRONTEND_URL=\K.*' /etc/sparkyfitness/.env)
+    NGINX_RESOLVER=$(awk '$1=="nameserver" {ns=$2; sub(/%.*/, "", ns); printf "%s%s", sep, (ns ~ /:/ ? "[" ns "]" : ns); sep=" "}' /etc/resolv.conf)
     sed \
       -e 's|${SPARKY_FITNESS_SERVER_HOST}|127.0.0.1|g' \
       -e 's|${SPARKY_FITNESS_SERVER_PORT}|3010|g' \
       -e "s|\${SPARKY_FITNESS_FRONTEND_URL}|${FRONTEND_URL}|g" \
       -e 's|${NGINX_LISTEN_PORT}|80|g' \
+      -e 's|${NGINX_RATE_LIMIT}|5r/s|g' \
+      -e "s|\${NGINX_RESOLVER}|${NGINX_RESOLVER:-127.0.0.1}|g" \
       -e 's|${NGINX_ACCESS_LOG}|/var/log/nginx/sparkyfitness.access.log|g' \
       -e 's|${NGINX_ERROR_LOG}|/var/log/nginx/sparkyfitness.error.log|g' \
       -e 's|root /usr/share/nginx/html;|root /var/www/sparkyfitness;|g' \
@@ -82,7 +83,7 @@ function update_script() {
   Type=simple
   WorkingDirectory=/opt/sparkyfitness/SparkyFitnessServer
   EnvironmentFile=/etc/sparkyfitness/.env
-  ExecStart=/opt/sparkyfitness/SparkyFitnessServer/node_modules/.bin/tsx SparkyFitnessServer.js
+  ExecStart=/opt/sparkyfitness/SparkyFitnessServer/node_modules/.bin/tsx index.ts
   Restart=always
   RestartSec=5
 

@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
-# Copyright (c) 2021-2026 remz1337
-# Author: remz1337
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
+# Copyright (c) 2021-2026 community-scripts ORG
+# Author: MickLesk (CanbiZ)
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/stalwartlabs/stalwart
 
 APP="Stalwart"
-var_tags="${var_tags:-email}"
-var_cpu="${var_cpu:-4}"
+var_tags="${var_tags:-mail;smtp;imap}"
+var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-4096}"
-var_disk="${var_disk:-8}"
+var_disk="${var_disk:-20}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
+#var_arm64="${var_arm64:-no}" # unset = ask the user; set yes/no only when verified
 var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
@@ -24,26 +26,23 @@ function update_script() {
   check_container_storage
   check_container_resources
 
-  if [[ ! -f /opt/stalwart ]]; then
+  if [[ ! -d /opt/stalwart ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
-  if check_for_gh_release "stalwart" "stalwartlabs/stalwart"; then
-    msg_info "Stopping service"
+
+  RELEASE="v0.16.27"
+  if check_for_gh_release "stalwart" "stalwartlabs/stalwart" "${RELEASE}" "Stalwart v1 changes the data store layout and requires an offline migration with stalwartlabs/stalwart-migrate; pinned until this script supports it"; then
+    msg_info "Stopping Service"
     systemctl stop stalwart
-    msg_ok "Service stopped"
+    msg_ok "Stopped Service"
 
-    msg_info "Updating service"
-    /opt/stalwart/bin/stalwart --config /opt/stalwart/etc/config.toml --export /opt/stalwart/export
-    chown -R stalwart:stalwart /opt/stalwart/export
-    rm -rf /opt/stalwart/bin/stalwart
-    fetch_and_deploy_gh_release "stalwart" "stalwartlabs/stalwart" "singlefile" "latest" "/opt/stalwart/bin" "stalwart-x86_64-unknown-linux-gnu"
-    chmod +x /opt/stalwart/bin/stalwart
-	msg_ok "Updated service"
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "stalwart" "stalwartlabs/stalwart" "prebuild" "${RELEASE}" "/opt/stalwart" "stalwart-$(arch_resolve x86_64 aarch64)-unknown-linux-gnu.tar.gz"
+    chmod +x /opt/stalwart/stalwart
 
-    msg_info "Starting service"
+    msg_info "Starting Service"
     systemctl start stalwart
-    msg_ok "Started service"
+    msg_ok "Started Service"
     msg_ok "Updated successfully!"
   fi
   exit
@@ -53,7 +52,9 @@ start
 build_container
 description
 
-msg_ok "Completed successfully!\n"
+msg_ok "Completed Successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW} Access it using the following URL:${CL}"
-echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080/login${CL}"
+echo -e "${INFO}${YW}Access it using the following URL:${CL}"
+echo -e "${GATEWAY}${BGN}http://${IP}:8080/admin${CL}"
+echo -e "${INFO}${YW}The bootstrap admin password was printed to the service log:${CL}"
+echo -e "${TAB}${DEFAULT}${BGN}journalctl -u stalwart | grep -A8 'bootstrap mode'${CL}"

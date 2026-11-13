@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck | Co-Author: havardthom | Co-Author: Slaviša Arežina (tremor021)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -48,7 +49,13 @@ function update_script() {
 
     msg_info "Installing uv-based Open-WebUI"
     PYTHON_VERSION="3.12" setup_uv
-    $STD uv tool install --python 3.12 --constraint <(echo "numba>=0.60") open-webui[all]
+    installed=0
+    for attempt in 1 2; do
+      $STD uv tool install --python 3.12 open-webui[all] && { installed=1; break; }
+      msg_warn "Open WebUI install attempt $attempt failed, retrying..."
+      sleep 10
+    done
+    ((installed)) || $STD uv tool install --python 3.12 open-webui[all]
     msg_ok "Installed uv-based Open-WebUI"
 
     msg_info "Restoring data"
@@ -114,7 +121,20 @@ EOF
 
   msg_info "Updating Open WebUI via uv"
   PYTHON_VERSION="3.12" setup_uv
-  $STD uv tool install --force --python 3.12 --constraint <(echo "numba>=0.60") open-webui[all]
+  OWUI_PYTHON="/root/.local/share/uv/tools/open-webui/bin/python3.12"
+  OTEL_ARGS=()
+  if [[ -x "$OWUI_PYTHON" ]]; then
+    while IFS= read -r pkg; do
+      OTEL_ARGS+=(--with "$pkg")
+    done < <(uv pip list --python "$OWUI_PYTHON" --format freeze 2>/dev/null | grep -i '^opentelemetry-' | cut -d= -f1)
+  fi
+  updated=0
+  for attempt in 1 2; do
+    $STD uv tool install --force --python 3.12 "${OTEL_ARGS[@]}" open-webui[all] && { updated=1; break; }
+    msg_warn "Open WebUI update attempt $attempt failed, retrying..."
+    sleep 10
+  done
+  ((updated)) || $STD uv tool install --force --python 3.12 "${OTEL_ARGS[@]}" open-webui[all]
   systemctl restart open-webui
   msg_ok "Updated Open WebUI"
   msg_ok "Updated successfully!"

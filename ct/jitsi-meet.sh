@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -11,9 +12,17 @@ var_cpu="${var_cpu:-4}"
 var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-12}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
+
+# Optional public setup, read by the install script (all empty = LAN-only install as before).
+# Without the export they never reach the container.
+export var_jitsi_domain="${var_jitsi_domain:-}"
+export var_jitsi_le_email="${var_jitsi_le_email:-}"
+export var_jitsi_public_ip="${var_jitsi_public_ip:-}"
+export var_jitsi_admin_user="${var_jitsi_admin_user:-}"
+export var_jitsi_admin_pass="${var_jitsi_admin_pass:-}"
 
 header_info "$APP"
 variables
@@ -31,7 +40,7 @@ function update_script() {
   fi
 
   msg_info "Updating Jitsi Meet"
-  $STD apt update
+  apt_update_safe
   $STD apt install -y --only-upgrade \
     jitsi-meet \
     jicofo \
@@ -48,4 +57,7 @@ description
 msg_ok "Completed Successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW}Access it using the following URL:${CL}"
-echo -e "${GATEWAY}${BGN}https://${IP}${CL}"
+echo -e "${GATEWAY}${BGN}https://${var_jitsi_domain:-$IP}${CL}"
+if [[ -n "${var_jitsi_domain}" ]]; then
+  echo -e "${INFO}${YW}Forward TCP 80/443 and UDP 10000 to the container. Secure-domain credentials (if enabled) are in ~/jitsi-meet.creds inside the container.${CL}"
+fi

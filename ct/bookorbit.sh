@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -8,7 +9,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 APP="BookOrbit"
 var_tags="${var_tags:-books;library;reading}"
 var_cpu="${var_cpu:-2}"
-var_ram="${var_ram:-2048}"
+var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-10}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
@@ -47,7 +48,12 @@ function update_script() {
 
     $STD corepack prepare "pnpm@${PNPM_VERSION}" --activate
     $STD pnpm install --frozen-lockfile
-    $STD pnpm --filter client run build-only
+    # vite's bundler (rolldown) crashes at random on some builds, rolldown#10860.
+    for attempt in 1 2 3; do
+      $STD pnpm --filter client run build-only && break
+      [[ $attempt -eq 3 ]] && { msg_error "Client build failed three times"; exit 1; }
+      msg_warn "Client build failed (attempt $attempt), retrying"
+    done
     $STD pnpm --filter server run build
     cp -r /opt/bookorbit/client/dist /opt/bookorbit/server/public
     mkdir -p /opt/bookorbit/server/migrations
@@ -56,6 +62,10 @@ function update_script() {
     restore_backup
     APP_VER=$(cat ~/.bookorbit)
     sed -i "s/^APP_VERSION=.*/APP_VERSION=v$APP_VER/" /opt/bookorbit/.env
+    if ! grep -q '^TimeoutStartSec=' /etc/systemd/system/bookorbit.service; then
+      sed -i '/^\[Service\]/a TimeoutStartSec=infinity' /etc/systemd/system/bookorbit.service
+      systemctl daemon-reload
+    fi
     msg_ok "Rebuilt Application"
 
     msg_info "Updating Kobo Python Runtime"

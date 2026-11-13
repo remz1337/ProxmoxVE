@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -28,6 +29,18 @@ function update_script() {
   if [[ ! -d /opt/docuseal ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
+  fi
+
+  ensure_dependencies musl
+  [[ -f /opt/pdfium/lib/libpdfium.so ]] || rm -f "$HOME/.pdfium"
+  fetch_and_deploy_gh_release "pdfium" "docusealco/pdfium-binaries" "prebuild" "latest" "/opt/pdfium" "pdfium-musl-$(arch_resolve "x86_64" "aarch64").zip"
+  if ! cmp -s /opt/pdfium/lib/libpdfium.so /usr/lib/libpdfium.so; then
+    msg_info "Updating PDFium"
+    install -m 644 /opt/pdfium/lib/libpdfium.so /usr/lib/libpdfium.so
+    echo "/usr/lib/$(arch_resolve "x86_64" "aarch64")-linux-musl" >/etc/ld.so.conf.d/musl.conf
+    ldconfig
+    systemctl restart docuseal docuseal-sidekiq
+    msg_ok "Updated PDFium"
   fi
 
   if check_for_gh_release "docuseal" "docusealco/docuseal"; then

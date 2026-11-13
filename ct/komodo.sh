@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -34,7 +35,7 @@ function update_script() {
 
   msg_warn "⚠️  ${APP} has been migrated to an addon script."
   echo ""
-  msg_info "This is a one-time migration. After this, you can update ${APP} anytime with:"
+  msg_custom "ℹ️" "${YW}" "This is a one-time migration. After this, you can update ${APP} anytime with:"
   echo -e "${TAB}${TAB}${GN}update_komodo${CL}  or  ${GN}bash <(curl -fsSL ${ADDON_SCRIPT})${CL}"
   echo ""
   read -r -p "${TAB}Migrate update function now? [y/N]: " CONFIRM
@@ -65,7 +66,7 @@ MIGRATION_EOF
   ln -sf /usr/bin/update /usr/bin/update_komodo 2>/dev/null || true
   msg_ok "Migration complete"
 
-  msg_info "Running addon update"
+  echo -e "${INFO}${YW}Running addon update${CL}"
   type=update bash <(curl -fsSL "${ADDON_SCRIPT}")
   exit
 }

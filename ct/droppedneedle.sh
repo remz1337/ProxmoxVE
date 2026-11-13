@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: michelroegl-brunner | Co-Author: vhsdream
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -90,8 +91,9 @@ User=root
 WorkingDirectory=/opt/droppedneedle/backend
 Environment=ROOT_APP_DIR=/opt/droppedneedle/backend
 Environment=PORT=8688
+Environment=COMMIT_TAG=v$(<~/.droppedneedle)
 # Environment=SLSKD_DOWNLOADS_PATH=<path-to-slskd-downloads>
-ExecStart=/opt/droppedneedle/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8688 --loop uvloop --http httptools --workers 1
+ExecStart=/opt/droppedneedle/venv/bin/python -m maintenance.automatic_upgrade --start-target
 Restart=on-failure
 RestartSec=5
 
@@ -100,8 +102,16 @@ WantedBy=multi-user.target
 EOF
       rm -f /etc/systemd/system/musicseerr.service
       msg_ok "Replaced systemd Service"
-    elif ! grep -q 'SLSKD' /etc/systemd/system/droppedneedle.service; then
-      sed -i '\|=8688$|a# Environment=SLSKD_DOWNLOADS_PATH=<path-to-slskd-downloads>' /etc/systemd/system/droppedneedle.service
+    else
+      if ! grep -q 'SLSKD' /etc/systemd/system/droppedneedle.service; then
+        sed -i '\|=8688$|a# Environment=SLSKD_DOWNLOADS_PATH=<path-to-slskd-downloads>' /etc/systemd/system/droppedneedle.service
+      fi
+      sed -i 's|^ExecStart=.*|ExecStart=/opt/droppedneedle/venv/bin/python -m maintenance.automatic_upgrade --start-target|' /etc/systemd/system/droppedneedle.service
+      if grep -q '^Environment=COMMIT_TAG=' /etc/systemd/system/droppedneedle.service; then
+        sed -i "s|^Environment=COMMIT_TAG=.*|Environment=COMMIT_TAG=v$(<~/.droppedneedle)|" /etc/systemd/system/droppedneedle.service
+      else
+        sed -i "\|=8688$|a Environment=COMMIT_TAG=v$(<~/.droppedneedle)" /etc/systemd/system/droppedneedle.service
+      fi
     fi
 
     systemctl daemon-reload

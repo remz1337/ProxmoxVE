@@ -15,6 +15,8 @@ update_os
 
 msg_info "Installing Dependencies"
 $STD apt install -y \
+  build-essential \
+  ccache \
   cmake \
   git \
   nftables \
@@ -26,11 +28,11 @@ $STD apt install -y \
 msg_ok "Installed Dependencies"
 
 NODE_VERSION="22" NODE_MODULE="pnpm@11.4.0" setup_nodejs
-setup_go
 RUST_PROFILE="minimal" setup_rust
 PG_VERSION="17" PG_MODULES="cron" setup_postgresql
 
 fetch_and_deploy_gh_release "firecrawl" "firecrawl/firecrawl" "tarball" "latest" "/opt/firecrawl"
+GO_VERSION="$(grep -m1 '^go ' /opt/firecrawl/apps/api/sharedLibs/go-html-to-md/go.mod | awk '{print $2}')" setup_go
 
 msg_info "Configuring FDB"
 FDB_VERSION="$(awk -F= '/^ARG FDB_VERSION=/{print $2; exit}' /opt/firecrawl/apps/api/Dockerfile)"
@@ -43,7 +45,6 @@ FDB_ARCH="$(get_system_arch)"
 fetch_and_deploy_gh_release "foundationdb-clients" "apple/foundationdb" "binary" "$FDB_VERSION" "/opt/foundationdb-clients" "foundationdb-clients_${FDB_VERSION}-1_${FDB_ARCH}.deb"
 msg_ok "Configured FDB"
 
-
 PG_DB_NAME="firecrawl" PG_DB_USER="firecrawl" PG_DB_EXTENSIONS="pgcrypto,pg_cron" PG_DB_CREDS_FILE="/dev/null" setup_postgresql_db
 
 msg_info "Configuring pg_cron"
@@ -55,7 +56,7 @@ msg_ok "Configured pg_cron"
 msg_info "Configuring RabbitMQ"
 systemctl enable -q --now rabbitmq-server
 until rabbitmqctl status &>/dev/null; do sleep 1; done
-RABBITMQ_PASSWORD="$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c24)"
+RABBITMQ_PASSWORD="$(random_password 24)"
 $STD rabbitmqctl add_user firecrawl "$RABBITMQ_PASSWORD"
 $STD rabbitmqctl set_permissions -p / firecrawl ".*" ".*" ".*"
 msg_ok "Configured RabbitMQ"

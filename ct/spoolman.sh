@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: MickLesk (Canbiz)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -29,8 +30,6 @@ function update_script() {
     exit
   fi
 
-  PYTHON_VERSION="3.14" setup_uv
-
   if check_for_gh_release "spoolman" "Donkie/Spoolman"; then
     msg_info "Stopping Service"
     systemctl stop spoolman
@@ -39,6 +38,7 @@ function update_script() {
     create_backup /opt/spoolman/.env
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "spoolman" "Donkie/Spoolman" "prebuild" "latest" "/opt/spoolman" "spoolman.zip"
+    PYTHON_VERSION="3.14" UV_PROJECT_DIR="/opt/spoolman" setup_uv
 
     restore_backup
 

@@ -17,7 +17,6 @@ msg_info "Installing Dependencies"
 $STD apt install -y \
   build-essential \
   git \
-  nginx \
   redis-server \
   atomicparsley \
   python3-dev \
@@ -25,13 +24,26 @@ $STD apt install -y \
   libsasl2-dev \
   libssl-dev \
   sqlite3 \
-  ffmpeg
+  ffmpeg \
+  libcairo2-dev \
+  libpango1.0-dev \
+  libjpeg-dev \
+  libgif-dev \
+  librsvg2-dev \
+  pkg-config
 msg_ok "Installed Dependencies"
 
-UV_PYTHON="3.13" setup_uv
+PYTHON_VERSION="3.13" setup_uv
 NODE_VERSION="24" setup_nodejs
 
 fetch_and_deploy_gh_release "deno" "denoland/deno" "prebuild" "latest" "/usr/local/bin" "deno-$(arch_resolve "x86_64" "aarch64")-unknown-linux-gnu.zip"
+fetch_and_deploy_gh_release "bgutil-ytdlp-pot-provider" "Brainicism/bgutil-ytdlp-pot-provider" "tarball"
+
+msg_info "Building BgUtil POT Provider Server"
+cd /opt/bgutil-ytdlp-pot-provider/server
+$STD npm ci
+$STD npx tsc
+msg_ok "Built BgUtil POT Provider Server"
 
 msg_info "Installing ElasticSearch"
 setup_deb822_repo \
@@ -85,8 +97,8 @@ if [[ -f /opt/tubearchivist/backend/requirements.plugins.txt ]]; then
   mkdir -p /opt/yt_plugins/bgutil
   $STD uv pip install --python /opt/tubearchivist/.venv/bin/python --target /opt/yt_plugins/bgutil -r /opt/tubearchivist/backend/requirements.plugins.txt
 fi
-TA_PASSWORD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c13)
-ES_PASSWORD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c13)
+TA_PASSWORD=$(random_password 13)
+ES_PASSWORD=$(random_password 13)
 mkdir -p /opt/tubearchivist/{cache,media}
 ln -sf /opt/tubearchivist/cache /cache
 ln -sf /opt/tubearchivist/media /youtube
@@ -94,7 +106,7 @@ cat <<EOF >/opt/tubearchivist/.env
 TA_HOST=http://${LOCAL_IP}:8000
 TA_USERNAME=admin
 TA_PASSWORD=${TA_PASSWORD}
-TA_BACKEND_PORT=8080
+TA_PORT=8000
 TA_APP_DIR=/opt/tubearchivist/backend
 TA_CACHE_DIR=/cache
 TA_MEDIA_DIR=/youtube
@@ -116,91 +128,9 @@ EOF
 systemctl enable -q --now redis-server
 msg_ok "Set up Tube Archivist"
 
-msg_info "Configuring Nginx"
-sed -i 's/^user www-data;$/user root;/' /etc/nginx/nginx.conf
-cat <<'EOF' >/etc/nginx/sites-available/default
-server {
-    listen 8000;
-
-    location = /_auth {
-        internal;
-        proxy_pass http://localhost:8080/api/ping/;
-        proxy_pass_request_body off;
-        proxy_set_header Content-Length "";
-        proxy_set_header Host $http_host;
-        proxy_set_header Cookie $http_cookie;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    location /cache/videos/ {
-        auth_request /_auth;
-        alias /cache/videos/;
-    }
-
-    location /cache/channels/ {
-        auth_request /_auth;
-        alias /cache/channels/;
-    }
-
-    location /cache/playlists/ {
-        auth_request /_auth;
-        alias /cache/playlists/;
-    }
-
-    location /media/ {
-        auth_request /_auth;
-        alias /youtube/;
-        types {
-            text/vtt vtt;
-        }
-    }
-
-    location /youtube/ {
-        auth_request /_auth;
-        alias /youtube/;
-        types {
-            video/mp4 mp4;
-        }
-    }
-
-    location /api {
-        include proxy_params;
-        proxy_pass http://localhost:8080;
-    }
-
-    location /admin {
-        include proxy_params;
-        proxy_pass http://localhost:8080;
-    }
-
-    location /static/ {
-        alias /opt/tubearchivist/backend/staticfiles/;
-    }
-
-    root /opt/tubearchivist/backend/static;
-    index index.html;
-
-    location ~* ^/(?!static/|cache/).*\.(?:css|js|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
-        try_files $uri $uri/ /index.html =404;
-    }
-
-    location = /index.html {
-        add_header Cache-Control "no-store, no-cache, must-revalidate";
-        add_header Pragma "no-cache";
-        expires 0;
-    }
-
-    location / {
-        add_header Cache-Control "no-store, no-cache, must-revalidate";
-        add_header Pragma "no-cache";
-        expires 0;
-        try_files $uri $uri/ /index.html =404;
-    }
-}
-EOF
-systemctl enable -q nginx
-systemctl restart nginx
-msg_ok "Configured Nginx"
+msg_info "Installing yt-dlp Nightly"
+$STD uv pip install --python /opt/tubearchivist/.venv/bin/python -U --prerelease allow "yt-dlp[default]"
+msg_ok "Installed yt-dlp Nightly"
 
 msg_info "Creating Services"
 cat <<'RUNEOF' >/opt/tubearchivist/backend/run.sh
@@ -220,6 +150,7 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
+$PYTHON manage.py ta_stop_on_error
 $PYTHON manage.py migrate
 $PYTHON manage.py collectstatic --noinput -c
 $PYTHON manage.py ta_envcheck
@@ -230,10 +161,26 @@ exec $PYTHON backend_start.py
 RUNEOF
 chmod +x /opt/tubearchivist/backend/run.sh
 ln -sf /opt/tubearchivist/.env /opt/tubearchivist/backend/.env
+cat <<EOF >/etc/systemd/system/bgutil-provider.service
+[Unit]
+Description=BgUtil YT-DLP POT Provider
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bgutil-ytdlp-pot-provider/server
+ExecStart=/usr/bin/node build/main.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 cat <<EOF >/etc/systemd/system/tubearchivist.service
 [Unit]
 Description=Tube Archivist Backend
-After=network.target elasticsearch.service redis-server.service
+After=network.target elasticsearch.service redis-server.service bgutil-provider.service
 
 [Service]
 Type=simple
@@ -286,7 +233,7 @@ RuntimeMaxSec=3600
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl enable -q --now tubearchivist tubearchivist-celery tubearchivist-beat
+systemctl enable -q --now bgutil-provider tubearchivist tubearchivist-celery tubearchivist-beat
 msg_ok "Created Services"
 
 motd_ssh

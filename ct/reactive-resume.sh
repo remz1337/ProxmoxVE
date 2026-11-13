@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: vhsdream | MickLesk (CanbiZ)
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
-# Source: https://rxresume.org | Github: https://github.com/amruthpillai/reactive-resume
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
+# Source: https://rxresu.me/ | Github: https://github.com/amruthpillai/reactive-resume
 
 APP="Reactive-Resume"
 var_tags="${var_tags:-documents}"
@@ -45,7 +46,6 @@ function update_script() {
     msg_info "Updating Reactive Resume (Patience)"
     cd /opt/reactive-resume
     export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-
     corepack prepare --activate
     export CI="true"
     export NODE_ENV="production"
@@ -54,7 +54,7 @@ function update_script() {
     msg_ok "Updated Reactive Resume"
 
     msg_info "Updating Service"
-    sed -i 's|WorkingDirectory=/opt/reactive-resume/apps/web|WorkingDirectory=/opt/reactive-resume/apps/server|; s|ExecStart=/usr/bin/node .output/server/index.mjs|ExecStart=/usr/bin/node dist/index.mjs|' /etc/systemd/system/reactive-resume.service
+    sed -i -E 's|^WorkingDirectory=/opt/reactive-resume(/.*)?$|WorkingDirectory=/opt/reactive-resume/apps/server|; s|ExecStart=/usr/bin/node .output/server/index.mjs|ExecStart=/usr/bin/node dist/index.mjs|' /etc/systemd/system/reactive-resume.service
     systemctl daemon-reload
     msg_ok "Updated Service"
 

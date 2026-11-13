@@ -31,10 +31,32 @@ Components: main
 Architectures: $(arch_resolve)
 Signed-By: /usr/share/keyrings/clickhouse-keyring.gpg
 EOF
-$STD apt update
+apt_update_safe
 export DEBIAN_FRONTEND=noninteractive
 $STD apt install -y clickhouse-server clickhouse-client
 msg_ok "Setup ClickHouse"
+
+fetch_and_deploy_gh_release "histogram-quantile" "SigNoz/signoz" "prebuild" "histogram-quantile/v0.0.1" "/opt/histogram-quantile" "histogram-quantile_linux_$(arch_resolve).tar.gz"
+
+msg_info "Setting up ClickHouse histogramQuantile Function"
+mkdir -p /var/lib/clickhouse/user_scripts
+install -m 755 -o clickhouse -g clickhouse /opt/histogram-quantile/histogram-quantile /var/lib/clickhouse/user_scripts/histogramQuantile
+cat <<EOF >/etc/clickhouse-server/histogram_quantile_function.yaml
+functions:
+  name: histogramQuantile
+  type: executable
+  format: CSV
+  command: ./histogramQuantile
+  return_type: Float64
+  argument:
+    - name: buckets
+      type: Array(Float64)
+    - name: counts
+      type: Array(Float64)
+    - name: quantile
+      type: Float64
+EOF
+msg_ok "Setup ClickHouse histogramQuantile Function"
 
 msg_info "Setting up Zookeeper"
 ZOOURL=$(curl -fsSL https://dlcdn.apache.org/zookeeper/current/ | grep -o 'apache-zookeeper-[0-9.]\+-bin\.tar\.gz' | head -n1)
@@ -103,6 +125,9 @@ cat <<EOF >/etc/clickhouse-server/config.d/cluster.xml
         <shard>01</shard>
         <replica>01</replica>
     </macros>
+    <merge_tree>
+      <allow_dimensions_outside_sorting_key>1</allow_dimensions_outside_sorting_key>
+    </merge_tree>
 </clickhouse>
 EOF
 systemctl enable -q --now clickhouse-server
@@ -126,7 +151,7 @@ INVITE_EMAIL_TEMPLATE=/opt/signoz/templates/invitation_email_template.html
 SIGNOZ_SQLSTORE_SQLITE_PATH=/var/lib/signoz/signoz.db
 SIGNOZ_WEB_ENABLED=true
 SIGNOZ_WEB_DIRECTORY=/opt/signoz/web
-SIGNOZ_JWT_SECRET=secret
+SIGNOZ_JWT_SECRET=$(openssl rand -hex 32)
 SIGNOZ_ALERTMANAGER_PROVIDER=signoz
 SIGNOZ_TELEMETRYSTORE_PROVIDER=clickhouse
 SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://localhost:9000?password=

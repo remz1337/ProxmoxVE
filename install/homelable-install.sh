@@ -20,7 +20,7 @@ $STD apt install -y \
   caddy
 msg_ok "Installed Dependencies"
 
-UV_PYTHON="3.13" setup_uv
+PYTHON_VERSION="3.13" setup_uv
 NODE_VERSION="20" setup_nodejs
 fetch_and_deploy_gh_release "homelable" "Pouzor/homelable" "tarball" "latest" "/opt/homelable"
 
@@ -33,7 +33,13 @@ msg_ok "Set up Python Backend"
 msg_info "Configuring Homelable"
 mkdir -p /opt/homelable/data
 SECRET_KEY=$(openssl rand -hex 32)
-BCRYPT_HASH=$(/opt/homelable/backend/.venv/bin/python -c "import bcrypt; print(bcrypt.hashpw(b'admin', bcrypt.gensalt()).decode())")
+HOMELABLE_PASS=$(random_password 20)
+BCRYPT_HASH=$(/opt/homelable/backend/.venv/bin/python -c "import bcrypt,sys; print(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt()).decode())" "$HOMELABLE_PASS")
+{
+  echo "Homelable Credentials"
+  echo "Username: admin"
+  echo "Password: ${HOMELABLE_PASS}"
+} >~/homelable.creds
 cat <<EOF >/opt/homelable/backend/.env
 SECRET_KEY=${SECRET_KEY}
 SQLITE_PATH=/opt/homelable/data/homelab.db

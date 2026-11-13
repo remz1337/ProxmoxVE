@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: durzo
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -29,7 +30,7 @@ function update_script() {
     exit
   fi
 
-  NODE_VERSION="24" setup_nodejs
+  NODE_VERSION="26" setup_nodejs
 
   msg_info "Updating prestart script"
   cat <<EOF >/data/tracearr/prestart.sh
@@ -121,8 +122,10 @@ EOF
     $STD pnpm install --frozen-lockfile --force
     $STD pnpm turbo telemetry disable
     $STD pnpm turbo run build --no-daemon --filter=@tracearr/shared --filter=@tracearr/server --filter=@tracearr/web
+    $STD ./scripts/fetch-basemap.sh || msg_warn "Basemap download failed, keeping the existing map"
+    [[ -d /opt/tracearr/data ]] && mv /opt/tracearr/data /opt/tracearr.data
     rm -rf /opt/tracearr
-    mkdir -p /opt/tracearr/{packages/shared,apps/server,apps/web,apps/server/src/db}
+    mkdir -p /opt/tracearr/{packages/shared,packages/emails,apps/server,apps/web,apps/server/src/db,assets}
     cp -rf package.json /opt/tracearr/
     cp -rf pnpm-workspace.yaml /opt/tracearr/
     cp -rf pnpm-lock.yaml /opt/tracearr/
@@ -132,12 +135,18 @@ EOF
     cp -rf apps/web/dist /opt/tracearr/apps/web/dist
     cp -rf packages/shared/package.json /opt/tracearr/packages/shared/
     cp -rf packages/shared/dist /opt/tracearr/packages/shared/dist
+    cp -rf packages/emails/package.json /opt/tracearr/packages/emails/
+    cp -rf packages/emails/dist /opt/tracearr/packages/emails/dist
     cp -rf apps/server/src/db/migrations /opt/tracearr/apps/server/src/db/migrations
-    cp -rf data /opt/tracearr/data
+    cp -f assets/logo.png /opt/tracearr/assets/
+    [[ -d /opt/tracearr.data ]] && mv /opt/tracearr.data /opt/tracearr/data
+    mkdir -p /opt/tracearr/data
+    cp -rf data/. /opt/tracearr/data/
     mkdir -p /opt/tracearr/data/image-cache
     rm -rf /opt/tracearr.build
     cd /opt/tracearr
-    $STD pnpm install --prod --frozen-lockfile --ignore-scripts
+    $STD pnpm install --prod --frozen-lockfile --ignore-scripts --filter @tracearr/server...
+    rm -rf "$(pnpm store path)"
     $STD chown -R tracearr:tracearr /opt/tracearr
     msg_ok "Built Tracearr"
 

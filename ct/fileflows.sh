@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: kkroboth
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -101,7 +102,8 @@ function update_script() {
   fi
   msg_ok "Ensured ASP.NET Core Runtime"
 
-  fetch_and_deploy_from_url "https://fileflows.com/downloads/zip" "/opt/fileflows"
+  rm -rf /opt/fileflows/{Server,FlowRunner,Libraries,Agent}
+  fetch_and_deploy_from_url "https://fileflows.com/downloads/ff-latest.tar.xz" "/opt/fileflows"
 
   msg_info "Starting Service"
   systemctl --all start 'fileflows*'

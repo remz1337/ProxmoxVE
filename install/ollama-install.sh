@@ -40,7 +40,7 @@ Suites: all
 Components: main
 Signed-By: /usr/share/keyrings/oneapi-archive-keyring.gpg
 EOF
-$STD apt update
+apt_update_safe
 msg_ok "Set up Intel® Repositories"
 
 msg_info "Installing Intel® Level Zero"
@@ -57,10 +57,6 @@ else
   }
 fi
 msg_ok "Installed Intel® Level Zero"
-
-msg_info "Installing Intel® oneAPI Base Toolkit (Patience)"
-$STD apt install -y --no-install-recommends intel-basekit-2024.1
-msg_ok "Installed Intel® oneAPI Base Toolkit"
 fi
 
 msg_info "Installing Ollama (Patience)"

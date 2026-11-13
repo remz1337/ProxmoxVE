@@ -25,11 +25,39 @@ setup_hwaccel
 
 PYTHON_VERSION="3.12" setup_uv
 
+OTEL_ARGS=()
+prompt="${var_openwebui_otel:-}"
+[[ -n "$prompt" ]] || read -r -p "${TAB3}Would you like to install OpenTelemetry instrumentation packages (requires manual .env configuration)? <y/N> " prompt || true
+if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
+  for pkg in \
+    opentelemetry-api \
+    opentelemetry-sdk \
+    opentelemetry-exporter-otlp \
+    opentelemetry-exporter-otlp-proto-http \
+    opentelemetry-instrumentation-fastapi \
+    opentelemetry-instrumentation-aiohttp-client \
+    opentelemetry-instrumentation-httpx \
+    opentelemetry-instrumentation-sqlalchemy \
+    opentelemetry-instrumentation-requests \
+    opentelemetry-instrumentation-logging \
+    opentelemetry-instrumentation-redis \
+    opentelemetry-instrumentation-system-metrics; do
+    OTEL_ARGS+=(--with "$pkg")
+  done
+fi
+
 msg_info "Installing Open WebUI"
-$STD uv tool install --python 3.12 --constraint <(echo "numba>=0.60") open-webui[all]
+installed=0
+for attempt in 1 2; do
+  $STD uv tool install --python 3.12 "${OTEL_ARGS[@]}" open-webui[all] && { installed=1; break; }
+  msg_warn "Open WebUI install attempt $attempt failed, retrying..."
+  sleep 10
+done
+((installed)) || $STD uv tool install --python 3.12 "${OTEL_ARGS[@]}" open-webui[all]
 msg_ok "Installed Open WebUI"
 
-read -r -p "${TAB3}Would you like to add Ollama? <y/N> " prompt
+prompt="${var_openwebui_ollama:-}"
+[[ -n "$prompt" ]] || read -r -p "${TAB3}Would you like to add Ollama? <y/N> " prompt || true
 if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   if [[ "$(arch_resolve)" == "amd64" ]]; then
   msg_info "Setting up Intel® Repositories"
@@ -51,7 +79,7 @@ Suites: all
 Components: main
 Signed-By: /usr/share/keyrings/oneapi-archive-keyring.gpg
 EOF
-  $STD apt update
+  apt_update_safe
   msg_ok "Set up Intel® Repositories"
 
   msg_info "Installing Intel® Level Zero"
@@ -68,10 +96,6 @@ EOF
     }
   fi
   msg_ok "Installed Intel® Level Zero"
-
-  msg_info "Installing Intel® oneAPI Base Toolkit (Patience)"
-  $STD apt install -y --no-install-recommends intel-basekit-2024.1 2>/dev/null || true
-  msg_ok "Installed Intel® oneAPI Base Toolkit"
   fi
 
   msg_info "Installing Ollama"

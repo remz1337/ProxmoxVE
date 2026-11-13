@@ -47,7 +47,8 @@ echo " 3) Use an existing Flaresolverr/Byparr LXC"
 echo " 4) Disable captcha bypassing altogether (not recommended)"
 echo ""
 
-read -r -p "${TAB3}Select deployment type [1]: " DEPLOYMENT_TYPE
+DEPLOYMENT_TYPE="${var_shelfmark_deployment_type:-}"
+[[ -n "$DEPLOYMENT_TYPE" ]] || read -r -p "${TAB3}Select deployment type [1]: " DEPLOYMENT_TYPE || true
 DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:-1}"
 if [[ "$(arch_resolve)" == "arm64" && "$DEPLOYMENT_TYPE" == "2" ]]; then
   msg_warn "FlareSolverr has no arm64 build; using Shelfmark's internal bypasser instead"
@@ -69,7 +70,8 @@ case "$DEPLOYMENT_TYPE" in
   echo "Example: http://flaresoverr.homelab.lan:8191 or"
   echo "http://192.168.10.99:8191"
   echo ""
-  read -r -p "FlareSolverr/Byparr URL: " BYPASSER_URL
+  BYPASSER_URL="${var_shelfmark_bypasser_url:-}"
+  [[ -n "$BYPASSER_URL" ]] || read -r -p "FlareSolverr/Byparr URL: " BYPASSER_URL || true
 
   if [[ -z "$BYPASSER_URL" ]]; then
     msg_warn "No Flaresolverr/Byparr URL provided. Falling back to Shelfmark's internal bypasser."
@@ -116,13 +118,14 @@ else
     chromium-common \
     chromium \
     python3-tk
+  sed -i '/DOCKERMODE=/s/false/true/' /etc/shelfmark/.env
   msg_ok "Installed internal bypasser dependencies"
 fi
 
 NODE_VERSION="24" setup_nodejs
-PYTHON_VERSION="3.14" setup_uv
 
 fetch_and_deploy_gh_release "shelfmark" "calibrain/shelfmark" "tarball" "latest" "/opt/shelfmark"
+PYTHON_VERSION="3.14" UV_PROJECT_DIR="/opt/shelfmark" setup_uv
 RELEASE_VERSION=$(cat "$HOME/.shelfmark")
 
 msg_info "Building Shelfmark frontend"
@@ -165,22 +168,6 @@ KillMode=mixed
 WantedBy=multi-user.target
 EOF
 
-if [[ "$DEPLOYMENT_TYPE" == "1" ]]; then
-  cat <<EOF >/etc/systemd/system/chromium.service
-[Unit]
-Description=Chromium Headless Browser
-After=network.target
-
-[Service]
-User=root
-ExecStart=/usr/bin/chromium --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --hide-scrollbars
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  systemctl enable -q --now chromium
-fi
 if [[ "$DEPLOYMENT_TYPE" == "2" ]]; then
   cat <<EOF >/etc/systemd/system/flaresolverr.service
 [Unit]

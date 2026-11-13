@@ -13,6 +13,10 @@ setting_up_container
 network_check
 update_os
 
+msg_info "Installing Dependencies"
+$STD apt install -y git
+msg_ok "Installed Dependencies"
+
 PYTHON_VERSION="3.13" setup_uv
 fetch_and_deploy_gh_release "kometa" "Kometa-Team/Kometa" "tarball"
 
@@ -24,9 +28,15 @@ mkdir -p config/assets
 cp config/config.yml.template config/config.yml
 msg_ok "Setup Kometa"
 
-read -r -p "${TAB3}Enter your TMDb API key: " TMDBKEY
-read -r -p "${TAB3}Enter your Plex URL: " PLEXURL
-read -r -p "${TAB3}Enter your Plex token: " PLEXTOKEN
+TMDBKEY="${var_kometa_tmdb_key:-}"
+[[ -n "$TMDBKEY" ]] || read -r -p "${TAB3}Enter your TMDb API key: " TMDBKEY || true
+[[ -n "$TMDBKEY" ]] || { msg_error "No TMDb API key given; set var_kometa_tmdb_key or answer the prompt"; exit 64; }
+PLEXURL="${var_kometa_plex_url:-}"
+[[ -n "$PLEXURL" ]] || read -r -p "${TAB3}Enter your Plex URL: " PLEXURL || true
+[[ -n "$PLEXURL" ]] || { msg_error "No Plex URL given; set var_kometa_plex_url or answer the prompt"; exit 64; }
+PLEXTOKEN="${var_kometa_plex_token:-}"
+[[ -n "$PLEXTOKEN" ]] || read -r -p "${TAB3}Enter your Plex token: " PLEXTOKEN || true
+[[ -n "$PLEXTOKEN" ]] || { msg_error "No Plex token given; set var_kometa_plex_token or answer the prompt"; exit 64; }
 sed -i '/^plex:/,/^[^ ]/{s|  url:.*|  url: '"$PLEXURL"'|}' /opt/kometa/config/config.yml
 sed -i '/^plex:/,/^[^ ]/{s|  token:.*|  token: '"$PLEXTOKEN"'|}' /opt/kometa/config/config.yml
 sed -i '/^tmdb:/,/^[^ ]/{s|  apikey:.*|  apikey: '"$TMDBKEY"'|}' /opt/kometa/config/config.yml

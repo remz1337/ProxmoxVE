@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: vhsdream
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -42,7 +43,7 @@ function update_script() {
 
     msg_info "Configuring BentoPDF"
     cd /opt/bentopdf
-    $STD npm ci --no-audit --no-fund
+    $STD npm ci --no-audit --no-fund --allow-remote=all
     export NODE_OPTIONS="--max-old-space-size=3072"
     export SIMPLE_MODE=true
     export VITE_USE_CDN=true

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Florianb63
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -32,7 +33,7 @@ function update_script() {
   setup_mariadb
 
   msg_info "Updating ITSM-NG"
-  $STD apt update
+  apt_update_safe
   $STD apt -y upgrade
   chown -R www-data:www-data /var/lib/itsm-ng
   mkdir -p /usr/share/itsm-ng/css/palettes

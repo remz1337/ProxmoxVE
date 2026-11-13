@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -36,7 +37,7 @@ function update_script() {
 
   if [ "$UPD" == "1" ]; then
     msg_info "Updating ${APP} LXC"
-    $STD apt update
+    apt_update_safe
     $STD apt upgrade -y
     msg_ok "Updated successfully!"
 
@@ -57,7 +58,7 @@ function update_script() {
   fi
   if [ "$UPD" == "2" ]; then
     msg_info "Installing Home Assistant Community Store (HACS)"
-    $STD apt update
+    apt_update_safe
     cd /var/lib/containers/storage/volumes/hass_config/_data
     $STD bash <(curl -fsSL https://get.hacs.xyz)
     msg_ok "Installed Home Assistant Community Store (HACS)"
@@ -65,33 +66,7 @@ function update_script() {
     exit
   fi
   if [ "$UPD" == "3" ]; then
-    msg_info "Installing FileBrowser"
-    $STD curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
-    $STD filebrowser config init -a '0.0.0.0'
-    $STD filebrowser config set -a '0.0.0.0'
-    $STD filebrowser users add admin community-scripts.org --perm.admin
-    msg_ok "Installed FileBrowser"
-
-    msg_info "Creating Service"
-    cat <<EOF >/etc/systemd/system/filebrowser.service
-[Unit]
-Description=Filebrowser
-After=network-online.target
-
-[Service]
-User=root
-WorkingDirectory=/root/
-ExecStart=/usr/local/bin/filebrowser -r /
-
-[Install]
-WantedBy=default.target
-EOF
-    systemctl enable -q --now filebrowser
-    msg_ok "Created Service"
-
-    msg_ok "Completed successfully!\n"
-    echo -e "FileBrowser should be reachable by going to the following URL.
-         ${BL}http://$LOCAL_IP:8080${CL}   admin|community-scripts.org\n"
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/tools/addon/filebrowser.sh)"
     exit
   fi
   if [ "$UPD" == "4" ]; then

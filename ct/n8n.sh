@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -45,7 +46,10 @@ EOF
     systemctl daemon-reload
   fi
 
-  $STD npm install -g n8n@latest
+  # n8n-nodes-base 2.46.0 pins both @napi-rs/canvas musl binaries as hard
+  # dependencies, which no os/cpu/libc combination can satisfy. Drop --force
+  # once upstream makes them optional again.
+  $STD npm install -g n8n@latest --force
   systemctl restart n8n
   msg_ok "Updated n8n"
   msg_ok "Updated successfully!"

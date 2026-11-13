@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
@@ -30,14 +31,22 @@ function update_script() {
     exit
   fi
 
+  if [[ ! -f /etc/cron.d/invoiceshelf ]]; then
+    msg_info "Adding the Laravel scheduler"
+    cat <<'EOF' >/etc/cron.d/invoiceshelf
+* * * * * www-data cd /opt/invoiceshelf && php artisan schedule:run >> /dev/null 2>&1
+EOF
+    msg_ok "Added the Laravel scheduler"
+  fi
+
   if check_for_gh_release "invoiceshelf" "InvoiceShelf/InvoiceShelf"; then
     msg_info "Stopping Services"
     systemctl stop caddy
     msg_ok "Stopped Services"
 
-    create_backup /opt/invoiceshelf/.env /opt/invoiceshelf/storage
+    create_backup /opt/invoiceshelf/.env
 
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "invoiceshelf" "InvoiceShelf/InvoiceShelf" "tarball"
+    CLEAN_INSTALL=1 CLEAN_INSTALL_KEEP="storage" fetch_and_deploy_gh_release "invoiceshelf" "InvoiceShelf/InvoiceShelf" "tarball"
 
     restore_backup
 
@@ -52,6 +61,7 @@ function update_script() {
       $STD pnpm run build
     fi
     $STD php artisan migrate --force
+    $STD php artisan storage:link
     $STD php artisan optimize:clear
     chown -R www-data:www-data /opt/invoiceshelf
     msg_ok "Updated Application"

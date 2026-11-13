@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Slaviša Arežina (tremor021)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
 # Source: https://pangolin.net/ | Github: https://github.com/fosrl/pangolin
 
 APP="Pangolin"
-PANGOLIN_VERSION="${PANGOLIN_VERSION:-1.21.0}"
 var_tags="${var_tags:-proxy}"
 var_cpu="${var_cpu:-2}"
 var_ram="${var_ram:-4096}"
@@ -16,6 +16,9 @@ var_version="${var_version:-13}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 var_tun="${var_tun:-1}"
+
+export var_pangolin_url="${var_pangolin_url:-}"
+export var_pangolin_email="${var_pangolin_email:-}"
 
 header_info "$APP"
 variables
@@ -34,7 +37,7 @@ function update_script() {
   ensure_dependencies build-essential python3
 
   if ! command -v psql &>/dev/null; then
-    msg_error "This installation uses SQLite and cannot be upgraded to Pangolin ${PANGOLIN_VERSION}."
+    msg_error "This installation uses SQLite and cannot be upgraded to latest Pangolin."
     echo -e "${INFO}${YW}Starting with Pangolin 1.20.0, PostgreSQL is required as the database backend.${CL}"
     echo -e "${INFO}${YW}An automatic migration of your existing SQLite data is not supported.${CL}"
     echo -e "${INFO}${YW}Please create a new LXC with the Pangolin install script, which sets up PostgreSQL automatically.${CL}"
@@ -44,21 +47,21 @@ function update_script() {
 
   NODE_VERSION="24" setup_nodejs
 
-  if check_for_gh_release "pangolin" "fosrl/pangolin" "$PANGOLIN_VERSION" "Pinned to a tested release because Pangolin's schema changes have repeatedly broken unattended updates. To try a newer version at your own risk, run: 'export PANGOLIN_VERSION=<tag>' and re-run update. If it breaks, please open an issue at https://github.com/community-scripts/ProxmoxVE/issues with the error log."; then
+  if check_for_gh_release "pangolin" "fosrl/pangolin"; then
     msg_info "Stopping Service"
     systemctl stop pangolin
     systemctl stop gerbil
-    msg_info "Service stopped"
+    msg_ok "Stopped Service"
 
     DB_URL=$(sed -n 's/.*connection_string: "\(.*\)".*/\1/p' /opt/pangolin/config/config.yml)
     create_backup /opt/pangolin/config
 
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "pangolin" "fosrl/pangolin" "tarball" "$PANGOLIN_VERSION"
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "pangolin" "fosrl/pangolin" "tarball"
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "gerbil" "fosrl/gerbil" "singlefile" "latest" "/usr/bin" "gerbil_linux_$(arch_resolve)"
 
     msg_info "Updating Pangolin"
     cd /opt/pangolin
-    $STD npm ci
+    $STD npm ci --allow-remote=all
     $STD npm run set:pg
     $STD npm run set:oss
     rm -rf server/private

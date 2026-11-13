@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: MickLesk (Canbiz)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -48,12 +49,16 @@ function update_script() {
     chown -R www-data:www-data /opt/wallos
     chmod -R 755 /opt/wallos
     mkdir -p /var/log/cron
-    $STD curl http://localhost/endpoints/db/migrate.php
     msg_ok "Configured Wallos"
 
     msg_info "Reload Apache2"
     systemctl reload apache2
     msg_ok "Apache2 Reloaded"
+
+    msg_info "Running Database Migration"
+    cd /opt/wallos
+    $STD sudo -u www-data php /opt/wallos/endpoints/db/migrate.php
+    msg_ok "Ran Database Migration"
     msg_ok "Updated successfully!"
   fi
   exit

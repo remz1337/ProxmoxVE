@@ -39,13 +39,14 @@ else
 fi
 msg_ok "Installed ASP.NET Core Runtime"
 
-fetch_and_deploy_from_url "https://fileflows.com/downloads/zip" "/opt/fileflows"
+fetch_and_deploy_from_url "https://fileflows.com/downloads/ff-latest.tar.xz" "/opt/fileflows"
 
 $STD ln -svf /usr/bin/ffmpeg /usr/local/bin/ffmpeg
 $STD ln -svf /usr/bin/ffprobe /usr/local/bin/ffprobe
 $STD rm -rf /opt/fileflows/Server/runtimes/win-*
 
-read -r -p "${TAB3}Do you want to install FileFlows Server or Node? (S/N): " install_server
+install_server="${var_fileflows_mode:-}"
+[[ -n "$install_server" ]] || read -r -p "${TAB3}Do you want to install FileFlows Server or Agent? (S/A): " install_server || true
 
 if [[ "$install_server" =~ ^[Ss]$ ]]; then
   msg_info "Installing FileFlows Server"
@@ -54,15 +55,23 @@ if [[ "$install_server" =~ ^[Ss]$ ]]; then
   systemctl enable -q --now fileflows
   msg_ok "Installed FileFlows Server"
 else
-  msg_info "Installing FileFlows Node"
-  read -r -p "${TAB3}Enter FileFlows Server URL (e.g. http://192.168.1.10:19200): " server_url
+  server_url="${var_fileflows_server_url:-}"
+  [[ -n "$server_url" ]] || read -r -p "${TAB3}Enter FileFlows Server URL (e.g. http://192.168.1.10:19200): " server_url || true
   while [[ -z "${server_url// /}" ]]; do
-    read -r -p "${TAB3}Enter FileFlows Server URL (e.g. http://192.168.1.10:19200): " server_url
+    read -r -p "${TAB3}Enter FileFlows Server URL (e.g. http://192.168.1.10:19200): " server_url || { msg_error "No FileFlows Server URL given; set var_fileflows_server_url or answer the prompt"; exit 64; }
   done
-  cd /opt/fileflows/Node
-  $STD dotnet FileFlows.Node.dll --server "$server_url" --systemd install --root true
-  systemctl enable -q --now fileflows-node
-  msg_ok "Installed FileFlows Node"
+  msg_info "Installing FileFlows Agent"
+  cd /opt/fileflows/Agent
+  before_units="$(systemctl list-unit-files 'fileflows*' --no-legend 2>/dev/null | awk '{print $1}' | sort || true)"
+  $STD dotnet FileFlows.Agent.dll --server "$server_url" --systemd install --root true
+  after_units="$(systemctl list-unit-files 'fileflows*' --no-legend 2>/dev/null | awk '{print $1}' | sort || true)"
+  agent_unit="$(comm -13 <(echo "$before_units") <(echo "$after_units") | head -n1)"
+  if [[ -n "$agent_unit" ]]; then
+    systemctl enable -q --now "$agent_unit"
+  else
+    msg_warn "Could not detect the FileFlows Agent systemd unit; start it manually (systemctl list-unit-files 'fileflows*')."
+  fi
+  msg_ok "Installed FileFlows Agent"
 fi
 
 motd_ssh

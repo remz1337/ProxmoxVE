@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Sander Koenders (sanderkoenders)
@@ -47,9 +48,7 @@ function update_script() {
       exit
     fi
 
-    msg_info "Setting up SSH Public Key for backup user"
-
-    msg_info "Please paste your SSH public key (e.g., ssh-rsa AAAAB3... user@host): \n"
+    echo -e "${INFO}${YW}Please paste your SSH public key (e.g., ssh-rsa AAAAB3... user@host):${CL}"
     read -p "Key: " SSH_PUBLIC_KEY
     echo
 

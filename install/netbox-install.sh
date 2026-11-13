@@ -59,22 +59,65 @@ sed -i -e 's/ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = ["*"]/' \
 $STD /opt/netbox/upgrade.sh
 ln -s /opt/netbox/contrib/netbox-housekeeping.sh /etc/cron.daily/netbox-housekeeping
 
-mv /opt/netbox/contrib/apache.conf /etc/apache2/sites-available/netbox.conf
 $STD openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/netbox.key -out /etc/ssl/certs/netbox.crt -subj "/C=US/O=NetBox/OU=Certificate/CN=localhost"
+cat <<EOF >/etc/apache2/sites-available/netbox.conf
+<VirtualHost *:80>
+    ProxyPreserveHost On
+
+    Alias /static /opt/netbox/netbox/static
+
+    <Directory /opt/netbox/netbox/static>
+        Options FollowSymLinks MultiViews
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    <Location /static>
+        ProxyPass !
+    </Location>
+
+    RequestHeader set "X-Forwarded-Proto" expr=%{REQUEST_SCHEME}
+    ProxyPass / http://127.0.0.1:8001/
+    ProxyPassReverse / http://127.0.0.1:8001/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ProxyPreserveHost On
+
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/netbox.crt
+    SSLCertificateKeyFile /etc/ssl/private/netbox.key
+
+    Alias /static /opt/netbox/netbox/static
+
+    <Directory /opt/netbox/netbox/static>
+        Options FollowSymLinks MultiViews
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    <Location /static>
+        ProxyPass !
+    </Location>
+
+    RequestHeader set "X-Forwarded-Proto" expr=%{REQUEST_SCHEME}
+    ProxyPass / http://127.0.0.1:8001/
+    ProxyPassReverse / http://127.0.0.1:8001/
+</VirtualHost>
+EOF
 $STD a2enmod ssl proxy proxy_http headers rewrite
 $STD a2ensite netbox
 systemctl restart apache2
 
 mv /opt/netbox/contrib/gunicorn.py /opt/netbox/gunicorn.py
 mv /opt/netbox/contrib/*.service /etc/systemd/system/
-systemctl daemon-reload
 systemctl enable -q --now netbox netbox-rq
 echo -e "Netbox Secret: \e[32m$SECRET_KEY\e[0m" >>~/netbox.creds
 msg_ok "Configured NetBox"
 
 msg_info "Setting up Django Admin"
 DJANGO_USER=Admin
-DJANGO_PASS=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | cut -c1-13)
+DJANGO_PASS=$(random_password 13)
 
 source /opt/netbox/venv/bin/activate
 $STD python3 /opt/netbox/netbox/manage.py shell <<EOF

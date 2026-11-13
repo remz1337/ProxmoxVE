@@ -25,7 +25,7 @@ msg_ok "Installed Dependencies"
 
 PHP_VERSION="8.4" PHP_FPM="YES" PHP_MODULE="pdo-sqlite" setup_php
 setup_composer
-NODE_VERSION="22" setup_nodejs
+NODE_VERSION="22" NODE_MODULE="bun" setup_nodejs
 setup_meilisearch
 fetch_and_deploy_gh_release "bar-assistant" "karlomikus/bar-assistant" "tarball" "latest" "/opt/bar-assistant"
 fetch_and_deploy_gh_release "vue-salt-rim" "karlomikus/vue-salt-rim" "tarball" "latest" "/opt/vue-salt-rim"
@@ -34,7 +34,7 @@ msg_info "Configuring PHP"
 PHPVER=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION . "\n";')
 sed -i.bak -E 's/^\s*;?\s*ffi\.enable\s*=.*/ffi.enable=true/' /etc/php/${PHPVER}/fpm/php.ini
 $STD systemctl reload php${PHPVER}-fpm
-msg_info "configured PHP"
+msg_ok "Configured PHP"
 
 msg_info "Installing Bar Assistant"
 cd /opt/bar-assistant
@@ -52,6 +52,7 @@ $STD php artisan key:generate
 touch storage/bar-assistant/database.ba3.sqlite
 $STD php artisan migrate --force
 $STD php artisan storage:link
+$STD php artisan starter-media:publish
 $STD php artisan bar:setup-meilisearch
 $STD php artisan scout:sync-index-settings
 $STD php artisan config:cache
@@ -68,8 +69,8 @@ window.srConfig = {}
 window.srConfig.API_URL = "http://${LOCAL_IP}/bar"
 window.srConfig.MEILISEARCH_URL = "http://${LOCAL_IP}/search"
 EOF
-$STD npm install
-$STD npm run build
+$STD bun install
+$STD bun run build
 msg_ok "Installed Salt Rim"
 
 msg_info "Creating Service"

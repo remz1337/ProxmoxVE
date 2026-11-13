@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -43,8 +44,8 @@ function update_script() {
     msg_info "Migrating to v4: Removing RabbitMQ"
     systemctl stop rabbitmq-server
     systemctl disable rabbitmq-server
-    $STD apt-get purge -y rabbitmq-server erlang-base
-    $STD apt-get autoremove -y
+    $STD apt purge -y rabbitmq-server erlang-base
+    $STD apt autoremove -y
     msg_ok "Removed RabbitMQ"
   fi
 
@@ -223,6 +224,8 @@ http {
       proxy_pass $upstream_url;
       proxy_set_header Host $proxy_host;
       proxy_set_header User-Agent "Reitti/1.0";
+      proxy_ssl_server_name on;
+      proxy_ssl_name $proxy_host;
       proxy_cache tiles;
       proxy_cache_key $upstream_url;
       proxy_cache_valid 200 30d;

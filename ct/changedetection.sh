@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
-# Author: tteck (tteckster)
-# License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
+# Author: tteck (tteckster) | Co-Author: CrazyWolf13, MickLesk
+# License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://changedetection.io/ | Github: https://github.com/dgtlmoon/changedetection.io
 
 APP="Change Detection"
@@ -11,7 +12,7 @@ var_cpu="${var_cpu:-4}"
 var_ram="${var_ram:-4096}"
 var_disk="${var_disk:-10}"
 var_os="${var_os:-debian}"
-var_version="${var_version:-12}"
+var_version="${var_version:-13}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 var_postfix_sat="${var_postfix_sat:-yes}"
@@ -31,7 +32,18 @@ function update_script() {
     exit
   fi
 
-  ensure_dependencies libjpeg-dev
+  ensure_dependencies libjpeg-dev poppler-utils file locales
+
+  msg_info "Generating Locales"
+  for l in cs_CZ de_DE en_GB en_US es_ES fr_FR id_ID it_IT ja_JP ko_KR \
+    pl_PL pt_BR ru_RU tr_TR uk_UA zh_CN zh_TW; do
+    sed -i "s/^# *${l}.UTF-8 UTF-8/${l}.UTF-8 UTF-8/" /etc/locale.gen
+  done
+  $STD locale-gen
+  if ! grep -q "^LC_ALL=" /opt/changedetection/.env 2>/dev/null; then
+    echo "LC_ALL=en_US.UTF-8" >>/opt/changedetection/.env
+  fi
+  msg_ok "Generated Locales"
 
   NODE_VERSION="24" setup_nodejs
 
@@ -66,8 +78,8 @@ function update_script() {
     msg_info "Updating Browserless (Patience)"
     $STD git -C /opt/browserless/ fetch --all
     $STD git -C /opt/browserless/ reset --hard origin/main
-    $STD npm update --prefix /opt/browserless
     $STD npm ci --include=optional --include=dev --prefix /opt/browserless
+    $STD npm install --save-exact playwright-core@1.62.1 --prefix /opt/browserless
     $STD /opt/browserless/node_modules/playwright-core/cli.js install --with-deps
     # Update Chrome separately, as it has to be done with the force option. Otherwise the installation of other browsers will not be done if Chrome is already installed.
     $STD /opt/browserless/node_modules/playwright-core/cli.js install --force chrome

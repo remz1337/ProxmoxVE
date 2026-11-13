@@ -6,13 +6,18 @@
 # Source: https://komo.do/ | Github: https://github.com/moghtech/komodo
 if ! command -v curl &>/dev/null; then
   printf "\r\e[2K%b" '\033[93m Setup Source \033[m' >&2
-  apt-get update >/dev/null 2>&1 || apk update >/dev/null 2>&1
-  apt-get install -y curl >/dev/null 2>&1 || apk add --no-cache curl >/dev/null 2>&1
+  if [[ -f /etc/alpine-release ]]; then
+    apk update >/dev/null 2>&1
+    apk add --no-cache curl >/dev/null 2>&1
+  else
+    apt-get update >/dev/null 2>&1
+    apt-get install -y curl >/dev/null 2>&1
+  fi
 fi
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/error_handler.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/core.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/lib/tools.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/error_handler.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "komodo" "addon"
 
 # Enable error handling
@@ -131,25 +136,7 @@ function update() {
 }
 
 # ==============================================================================
-# PROXMOX HOST CHECK
-# ==============================================================================
-function check_proxmox_host() {
-  if command -v pveversion &>/dev/null; then
-    msg_error "Running on the Proxmox host is NOT recommended!"
-    msg_error "This should be executed inside an LXC container."
-    echo ""
-    echo -n "${TAB}Continue anyway? (y/N): "
-    read -r confirm
-    if [[ ! "${confirm,,}" =~ ^(y|yes)$ ]]; then
-      msg_warn "Aborted. Please run this inside an LXC container."
-      exit 0
-    fi
-    msg_warn "Proceeding on Proxmox host at your own risk!"
-  fi
-}
-
-# ==============================================================================
-# CHECK / INSTALL DOCKER
+# DEPENDENCIES
 # ==============================================================================
 function ensure_openssl() {
   if command -v openssl &>/dev/null; then
@@ -163,53 +150,17 @@ function ensure_openssl() {
     $STD apt-get install -y openssl
   else
     msg_error "openssl is required but could not be installed automatically."
-    exit 10
+    exit 237
   fi
   msg_ok "Installed openssl"
-}
-
-function check_or_install_docker() {
-  if command -v docker &>/dev/null; then
-    msg_ok "Docker $(docker --version | cut -d' ' -f3 | tr -d ',') is available"
-    if docker compose version &>/dev/null; then
-      msg_ok "Docker Compose is available"
-    else
-      msg_error "Docker Compose plugin is not available. Please install it."
-      exit 10
-    fi
-    ensure_openssl
-    return
-  fi
-
-  msg_warn "Docker is not installed."
-  echo -n "${TAB}Install Docker now? (y/N): "
-  read -r install_docker_prompt
-  if [[ ! "${install_docker_prompt,,}" =~ ^(y|yes)$ ]]; then
-    msg_error "Docker is required for ${APP}. Exiting."
-    exit 10
-  fi
-
-  msg_info "Installing Docker"
-  if [[ -f /etc/alpine-release ]]; then
-    $STD apk add docker docker-cli-compose
-    $STD rc-service docker start
-    $STD rc-update add docker default
-  else
-    DOCKER_CONFIG_PATH='/etc/docker/daemon.json'
-    mkdir -p "$(dirname "$DOCKER_CONFIG_PATH")"
-    echo -e '{\n  "log-driver": "journald"\n}' >"$DOCKER_CONFIG_PATH"
-    $STD sh <(curl -fsSL https://get.docker.com)
-  fi
-  msg_ok "Installed Docker"
-
-  ensure_openssl
 }
 
 # ==============================================================================
 # INSTALL
 # ==============================================================================
 function install() {
-  check_or_install_docker
+  ensure_docker
+  ensure_openssl
 
   echo -e "${TAB}Choose the database for Komodo:"
   echo -e "${TAB}  1) MongoDB (recommended)"
@@ -238,16 +189,17 @@ function install() {
   msg_info "Configuring environment"
   curl -fsSL "https://raw.githubusercontent.com/moghtech/komodo/main/compose/compose.env" -o "$COMPOSE_ENV"
 
-  DB_PASSWORD=$(openssl rand -base64 16 | tr -d '/+=')
-  ADMIN_PASSWORD=$(openssl rand -base64 8 | tr -d '/+=')
-  WEBHOOK_SECRET=$(openssl rand -base64 24 | tr -d '/+=')
-  JWT_SECRET=$(openssl rand -base64 24 | tr -d '/+=')
+  DB_PASSWORD=$(random_password 21)
+  ADMIN_PASSWORD=$(random_password 16)
+  WEBHOOK_SECRET=$(random_password 32)
+  JWT_SECRET=$(random_password 32)
 
   sed -i "s/^KOMODO_DATABASE_USERNAME=.*/KOMODO_DATABASE_USERNAME=komodo_admin/" "$COMPOSE_ENV"
   sed -i "s/^KOMODO_DATABASE_PASSWORD=.*/KOMODO_DATABASE_PASSWORD=${DB_PASSWORD}/" "$COMPOSE_ENV"
   sed -i "s/^KOMODO_INIT_ADMIN_PASSWORD=changeme/KOMODO_INIT_ADMIN_PASSWORD=${ADMIN_PASSWORD}/" "$COMPOSE_ENV"
   sed -i "s/^KOMODO_WEBHOOK_SECRET=.*/KOMODO_WEBHOOK_SECRET=${WEBHOOK_SECRET}/" "$COMPOSE_ENV"
   sed -i "s/^KOMODO_JWT_SECRET=.*/KOMODO_JWT_SECRET=${JWT_SECRET}/" "$COMPOSE_ENV"
+  sed -i "s|^KOMODO_HOST=.*|KOMODO_HOST=http://${LOCAL_IP}:${DEFAULT_PORT}|" "$COMPOSE_ENV"
   msg_ok "Configured environment"
 
   msg_info "Starting ${APP}"
@@ -263,14 +215,23 @@ function install() {
   } >>~/komodo.creds
 
   echo ""
-  msg_ok "${APP} is reachable at: ${BL}http://${LOCAL_IP}:${DEFAULT_PORT}${CL}"
+  msg_info "Waiting for ${APP} to answer"
+  for _ in $(seq 1 60); do
+    curl -fsS --max-time 3 "http://127.0.0.1:${DEFAULT_PORT}" >/dev/null 2>&1 && break
+    sleep 3
+  done
+  if curl -fsS --max-time 3 "http://127.0.0.1:${DEFAULT_PORT}" >/dev/null 2>&1; then
+    msg_ok "${APP} is reachable at: ${BL}http://${LOCAL_IP}:${DEFAULT_PORT}${CL}"
+  else
+    msg_error "${APP} did not come up - check: docker logs komodo-core-1"
+  fi
   echo ""
   echo -e "  Komodo Credentials"
   echo -e "  =================="
   echo -e "  User    : admin"
   echo -e "  Password: ${ADMIN_PASSWORD}"
   echo ""
-  msg_info "Credentials saved to ~/komodo.creds"
+  msg_ok "Credentials saved to ~/komodo.creds"
 }
 
 # ==============================================================================
@@ -292,7 +253,7 @@ if [[ "${type:-}" == "update" ]]; then
 fi
 
 header_info
-check_proxmox_host
+confirm_not_pve_host
 get_lxc_ip
 
 # Declare variables used by find_compose_file

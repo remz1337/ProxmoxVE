@@ -8,7 +8,10 @@
         "turnkey/**",
         "vm/**"
       ],
-      "excludeGlobs": []
+      "excludeGlobs": [
+        "**/headers/**",
+        "tools/headers/**"
+      ]
     }
   ],
   "update script": [
@@ -41,7 +44,10 @@
       "includeGlobs": [
         "vm/**"
       ],
-      "excludeGlobs": []
+      "excludeGlobs": [
+        "**/headers/**",
+        "tools/headers/**"
+      ]
     }
   ],
   "tools": [
@@ -71,17 +77,6 @@
       "excludeGlobs": []
     }
   ],
-  "core": [
-    {
-      "fileStatus": null,
-      "includeGlobs": [
-        "misc/*.func"
-      ],
-      "excludeGlobs": [
-        "misc/api.func"
-      ]
-    }
-  ],
   "documentation": [
     {
       "fileStatus": null,
@@ -108,8 +103,7 @@
     {
       "fileStatus": null,
       "includeGlobs": [
-        "api/**",
-        "misc/api.func"
+        "api/**"
       ],
       "excludeGlobs": []
     }

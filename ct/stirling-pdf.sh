@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -43,9 +44,30 @@ function update_script() {
     find /usr/lib -name "libicudata.so.*" -exec patchelf --clear-execstack {} \; || true
     msg_ok "Patched Native Libraries"
 
+    if [[ -f /etc/systemd/system/libreoffice-listener.service ]]; then
+      msg_info "Removing Conflicting LibreOffice Listener"
+      systemctl disable -q --now libreoffice-listener
+      rm -f /etc/systemd/system/libreoffice-listener.service
+      sed -i '/^Requires=libreoffice-listener.service$/d' /etc/systemd/system/stirlingpdf.service /etc/systemd/system/unoserver.service
+      sed -i 's/^After=syslog.target network.target libreoffice-listener.service$/After=syslog.target network.target unoserver.service/' /etc/systemd/system/stirlingpdf.service
+      sed -i 's/^After=libreoffice-listener.service$/After=network.target/' /etc/systemd/system/unoserver.service
+      systemctl daemon-reload
+      systemctl reset-failed libreoffice-listener.service 2>/dev/null || true
+      msg_ok "Removed Conflicting LibreOffice Listener"
+    fi
+
     msg_info "Stopping Services"
-    systemctl stop stirlingpdf libreoffice-listener unoserver
+    systemctl stop stirlingpdf unoserver
     msg_ok "Stopped Services"
+
+    if grep -q '^ExecStart=/usr/bin/java -jar Stirling-PDF.jar$' /etc/systemd/system/stirlingpdf.service; then
+      msg_info "Limiting Java Heap to Container Memory"
+      sed -i '/^ExecStop=\/bin\/kill -15 %n$/d' /etc/systemd/system/stirlingpdf.service
+      sed -i "s|^ExecStart=/usr/bin/java -jar Stirling-PDF.jar$|ExecStart=/bin/bash -c 'exec /usr/bin/java -XX:MaxRAM=\$\$(grep -m1 -o \"[0-9][0-9]*\" /proc/meminfo)k \$\$JAVA_BASE_OPTS \$\$JAVA_CUSTOM_OPTS -jar Stirling-PDF.jar'|" /etc/systemd/system/stirlingpdf.service
+      sed -i 's/-XX:MaxRAMPercentage=75/-XX:MaxRAMPercentage=50/' /opt/Stirling-PDF/.env
+      systemctl daemon-reload
+      msg_ok "Limited Java Heap to Container Memory"
+    fi
 
     if [[ -f ~/.Stirling-PDF-login ]]; then
       USE_ORIGINAL_FILENAME=true fetch_and_deploy_gh_release "stirling-pdf" "Stirling-Tools/Stirling-PDF" "singlefile" "latest" "/opt/Stirling-PDF" "Stirling-PDF-with-login.jar"
@@ -59,7 +81,7 @@ function update_script() {
     msg_ok "Font Cache Updated"
 
     msg_info "Starting Services"
-    systemctl start stirlingpdf libreoffice-listener unoserver
+    systemctl start unoserver stirlingpdf
     msg_ok "Started Services"
     msg_ok "Updated successfully!"
   fi

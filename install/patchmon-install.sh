@@ -60,6 +60,7 @@ REDIS_PORT=6379
 # OIDC_ENFORCE_HTTPS=true
 
 AGENT_BINARIES_DIR=/opt/patchmon/agents
+SSG_CONTENT_DIR=/opt/patchmon/ssg-content
 EOF
 msg_ok "Configured PatchMon"
 
@@ -85,6 +86,14 @@ for arch in "${AGENT_NAME[@]}"; do
 done
 msg_ok "Fetched PatchMon agent binaries"
 
+msg_info "Fetching SCAP Content"
+RELEASE=$(get_latest_github_release "ComplianceAsCode/content")
+curl_with_retry "https://github.com/ComplianceAsCode/content/releases/download/v${RELEASE}/scap-security-guide-${RELEASE}.tar.gz" "/tmp/ssg.tar.gz"
+mkdir -p /opt/patchmon/ssg-content
+tar -xzf /tmp/ssg.tar.gz -C /opt/patchmon/ssg-content --strip-components=1 --wildcards '*/ssg-*-ds.xml'
+rm -f /tmp/ssg.tar.gz
+msg_ok "Fetched SCAP Content"
+
 msg_info "Creating service"
 cat <<EOF >/etc/systemd/system/patchmon-server.service
 [Unit]
@@ -98,7 +107,7 @@ ExecStart=/opt/patchmon/patchmon-server
 Restart=always
 RestartSec=10
 Environment=PATH=/usr/bin:/usr/local/bin
-EnvironmentFile=/opt/patchmon/.env
+Environment=ENV_FILE=/opt/patchmon/.env
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -s https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ) | DevelopmentCats | AlphaLawless
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -30,11 +31,40 @@ function update_script() {
     exit
   fi
 
+  if [[ ! -x /usr/bin/7zz || ! -x /usr/bin/bsdtar ]]; then
+    msg_info "Installing Archive Tools"
+    $STD apt install -y 7zip-standalone libarchive-tools
+    msg_ok "Installed Archive Tools"
+  fi
+
   NODE_VERSION="24" setup_nodejs
+
+  # RomM 5.3.0 replaced rq-scheduler with `rq cron` and moved scans to their own queue
+  if grep -q rqscheduler /etc/systemd/system/romm-scheduler.service 2>/dev/null; then
+    msg_info "Migrating RQ services"
+    sed -i -e '/RQ_REDIS_/d' \
+      -e 's|^ExecStart=.*|ExecStart=/opt/romm/.venv/bin/rq cron --path /opt/romm/backend --url redis://127.0.0.1:6379/0 tasks.cron_config|' \
+      /etc/systemd/system/romm-scheduler.service
+    sed -i 's|bin/rq worker --path|bin/rq worker --with-scheduler --path|' /etc/systemd/system/romm-worker.service
+    sed -e 's|^Description=.*|Description=RomM RQ Scan Worker|' \
+      -e 's|^ExecStart=.*|ExecStart=/opt/romm/.venv/bin/rq worker --with-scheduler --path /opt/romm/backend --url redis://127.0.0.1:6379/0 scans|' \
+      /etc/systemd/system/romm-worker.service >/etc/systemd/system/romm-scan-worker.service
+    systemctl daemon-reload
+    systemctl enable -q --now romm-scan-worker
+    systemctl restart romm-worker romm-scheduler
+    msg_ok "Migrated RQ services"
+  fi
+
+  if ! grep -q '^save ' /etc/redis/redis.conf; then
+    msg_info "Reducing Redis snapshot frequency"
+    echo 'save 3600 1' >>/etc/redis/redis.conf
+    $STD redis-cli CONFIG SET save "3600 1"
+    msg_ok "Reduced Redis snapshot frequency"
+  fi
 
   if check_for_gh_release "romm" "rommapp/romm"; then
     msg_info "Stopping Services"
-    systemctl stop romm-backend romm-worker romm-scheduler romm-watcher
+    systemctl stop romm-backend romm-worker romm-scan-worker romm-scheduler romm-watcher
     msg_ok "Stopped Services"
 
     create_backup /opt/romm/.env
@@ -43,6 +73,8 @@ function update_script() {
       /opt/romm/frontend/dist/assets/ruffle
 
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "romm" "rommapp/romm" "tarball" "latest" "/opt/romm"
+    PYTHON_VERSION="3.13" UV_PROJECT_DIR="/opt/romm" setup_uv
+    echo "__version__ = \"$(cat ~/.romm)\"" >/opt/romm/backend/__version__.py
 
     find /opt/romm/backend/alembic/versions -maxdepth 1 -type f -name '1.*.py' -delete 2>/dev/null || true
     find /opt/romm/backend/alembic/versions -maxdepth 1 -type f -name '2.0.0_.py' -delete 2>/dev/null || true
@@ -57,7 +89,7 @@ function update_script() {
     $STD uv run alembic upgrade head
     if [[ -f /opt/romm/backend/utils/rom_patcher/package.json ]]; then
       cd /opt/romm/backend/utils/rom_patcher
-      $STD npm install --ignore-scripts --no-audit --no-fund
+      $STD npm install --ignore-scripts --no-audit --no-fund --allow-git=all
       if [[ -d node_modules/rom-patcher/rom-patcher-js ]]; then
         rm -rf rom-patcher-js
         cp -r node_modules/rom-patcher/rom-patcher-js ./rom-patcher-js
@@ -75,23 +107,174 @@ function update_script() {
     ln -sfn "$ROMM_BASE"/resources /opt/romm/frontend/dist/assets/romm/resources
     ln -sfn "$ROMM_BASE"/assets /opt/romm/frontend/dist/assets/romm/assets
     if [[ -f /etc/angie/http.d/romm.conf ]]; then
-      sed -i "s|alias .*/library/;|alias ${ROMM_BASE}/library/;|" /etc/angie/http.d/romm.conf
+      if ! grep -q "js_content decode.decodeBase64" /etc/angie/http.d/romm.conf ||
+        ! grep -q "coep_header" /etc/angie/http.d/romm.conf; then
+        msg_info "Updating Angie config (decode/cache locations, player isolation headers)"
+        dpkg -l angie-module-njs &>/dev/null || $STD apt install -y angie-module-njs
+        grep -q "ngx_http_js_module.so" /etc/angie/angie.conf || sed -i '1i load_module modules/ngx_http_js_module.so;' /etc/angie/angie.conf
+        mkdir -p /etc/angie/js "${ROMM_BASE}/cache"
+        cat <<'JSEOF' >/etc/angie/js/decode.js
+// Decode a Base64 encoded string received as a query parameter named 'value',
+// and return the decoded value in the response body.
+function decodeBase64(r) {
+  var encodedValue = r.args.value;
+
+  if (!encodedValue) {
+    r.return(400, "Missing 'value' query parameter");
+    return;
+  }
+
+  try {
+    // Use Buffer to return raw bytes — atob() returns a JS string which r.return()
+    // would re-encode as UTF-8, corrupting any non-ASCII bytes (e.g. in filenames
+    // like "Pokémon") and causing CRC mismatches in the mod_zip manifest.
+    r.return(200, Buffer.from(encodedValue, 'base64'));
+  } catch (e) {
+    r.return(400, "Invalid Base64 encoding");
+  }
+}
+
+export default { decodeBase64 };
+JSEOF
+        cat <<EOF >/etc/angie/http.d/romm.conf
+js_import /etc/angie/js/decode.js;
+
+upstream romm_backend {
+    server 127.0.0.1:5000;
+}
+
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+# COEP/COOP for the EmulatorJS and js-dos players (SharedArrayBuffer needs a
+# crossOriginIsolated document). Matched on \$request_uri because try_files
+# rewrites \$uri to /index.html before add_header runs, so a per-location
+# add_header on the player route never fires. Mirrors upstream RomM's
+# docker/nginx/templates/default.conf.template.
+map \$request_uri \$coep_header {
+    default        "";
+    ~^/rom/.*/(ejs|jsdos)(\?|\$) "require-corp";
+}
+map \$request_uri \$coop_header {
+    default        "";
+    ~^/rom/.*/(ejs|jsdos)(\?|\$) "same-origin";
+}
+
+server {
+    listen 80;
+    server_name _;
+    root /opt/romm/frontend/dist;
+    client_max_body_size 0;
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+        add_header Cache-Control "no-cache";
+        add_header Cross-Origin-Embedder-Policy \$coep_header;
+        add_header Cross-Origin-Opener-Policy \$coop_header;
+    }
+
+    location /assets {
+        alias /opt/romm/frontend/dist/assets;
+        try_files \$uri \$uri/ =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location /api {
+        proxy_pass http://romm_backend;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location ~ ^/(ws|netplay) {
+        proxy_pass http://romm_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_read_timeout 86400;
+    }
+
+    location = /openapi.json {
+        proxy_pass http://romm_backend;
+    }
+
+    location /library/ {
+        internal;
+        alias ${ROMM_BASE}/library/;
+    }
+
+    location /cache/ {
+        internal;
+        alias ${ROMM_BASE}/cache/;
+    }
+
+    location /decode {
+        internal;
+        js_content decode.decodeBase64;
+    }
+}
+EOF
+        msg_ok "Updated Angie config"
+      else
+        sed -i -e "s|alias .*/library/;|alias ${ROMM_BASE}/library/;|" \
+          -e "s|alias .*/cache/;|alias ${ROMM_BASE}/cache/;|" /etc/angie/http.d/romm.conf
+      fi
+      cat <<'SYNCEOF' >/usr/local/bin/romm-sync-angie-paths
+#!/usr/bin/env bash
+base="$(grep -m1 '^ROMM_BASE_PATH=' /opt/romm/.env 2>/dev/null | cut -d= -f2)"
+base="${base:-/var/lib/romm}"
+ln -sfn "${base}/resources" /opt/romm/frontend/dist/assets/romm/resources
+ln -sfn "${base}/assets" /opt/romm/frontend/dist/assets/romm/assets
+[[ -f /etc/angie/http.d/romm.conf ]] || exit 0
+sed -i -e "s|alias .*/library/;|alias ${base}/library/;|" \
+  -e "s|alias .*/cache/;|alias ${base}/cache/;|" /etc/angie/http.d/romm.conf
+SYNCEOF
+      chmod +x /usr/local/bin/romm-sync-angie-paths
+      mkdir -p /etc/systemd/system/angie.service.d
+      cat <<'DROPEOF' >/etc/systemd/system/angie.service.d/romm-paths.conf
+[Service]
+ExecStartPre=/usr/local/bin/romm-sync-angie-paths
+DROPEOF
+      systemctl daemon-reload
       systemctl reload angie
     elif [[ -f /etc/nginx/sites-available/romm ]]; then
       sed -i "s|alias .*/library/;|alias ${ROMM_BASE}/library/;|" /etc/nginx/sites-available/romm
       nginx_enable_site romm
     fi
+    if [[ -f /etc/systemd/system/romm-watcher.service ]]; then
+      sed -i "s|\(watcher\.py' \).*|\1\${ROMM_BASE_PATH}/library|" /etc/systemd/system/romm-watcher.service
+      systemctl daemon-reload
+    fi
     msg_ok "Updated ROMM"
 
+    # 5.3.0 refuses to start without filesystem.structure and dropped
+    # roms_folder/firmware_folder. A custom layout cannot be inferred.
+    ROMM_CFG=/var/lib/romm/config/config.yml
+    if [[ -f "$ROMM_CFG" ]] && ! grep -qE '^[[:space:]]*structure:' "$ROMM_CFG"; then
+      if grep -qE '^[[:space:]]*(roms_folder|firmware_folder):' "$ROMM_CFG"; then
+        msg_warn "RomM 5.3.0 removed roms_folder/firmware_folder - replace them with filesystem.structure in ${ROMM_CFG}"
+      else
+        printf '\nfilesystem:\n  structure:\n    default: "roms/{platform}/{game}"\n    firmware: "bios/{platform}"\n' >>"$ROMM_CFG"
+        msg_ok "Added filesystem.structure to ${ROMM_CFG}"
+      fi
+    fi
+
     msg_info "Starting Services"
-    systemctl start romm-backend romm-worker romm-scheduler romm-watcher
+    systemctl start romm-backend romm-worker romm-scan-worker romm-scheduler romm-watcher
     msg_ok "Started Services"
     msg_ok "Updated successfully"
   fi
 
   if check_for_gh_release "EmulatorJS" "EmulatorJS/EmulatorJS" "v4.2.3"; then
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "EmulatorJS" "EmulatorJS/EmulatorJS" "prebuild" "v4.2.3" "/opt/romm/frontend/dist/assets/emulatorjs" "4.2.3.7z"
-    systemctl restart romm-backend romm-worker romm-scheduler romm-watcher
+    systemctl restart romm-backend romm-worker romm-scan-worker romm-scheduler romm-watcher
     msg_ok "Updated EmulatorJS successfully"
   fi
   exit

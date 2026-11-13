@@ -14,10 +14,10 @@ network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y jq
+$STD apt install -y jq
 msg_ok "Installed Dependencies"
 
-NODE_VERSION="22" NODE_MODULE="pnpm@latest" setup_nodejs
+NODE_VERSION="24" NODE_MODULE="pnpm@latest" setup_nodejs
 fetch_and_deploy_gh_release "homepage" "gethomepage/homepage" "tarball"
 RELEASE=$(get_latest_github_release "gethomepage/homepage")
 
@@ -25,14 +25,29 @@ msg_info "Installing Homepage (Patience)"
 mkdir -p /opt/homepage/config
 cd /opt/homepage
 cp /opt/homepage/src/skeleton/* /opt/homepage/config
-echo 'onlyBuiltDependencies=*' >> .npmrc
+echo 'onlyBuiltDependencies=*' >>.npmrc
 $STD pnpm install
 export NEXT_PUBLIC_VERSION="v$RELEASE"
 export NEXT_PUBLIC_REVISION="source"
 export NEXT_PUBLIC_BUILDTIME=$(curl -fsSL https://api.github.com/repos/gethomepage/homepage/releases/latest | jq -r '.published_at')
 export NEXT_TELEMETRY_DISABLED=1
 $STD pnpm build
-echo "HOMEPAGE_ALLOWED_HOSTS=localhost:3000,${LOCAL_IP}:3000" >/opt/homepage/.env
+cat <<EOF >/opt/homepage/.env
+HOMEPAGE_ALLOWED_HOSTS=localhost:3000,${LOCAL_IP}:3000
+## Optional Authentication
+# HOMEPAGE_AUTH_ENABLED=true
+# HOMEPAGE_AUTH_SECRET="$(openssl rand -base64 32)"
+# HOMEPAGE_EXTERNAL_URL=<your-external-url>
+## Uncomment below and use strong, unique password for password login
+# HOMEPAGE_AUTH_PASSWORD=
+## Uncomment and fill in below for OIDC login
+# HOMEPAGE_OIDC_ISSUER=
+# HOMEPAGE_OIDC_CLIENT_ID=
+# HOMEPAGE_OIDC_CLIENT_SECRET=
+# HOMEPAGE_OIDC_SCOPE=openid email profile
+# HOMEPAGE_OIDC_NAME=
+EOF
+chmod 600 /opt/homepage/.env
 msg_ok "Installed Homepage"
 
 msg_info "Creating Service"
@@ -51,7 +66,8 @@ Environment="NODE_ENV=production"
 #Replace the * with either the IP:PORT or FQDN of the server (see logs to get the exact server using: journalctl -u homepage -b)
 Environment="HOMEPAGE_ALLOWED_HOSTS=*"
 WorkingDirectory=/opt/homepage/
-ExecStart=pnpm start
+Environment=CI=true
+ExecStart=/opt/homepage/node_modules/.bin/next start
 
 [Install]
 WantedBy=multi-user.target

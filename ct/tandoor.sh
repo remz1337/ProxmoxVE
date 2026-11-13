@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (Canbiz)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -43,11 +44,11 @@ function update_script() {
     systemctl stop tandoor
     msg_ok "Stopped Service"
 
-    create_backup /opt/tandoor/config /opt/tandoor/api /opt/tandoor/mediafiles /opt/tandoor/staticfiles /opt/tandoor/.env
+    create_backup /opt/tandoor/.env
 
     NODE_VERSION="22" NODE_MODULE="yarn" setup_nodejs
     PYTHON_VERSION="3.13" setup_uv
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "tandoor" "TandoorRecipes/recipes" "tarball" "latest" "/opt/tandoor"
+    CLEAN_INSTALL=1 CLEAN_INSTALL_KEEP="config api mediafiles staticfiles" fetch_and_deploy_gh_release "tandoor" "TandoorRecipes/recipes" "tarball" "latest" "/opt/tandoor"
 
     restore_backup
 

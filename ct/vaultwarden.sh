@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -7,23 +8,32 @@ source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/mi
 
 APP="Vaultwarden"
 var_tags="${var_tags:-password-manager}"
-var_cpu="${var_cpu:-4}"
-var_ram="${var_ram:-6144}"
-var_disk="${var_disk:-20}"
-var_os="${var_os:-debian}"
-var_version="${var_version:-13}"
 var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
+if [[ -z "${var_os:-}" ]] && command -v pveversion >/dev/null 2>&1; then
+  var_os=$(msg_menu "Choose the container OS" \
+    "debian" "Debian 13" \
+    "alpine" "Alpine (smaller footprint)")
+fi
+
+if [[ "${var_os:-}" == "alpine" ]]; then
+  var_cpu="${var_cpu:-1}"
+  var_ram="${var_ram:-256}"
+  var_disk="${var_disk:-1}"
+  var_version="${var_version:-3.24}"
+else
+  var_cpu="${var_cpu:-4}"
+  var_ram="${var_ram:-6144}"
+  var_disk="${var_disk:-20}"
+  var_version="${var_version:-13}"
+fi
 
 header_info "$APP"
 variables
 color
 catch_errors
 
-function update_script() {
-  header_info
-  check_container_storage
-  check_container_resources
+update_deb_based() {
   if [[ ! -f /etc/systemd/system/vaultwarden.service ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
@@ -43,17 +53,19 @@ function update_script() {
       printf '%s\n' "$INSTALLED_VERSION" >"$HOME/.vaultwarden"
     fi
     if check_for_gh_release "vaultwarden" "dani-garcia/vaultwarden"; then
-      msg_info "Stopping Service"
-      systemctl stop vaultwarden
-      msg_ok "Stopped Service"
-
       fetch_and_deploy_gh_release "vaultwarden" "dani-garcia/vaultwarden" "tarball" "latest" "/tmp/vaultwarden-src"
 
       msg_info "Updating VaultWarden to $VAULT (Patience)"
       cd /tmp/vaultwarden-src
       VW_VERSION="$VAULT"
       export VW_VERSION
-      $STD cargo build --features "sqlite,mysql,postgresql" --release
+      CARGO_BUILD_JOBS="$(get_parallel_jobs)" CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 $STD cargo build --features "sqlite,mysql,postgresql" --release
+      msg_ok "Built VaultWarden ${VAULT}"
+
+      msg_info "Stopping Service"
+      systemctl stop vaultwarden
+      msg_ok "Stopped Service"
+
       if [[ -f /usr/bin/vaultwarden ]]; then
         cp target/release/vaultwarden /usr/bin/
       else
@@ -113,6 +125,48 @@ function update_script() {
     fi
     exit
   fi
+}
+
+update_alpine() {
+  CHOICE=$(msg_menu "Vaultwarden Update Options" \
+    "1" "Update Vaultwarden" \
+    "2" "Reset ADMIN_TOKEN")
+
+  case $CHOICE in
+  1)
+    $STD apk -U upgrade
+    rc-service vaultwarden restart -q
+    msg_ok "Updated successfully!"
+    exit
+    ;;
+  2)
+    if [[ "${PHS_SILENT:-0}" == "1" ]]; then
+      msg_warn "Reset ADMIN_TOKEN requires interactive mode, skipping."
+      exit
+    fi
+    read -r -s -p "Setup your ADMIN_TOKEN (make it strong): " NEWTOKEN
+    echo ""
+    if [[ -n "$NEWTOKEN" ]]; then
+      if ! command -v argon2 >/dev/null 2>&1; then apk add argon2 &>/dev/null; fi
+      TOKEN=$(echo -n "${NEWTOKEN}" | argon2 "$(openssl rand -base64 32)" -e -id -k 19456 -t 2 -p 1)
+      if [[ ! -f /var/lib/vaultwarden/config.json ]]; then
+        sed -i "s|export ADMIN_TOKEN=.*|export ADMIN_TOKEN='${TOKEN}'|" /etc/conf.d/vaultwarden
+      else
+        sed -i "s|\"admin_token\": .*|\"admin_token\": \"${TOKEN}\",|" /var/lib/vaultwarden/config.json
+      fi
+      rc-service vaultwarden restart -q
+      msg_ok "Admin token updated"
+    fi
+    exit
+    ;;
+  esac
+}
+
+function update_script() {
+  header_info
+  check_container_storage
+  check_container_resources
+  run_os_update
 }
 
 start

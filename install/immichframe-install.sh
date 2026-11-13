@@ -54,11 +54,17 @@ cp -r build/* /opt/immichframe/wwwroot
 rm -rf /tmp/immichframe
 mkdir -p /opt/immichframe/Config
 curl -fsSL "https://raw.githubusercontent.com/immichFrame/ImmichFrame/main/docker/Settings.example.yml" -o /opt/immichframe/Config/Settings.yml
+sed -i '/^[[:space:]]*- UUID[[:space:]]*$/d' /opt/immichframe/Config/Settings.yml
 useradd -r -s /sbin/nologin -d /opt/immichframe -M immichframe
 chown -R immichframe:immichframe /opt/immichframe
 msg_ok "Setup ImmichFrame"
 
 msg_info "Creating Service"
+ADMIN_PASSWORD=$(openssl rand -hex 16)
+cat <<EOF >~/immichframe.creds
+ImmichFrame Admin User: admin
+ImmichFrame Admin Password: $ADMIN_PASSWORD
+EOF
 cat <<EOF >/etc/systemd/system/immichframe.service
 [Unit]
 Description=ImmichFrame Digital Photo Frame
@@ -73,6 +79,7 @@ ExecStart=/usr/bin/dotnet /opt/immichframe/ImmichFrame.WebApi.dll
 Environment=ASPNETCORE_URLS=http://0.0.0.0:8080
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=DOTNET_CONTENTROOT=/opt/immichframe
+Environment=IMMICHFRAME_ADMIN_PASSWORD=$ADMIN_PASSWORD
 Restart=always
 RestartSec=5
 StandardOutput=journal

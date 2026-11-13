@@ -32,7 +32,7 @@ CM="${GN}✓${CL} "
 CROSS="${RD}✗${CL} "
 
 # Telemetry
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "add-iptag" "pve"
 
 # Stop any running spinner
@@ -588,11 +588,17 @@ get_vm_ips() {
     fi
     if [[ "$agent_enabled" == "1" ]] && command -v qm >/dev/null 2>&1; then
         debug_log "vm $vmid: querying guest agent"
-        local qm_ips=$(timeout 5 qm guest cmd "$vmid" network-get-interfaces 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -v "127.0.0.1" | head -3)
+        local qm_ips=$(timeout 5 qm guest cmd "$vmid" network-get-interfaces 2>/dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -v "127.0.0.1")
+        local qm_kept=0
         for qm_ip in $qm_ips; do
             if [[ "$qm_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-                debug_log "vm $vmid: found IP $qm_ip via qm guest cmd"
-                ips+="$qm_ip "
+                if ip_in_cidrs "$qm_ip" "${CIDR_LIST[*]}"; then
+                    debug_log "vm $vmid: found IP $qm_ip via qm guest cmd"
+                    ips+="$qm_ip "
+                    ((++qm_kept >= 3)) && break
+                else
+                    debug_log "vm $vmid: skipping IP $qm_ip via qm guest cmd (outside CIDR_LIST)"
+                fi
             fi
         done
     else
@@ -1003,8 +1009,10 @@ get_lxc_ips() {
         fi
     fi
     
-    # Method 3: Direct container command to get ALL IPs if previous methods failed
-    if [[ -z "$ips" ]]; then
+    # Method 3: Merge live IPv4 addresses from running containers.
+    # Earlier methods can find only the primary net0/eth0 address; this probe
+    # also discovers Docker bridges, Tailscale, and other guest interfaces.
+    if [[ "${STATUS_CACHE[lxc_${vmid}]:-}" == "running" ]]; then
         local container_ips=$(timeout 5s pct exec "$vmid" -- ip -4 addr show 2>/dev/null | grep -oE 'inet ([0-9]{1,3}\.){3}[0-9]{1,3}' | awk '{print $2}' | grep -v '127.0.0.1')
         if [[ -n "$container_ips" ]]; then
             while IFS= read -r ip; do

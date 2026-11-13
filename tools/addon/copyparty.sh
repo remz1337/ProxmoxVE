@@ -7,18 +7,23 @@
 
 if ! command -v curl &>/dev/null; then
   printf "\r\e[2K%b" '\033[93m Setup Source \033[m' >&2
-  apt-get update >/dev/null 2>&1
-  apt-get install -y curl >/dev/null 2>&1
+  if [[ -f /etc/alpine-release ]]; then
+    apk update >/dev/null 2>&1
+    apk add --no-cache curl >/dev/null 2>&1
+  else
+    apt-get update >/dev/null 2>&1
+    apt-get install -y curl >/dev/null 2>&1
+  fi
 fi
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/error_handler.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/core.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/lib/tools.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/error_handler.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "copyparty" "addon"
 
 # Enable error handling
 set -Eeuo pipefail
-trap 'error_handler' ERR
+catch_errors
 load_functions
 
 # ==============================================================================
@@ -33,7 +38,6 @@ LOG_PATH="/var/log/copyparty"
 DATA_PATH="/var/lib/copyparty"
 SVC_USER="copyparty"
 SVC_GROUP="copyparty"
-SRC_URL="https://github.com/9001/copyparty/releases/latest/download/copyparty-sfx.py"
 DEFAULT_PORT=3923
 
 # ==============================================================================
@@ -45,27 +49,12 @@ if [[ -f "/etc/alpine-release" ]]; then
   SERVICE_PATH="/etc/init.d/copyparty"
 elif grep -qE 'ID=debian|ID=ubuntu' /etc/os-release; then
   OS="Debian"
-  PKG_MANAGER="apt-get install -y"
+  PKG_MANAGER="apt install -y"
   SERVICE_PATH="/etc/systemd/system/copyparty.service"
 else
   msg_error "Unsupported OS detected. Exiting."
   exit 238
 fi
-
-# ==============================================================================
-# HEADER
-# ==============================================================================
-function header_info() {
-  clear
-  cat <<"EOF"
-   ______                  ____             __
-  / ____/___  ____  __  __/ __ \____ ______/ /___  __
- / /   / __ \/ __ \/ / / / /_/ / __ `/ ___/ __/ / / /
-/ /___/ /_/ / /_/ / /_/ / ____/ /_/ / /  / /_/ /_/ /
-\____/\____/ .___/\__, /_/    \__,_/_/   \__/\__, /
-          /_/    /____/                     /____/
-EOF
-}
 
 # ==============================================================================
 # HELPER FUNCTIONS
@@ -125,11 +114,8 @@ function update() {
     fi
     msg_ok "Stopped service"
 
-    msg_info "Updating ${APP}"
-    curl -fsSL "$SRC_URL" -o "$BIN_PATH"
-    chmod +x "$BIN_PATH"
+    USE_ORIGINAL_FILENAME=true fetch_and_deploy_gh_release "copyparty-sfx.py" "9001/copyparty" "singlefile" "latest" "/usr/local/bin" "copyparty-sfx.py"
     chown "$SVC_USER:$SVC_GROUP" "$BIN_PATH"
-    msg_ok "Updated ${APP}"
 
     msg_info "Starting service"
     if [[ "$OS" == "Alpine" ]]; then
@@ -165,17 +151,25 @@ function install() {
   else
     read -rp "${TAB}Set admin username [admin]: " admin_user
     admin_user=${admin_user:-admin}
-    read -rsp "${TAB}Set admin password [community-scripts.org]: " admin_pass
+    read -rsp "${TAB}Set admin password [random]: " admin_pass
     echo ""
-    admin_pass=${admin_pass:-community-scripts.org}
+    admin_pass=${admin_pass:-$(random_password 20)}
     msg_ok "Configured with admin user: ${admin_user}"
   fi
 
   msg_info "Installing dependencies"
   if [[ "$OS" == "Debian" ]]; then
-    $STD $PKG_MANAGER python3 python3-pil ffmpeg curl
+    $STD $PKG_MANAGER \
+      python3 \
+      python3-pil \
+      ffmpeg \
+      curl
   else
-    $STD $PKG_MANAGER python3 py3-pillow ffmpeg curl
+    $STD $PKG_MANAGER \
+      python3 \
+      py3-pillow \
+      ffmpeg \
+      curl
   fi
   msg_ok "Dependencies installed (with thumbnail support)"
 
@@ -188,11 +182,8 @@ function install() {
     chown "$SVC_USER:$SVC_GROUP" "$DATA_PATH"
   fi
 
-  msg_info "Downloading ${APP}"
-  curl -fsSL "$SRC_URL" -o "$BIN_PATH"
-  chmod +x "$BIN_PATH"
+  USE_ORIGINAL_FILENAME=true fetch_and_deploy_gh_release "copyparty-sfx.py" "9001/copyparty" "singlefile" "latest" "/usr/local/bin" "copyparty-sfx.py"
   chown "$SVC_USER:$SVC_GROUP" "$BIN_PATH"
-  msg_ok "Downloaded to ${BIN_PATH}"
 
   msg_info "Creating configuration"
   cat <<EOF >"$CONF_PATH"
@@ -300,8 +291,10 @@ UPDATEEOF
   msg_ok "Storage: ${BL}${DATA_PATH}${CL}"
   msg_ok "Config: ${BL}${CONF_PATH}${CL}"
   if [[ -n "$admin_user" ]]; then
+    echo -e "Copyparty\nUsername: ${admin_user}\nPassword: ${admin_pass}" >~/copyparty.creds
+    chmod 600 ~/copyparty.creds
     echo ""
-    msg_ok "Login: ${GN}${admin_user}${CL} / ${GN}${admin_pass}${CL}"
+    msg_ok "Login: ${GN}${admin_user}${CL} (password in ~/copyparty.creds)"
   fi
 }
 

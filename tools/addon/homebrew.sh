@@ -7,19 +7,24 @@
 
 if ! command -v curl &>/dev/null; then
   printf "\r\e[2K%b" '\033[93m Setup Source \033[m' >&2
-  apt-get update >/dev/null 2>&1
-  apt-get install -y curl >/dev/null 2>&1
+  if [[ -f /etc/alpine-release ]]; then
+    apk update >/dev/null 2>&1
+    apk add --no-cache curl >/dev/null 2>&1
+  else
+    apt-get update >/dev/null 2>&1
+    apt-get install -y curl >/dev/null 2>&1
+  fi
 fi
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/core.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/tools.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/error_handler.func)
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/api.func) 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/core.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/lib/tools.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/error_handler.func")
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
 
 # Enable error handling
 set -Eeuo pipefail
 trap 'error_handler' ERR
 load_functions
-init_tool_telemetry "" "addon"
+declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "homebrew" "addon"
 
 # ==============================================================================
 # CONFIGURATION
@@ -29,18 +34,7 @@ APP="homebrew"
 APP_TYPE="tools"
 INSTALL_PATH="/home/linuxbrew/.linuxbrew"
 
-# ==============================================================================
-# OS DETECTION
-# ==============================================================================
-if [[ -f "/etc/alpine-release" ]]; then
-  echo -e "${CROSS} Alpine is not supported by Homebrew. Exiting."
-  exit 1
-elif grep -qE 'ID=debian|ID=ubuntu' /etc/os-release; then
-  OS="Debian"
-else
-  echo -e "${CROSS} Unsupported OS detected. Exiting."
-  exit 1
-fi
+require_debian_like
 
 # ==============================================================================
 # UNINSTALL
@@ -48,7 +42,7 @@ fi
 function uninstall() {
   msg_info "Uninstalling Homebrew"
 
-  BREW_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 { print $1; exit }' /etc/passwd)
+  BREW_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /(nologin|false)$/ { print $1; exit }' /etc/passwd)
   if [[ -n "$BREW_USER" ]]; then
     BREW_USER_HOME=$(getent passwd "$BREW_USER" | cut -d: -f6)
     for rc_file in "$BREW_USER_HOME/.bashrc" "$BREW_USER_HOME/.profile"; do
@@ -70,7 +64,7 @@ function uninstall() {
 # ==============================================================================
 function install() {
   msg_info "Detecting Non-Root User"
-  BREW_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 { print $1; exit }' /etc/passwd)
+  BREW_USER=$(awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /(nologin|false)$/ { print $1; exit }' /etc/passwd)
   if [[ -z "$BREW_USER" ]]; then
     msg_warn "No non-root user found (uid >= 1000). Homebrew cannot run as root."
     read -r -p "${TAB}Create a 'brew' user automatically? (y/N): " create_user_prompt
@@ -81,13 +75,13 @@ function install() {
       msg_ok "Created user 'brew'"
     else
       msg_error "Cannot install Homebrew without a non-root user. Exiting."
-      exit 1
+      exit 254
     fi
   fi
   msg_ok "Detected User: $BREW_USER"
 
   msg_info "Installing Dependencies"
-  $STD apt update
+  apt_update_safe
   $STD apt install -y build-essential git file procps
   msg_ok "Installed Dependencies"
 

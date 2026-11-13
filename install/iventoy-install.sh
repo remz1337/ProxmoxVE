@@ -13,6 +13,12 @@ setting_up_container
 network_check
 update_os
 
+if [[ "${CTTYPE:-1}" != "0" ]]; then
+  msg_error "iVentoy requires a privileged LXC container."
+  msg_error "Recreate the container with unprivileged=0."
+  exit 10
+fi
+
 fetch_and_deploy_gh_release "iventoy" "ventoy/PXE" "prebuild" "latest" "/opt/iventoy" "iventoy-*-linux-$(arch_resolve x86_64-free arm64-trial).tar.gz"
 mkdir -p /opt/iventoy/{data,iso}
 
@@ -31,8 +37,8 @@ Environment=IVENTOY_API_ALL=1
 Environment=IVENTOY_AUTO_RUN=1
 Environment=LIBRARY_PATH=/opt/iventoy/lib/lin64
 Environment=LD_LIBRARY_PATH=/opt/iventoy/lib/lin64
-ExecStart=/bin/sh /opt/iventoy/iventoy.sh -R start
-ExecStop=/bin/sh /opt/iventoy/iventoy.sh stop
+ExecStart=/bin/bash /opt/iventoy/iventoy.sh -R start
+ExecStop=/bin/bash /opt/iventoy/iventoy.sh stop
 Restart=on-failure
 RestartSec=5
 

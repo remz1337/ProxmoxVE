@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/misc/build.func)
+_cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Slaviša Arežina (tremor021)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -29,6 +30,15 @@ function update_script() {
     msg_error "No ${APP} Installation Found!"
     exit
   fi
+
+  if ! grep -q "^Environment=HOME=" /etc/systemd/system/planka.service; then
+    msg_info "Updating Service"
+    sed -i -e '/^Environment=NODE_ENV=/d' -e 's|^ExecStart=.*|Environment=NODE_ENV=production\nEnvironment=HOME=/root\nExecStart=/usr/bin/node app.js --prod|' /etc/systemd/system/planka.service
+    systemctl daemon-reload
+    systemctl restart planka
+    msg_ok "Updated Service"
+  fi
+
   if check_for_gh_release "planka" "plankanban/planka"; then
     msg_info "Stopping Service"
     systemctl stop planka
@@ -54,6 +64,7 @@ function update_script() {
     msg_ok "Backed up data"
 
     fetch_and_deploy_gh_release "planka" "plankanban/planka" "prebuild" "latest" "/opt/planka" "planka-prebuild.zip"
+    NODE_VERSION="24" setup_nodejs
 
     msg_info "Update Frontend"
     cd /opt/planka
