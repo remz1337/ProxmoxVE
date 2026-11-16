@@ -32,7 +32,7 @@ CM="${GN}✓${CL} "
 CROSS="${RD}✗${CL} "
 
 # Telemetry
-source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/api/api.func") 2>/dev/null || true
+source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/remz1337/core/remz}/api/api.func") 2>/dev/null || true
 declare -f init_tool_telemetry &>/dev/null && init_tool_telemetry "add-iptag" "pve"
 
 # Stop any running spinner

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 _cs_boot="${COMMUNITY_SCRIPTS_CORE_DIR:-$(dirname "${BASH_SOURCE[0]}")/../../core}/core/build.func"
-source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/core/build.func")
+source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/remz1337/core/remz}/core/build.func")
 # Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
@@ -52,7 +52,7 @@ update_deb_based() {
   if docker ps -a --format '{{.Image}}' | grep -q '^portainer/portainer-ce:latest$'; then
     msg_warn "Portainer is now managed by a dedicated addon script and is no longer updated here."
     echo -e "${TAB}Update/migrate it with:"
-    echo -e "${TAB}${TAB}${GN}bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/tools/addon/portainer.sh)\"${CL}"
+    echo -e "${TAB}${TAB}${GN}bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/remz1337/ProxmoxVE/remz/tools/addon/portainer.sh)\"${CL}"
   fi
 
   msg_ok "Updated successfully!"

@@ -580,7 +580,7 @@ qm create $VMID -agent 1${MACHINE} -bios ovmf${CPU_TYPE} -cores $CORE_COUNT -cpu
   -smbios1 uuid=$(od -x /dev/urandom | head -1 | awk '{OFS="-"; print $2$3,$4,$5,$6,$7$8$9}') \
   -boot order="sata0;scsi0" \
   -hostpci0 0000:${pci_num},pcie=1 \
-  -description "<div align='center'><a href='https://Helper-Scripts.com'><img src='https://raw.githubusercontent.com/remz1337/ProxmoxVE/main/misc/images/logo-81x112.png'/></a>
+  -description "<div align='center'><a href='https://Helper-Scripts.com'><img src='https://raw.githubusercontent.com/remz1337/core/remz/images/logo-81x112.png'/></a>
 
   # Windows 11 VM
 
