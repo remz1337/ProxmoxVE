@@ -4,7 +4,7 @@ source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: michelroegl-brunner
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
-# Source: https://github.com/community-scripts/ProxmoxVE-Local
+# Source: https://github.com/remz1337/ProxmoxVE-Local/tree/remz
 
 APP="PVE-Scripts-Local"
 var_tags="${var_tags:-pve-scripts-local}"

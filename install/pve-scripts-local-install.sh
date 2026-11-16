@@ -3,7 +3,7 @@
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: michelroegl-brunner
 # License: MIT | https://github.com/remz1337/ProxmoxVE/raw/remz/LICENSE
-# Source: https://github.com/community-scripts/ProxmoxVE-Local
+# Source: https://github.com/remz1337/ProxmoxVE-Local/tree/remz
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -22,10 +22,11 @@ $STD apt install -y \
 msg_ok "Dependencies installed."
 
 NODE_VERSION="24" setup_nodejs
-fetch_and_deploy_gh_release "ProxmoxVE-Local" "community-scripts/ProxmoxVE-Local" "tarball"
+fetch_and_deploy_gh_branch "ProxmoxVE-Local" "remz1337/ProxmoxVE-Local" "remz"
 
 msg_info "Installing PVE Scripts local"
 cd /opt/ProxmoxVE-Local
+git rev-parse HEAD >.fork-commit
 $STD npm install
 cp .env.example .env
 mkdir -p data
@@ -49,6 +50,7 @@ ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
 User=root
 
 [Install]
