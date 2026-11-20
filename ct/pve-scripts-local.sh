@@ -39,5 +39,8 @@ description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
-echo -e "${INFO}${YW}Access it using the following URL:${CL}"
-echo -e "${GATEWAY}${BGN}http://${IP}:3000${CL}"
+echo -e "${INFO}${YW}Open an SSH tunnel to the container:${CL}"
+echo -e "${GATEWAY}${BGN}ssh -N -L 3000:127.0.0.1:3000 root@${IP}${CL}"
+echo -e "${INFO}${YW}Then open http://localhost:3000 and use the private one-time setup token:${CL}"
+echo -e "${INFO}${YW}Read /var/lib/pvescriptslocal/bootstrap-token inside the container as root.${CL}"
+echo -e "${INFO}${YW}Approve each managed host fingerprint with pvescriptslocal-approve-host before connecting.${CL}"

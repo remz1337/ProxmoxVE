@@ -13,52 +13,12 @@ setting_up_container
 network_check
 update_os
 
-msg_info "Installing Dependencies"
-$STD apt install -y \
-  build-essential \
-  sshpass \
-  rsync \
-  expect
-msg_ok "Dependencies installed."
-
 NODE_VERSION="24" setup_nodejs
 fetch_and_deploy_gh_branch "ProxmoxVE-Local" "remz1337/ProxmoxVE-Local" "remz"
 
 msg_info "Installing PVE Scripts local"
-cd /opt/ProxmoxVE-Local
-git rev-parse HEAD >.fork-commit
-$STD npm install
-cp .env.example .env
-mkdir -p data
-chmod 755 data
-
-$STD npx prisma generate
-$STD npx prisma migrate deploy
-
-$STD npm run build
-msg_ok "Installed PVE Scripts local"
-
-msg_info "Creating Service"
-cat <<EOF >/etc/systemd/system/pvescriptslocal.service
-[Unit]
-Description=PVEScriptslocal Service
-After=network.target
-
-[Service]
-WorkingDirectory=/opt/ProxmoxVE-Local
-ExecStart=/usr/bin/npm start
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-Environment=NEXT_TELEMETRY_DISABLED=1
-User=root
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl enable -q --now pvescriptslocal
-msg_ok "Created Service"
+$STD bash /opt/ProxmoxVE-Local/scripts/install-system.sh
+msg_ok "Installed PVE Scripts local with private runtime and SSH-only management"
 
 motd_ssh
 customize
