@@ -50,12 +50,14 @@ Environment="KC_HOSTNAME_STRICT=false"
 WantedBy=multi-user.target
 EOF
 chmod 600 /etc/systemd/system/keycloak.service
-{
+(
+  umask 077
+  exec > /root/keycloak.creds
   echo "Keycloak Credentials"
   echo "Temporary admin, replace it with a permanent one"
   echo "Username: tmpadm"
   echo "Password: ${ADMIN_PASS}"
-} >~/keycloak.creds
+)
 systemctl enable -q --now keycloak
 msg_ok "Created Service"
 
